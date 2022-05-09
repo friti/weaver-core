@@ -466,7 +466,7 @@ class TensorboardHelper(object):
         # load custom function
         self.custom_fn = tb_custom_fn
         if self.custom_fn is not None:
-            from weaver.utils.import_tools import import_module
+            from utils.import_tools import import_module
             from functools import partial
             self.custom_fn = import_module(self.custom_fn, '_custom_fn')
             self.custom_fn = partial(self.custom_fn.get_tensorboard_custom_fn, tb_writer=self.writer)

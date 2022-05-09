@@ -12,9 +12,9 @@ import math
 import torch
 
 from torch.utils.data import DataLoader
-from weaver.utils.logger import _logger, _configLogger
-from weaver.utils.dataset import SimpleIterDataset
-from weaver.utils.import_tools import import_module
+from utils.logger import _logger, _configLogger
+from utils.dataset import SimpleIterDataset
+from utils.import_tools import import_module
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--regression-mode', action='store_true', default=False,
@@ -34,7 +34,7 @@ parser.add_argument('-t', '--data-test', nargs='*', default=[],
                     help='testing files; supported syntax:'
                          ' (a) plain list, `--data-test /path/to/a/* /path/to/b/*`;'
                          ' (b) keyword-based, `--data-test a:/path/to/a/* b:/path/to/b/*`, will produce output_a, output_b;'
-                         ' (c) split output per N input files, `--data-test a%10:/path/to/a/*`, will split per 10 input files')
+                         ' (c) split output per N input files, `--data-test a%%10:/path/to/a/*`, will split per 10 input files.')
 parser.add_argument('--data-fraction', type=float, default=1,
                     help='fraction of events to load from each file; for training, the events are randomly selected for each epoch')
 parser.add_argument('--file-fraction', type=float, default=1,
@@ -64,7 +64,7 @@ parser.add_argument('-o', '--network-option', nargs=2, action='append', default=
                     help='options to pass to the model class constructor, e.g., `--network-option use_counts False`')
 parser.add_argument('-m', '--model-prefix', type=str, default='models/{auto}/network',
                     help='path to save or load the model; for training, this will be used as a prefix, so model snapshots '
-                         'will saved to `{model_prefix}_epoch-%d_state.pt` after each epoch, and the one with the best '
+                         'will saved to `{model_prefix}_epoch-%%d_state.pt` after each epoch, and the one with the best '
                          'validation metric to `{model_prefix}_best_epoch_state.pt`; for testing, this should be the full path '
                          'including the suffix, otherwise the one with the best validation metric will be used; '
                          'for training, `{auto}` can be used as part of the path to auto-generate a name, '
@@ -95,7 +95,7 @@ parser.add_argument('--lr-scheduler', type=str, default='flat+decay',
 parser.add_argument('--warmup-steps', type=int, default=0,
                     help='number of warm-up steps, only valid for `flat+linear` and `flat+cos` lr schedulers')
 parser.add_argument('--load-epoch', type=int, default=None,
-                    help='used to resume interrupted training, load model and optimizer state saved in the `epoch-%d_state.pt` and `epoch-%d_optimizer.pt` files')
+                    help='used to resume interrupted training, load model and optimizer state saved in the `epoch-%%d_state.pt` and `epoch-%%d_optimizer.pt` files')
 parser.add_argument('--start-lr', type=float, default=5e-3,
                     help='start learning rate')
 parser.add_argument('--batch-size', type=int, default=128,
@@ -127,7 +127,6 @@ parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
 parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
                     help='backend for distributed training')
-
 
 def to_filelist(args, mode='train'):
     if mode == 'train':
@@ -339,7 +338,7 @@ def flops(model, model_info):
     :param model_info:
     :return:
     """
-    from weaver.utils.flops_counter import get_model_complexity_info
+    from utils.flops_counter import get_model_complexity_info
     import copy
 
     model = copy.deepcopy(model).cpu()
@@ -452,7 +451,7 @@ def optim(args, model, device):
         parameters = model.parameters()
 
     if args.optimizer == 'ranger':
-        from weaver.utils.nn.optimizer.ranger import Ranger
+        from utils.nn.optimizer.ranger import Ranger
         opt = Ranger(parameters, lr=args.start_lr, **optimizer_options)
     elif args.optimizer == 'adam':
         opt = torch.optim.Adam(parameters, lr=args.start_lr, **optimizer_options)
@@ -570,7 +569,7 @@ def iotest(args, data_loader):
     """
     from tqdm.auto import tqdm
     from collections import defaultdict
-    from weaver.utils.data.tools import _concat
+    from utils.data.tools import _concat
     _logger.info('Start running IO test')
     monitor_info = defaultdict(list)
 
@@ -595,7 +594,7 @@ def save_root(args, output_path, data_config, scores, labels, observers):
     :param observers
     :return:
     """
-    from weaver.utils.data.fileio import _write_root
+    from utils.data.fileio import _write_root
     output = {}
     if args.regression_mode:
         output[data_config.label_names[0]] = labels[data_config.label_names[0]]
@@ -643,12 +642,12 @@ def _main(args):
     # classification/regression mode
     if args.regression_mode:
         _logger.info('Running in regression mode')
-        from weaver.utils.nn.tools import train_regression as train
-        from weaver.utils.nn.tools import evaluate_regression as evaluate
+        from utils.nn.tools import train_regression as train
+        from utils.nn.tools import evaluate_regression as evaluate
     else:
         _logger.info('Running in classification mode')
-        from weaver.utils.nn.tools import train_classification as train
-        from weaver.utils.nn.tools import evaluate_classification as evaluate
+        from utils.nn.tools import train_classification as train
+        from utils.nn.tools import evaluate_classification as evaluate
 
     # training/testing mode
     training_mode = not args.predict
@@ -700,7 +699,7 @@ def _main(args):
         return
 
     if args.tensorboard:
-        from weaver.utils.nn.tools import TensorboardHelper
+        from utils.nn.tools import TensorboardHelper
         tb = TensorboardHelper(tb_comment=args.tensorboard, tb_custom_fn=args.tensorboard_custom_fn)
     else:
         tb = None
@@ -730,7 +729,7 @@ def _main(args):
         # lr finder: keep it after all other setups
         if args.lr_finder is not None:
             start_lr, end_lr, num_iter = args.lr_finder.replace(' ', '').split(',')
-            from weaver.utils.lr_finder import LRFinder
+            from utils.lr_finder import LRFinder
             lr_finder = LRFinder(model, opt, loss_func, device=dev, input_names=train_input_names,
                                  label_names=train_label_names)
             lr_finder.range_test(train_loader, start_lr=float(start_lr), end_lr=float(end_lr), num_iter=int(num_iter))
@@ -803,7 +802,7 @@ def _main(args):
             # run prediction
             if args.model_prefix.endswith('.onnx'):
                 _logger.info('Loading model %s for eval' % args.model_prefix)
-                from weaver.utils.nn.tools import evaluate_onnx
+                from utils.nn.tools import evaluate_onnx
                 test_metric, scores, labels, observers = evaluate_onnx(args.model_prefix, test_loader)
             else:
                 test_metric, scores, labels, observers = evaluate(
@@ -827,7 +826,6 @@ def _main(args):
                 else:
                     save_parquet(args, output_path, scores, labels, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
-
 
 def main():
     args = parser.parse_args()
@@ -875,7 +873,6 @@ def main():
     _configLogger('weaver', stdout=stdout, filename=args.log)
 
     _main(args)
-
 
 if __name__ == '__main__':
     main()
