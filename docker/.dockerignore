@@ -1,0 +1,8 @@
+.dockerignore
+.gitignore
+.gitlab-ci.yml
+.ipynb
+.git
+.cache
+.DS_Store
+.ipynb_checkpoints

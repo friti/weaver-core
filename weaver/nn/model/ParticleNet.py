@@ -125,6 +125,7 @@ class ParticleNet(nn.Module):
     def __init__(self,
                  input_dims,
                  num_classes,
+                 num_targets,
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
                  use_fusion=True,
@@ -134,6 +135,8 @@ class ParticleNet(nn.Module):
                  for_segmentation=False,
                  **kwargs):
         super(ParticleNet, self).__init__(**kwargs)
+        self.num_classes = num_classes;
+        self.num_targets = num_targets;
 
         self.use_fts_bn = use_fts_bn
         if self.use_fts_bn:
@@ -164,20 +167,22 @@ class ParticleNet(nn.Module):
                 in_chn = fc_params[idx - 1][0]
             if self.for_segmentation:
                 fcs.append(nn.Sequential(nn.Conv1d(in_chn, channels, kernel_size=1, bias=False),
-                                         nn.BatchNorm1d(channels), nn.ReLU(), nn.Dropout(drop_rate)))
+                                         nn.BatchNorm1d(channels), 
+                                         nn.ReLU(), 
+                                         nn.Dropout(drop_rate)))
             else:
-                fcs.append(nn.Sequential(nn.Linear(in_chn, channels), nn.ReLU(), nn.Dropout(drop_rate)))
+                fcs.append(nn.Sequential(nn.Linear(in_chn, channels), 
+                                         nn.ReLU(), 
+                                         nn.Dropout(drop_rate)))
         if self.for_segmentation:
-            fcs.append(nn.Conv1d(fc_params[-1][0], num_classes, kernel_size=1))
+            fcs.append(nn.Conv1d(fc_params[-1][0], num_classes+num_targets, kernel_size=1))
         else:
-            fcs.append(nn.Linear(fc_params[-1][0], num_classes))
+            fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
         self.fc = nn.Sequential(*fcs)
 
         self.for_inference = for_inference
 
     def forward(self, points, features, mask=None):
-#         print('points:\n', points)
-#         print('features:\n', features)
         if mask is None:
             mask = (features.abs().sum(dim=1, keepdim=True) != 0)  # (N, 1, P)
         points *= mask
@@ -211,10 +216,16 @@ class ParticleNet(nn.Module):
                 x = fts.mean(dim=-1)
 
         output = self.fc(x)
+
         if self.for_inference:
-            output = torch.softmax(output, dim=1)
-        # print('output:\n', output)
+            if self.num_targets == 0 and self.num_classes != 0:
+                output = torch.softmax(output,dim=1);
+            elif self.num_targets != 0 and self.num_classes != 0:
+                output_class = torch.softmax(output[:,:self.num_classes],dim=1)
+                output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
+                output = torch.cat((output_class,output_reg),dim=1);
         return output
+
 
 
 class FeatureConv(nn.Module):
@@ -238,8 +249,10 @@ class ParticleNetTagger(nn.Module):
                  pf_features_dims,
                  sv_features_dims,
                  num_classes,
+                 num_targets,
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
+                 input_dims=32,
                  use_fusion=True,
                  use_fts_bn=True,
                  use_counts=True,
@@ -250,10 +263,11 @@ class ParticleNetTagger(nn.Module):
         super(ParticleNetTagger, self).__init__(**kwargs)
         self.pf_input_dropout = nn.Dropout(pf_input_dropout) if pf_input_dropout else None
         self.sv_input_dropout = nn.Dropout(sv_input_dropout) if sv_input_dropout else None
-        self.pf_conv = FeatureConv(pf_features_dims, 32)
-        self.sv_conv = FeatureConv(sv_features_dims, 32)
-        self.pn = ParticleNet(input_dims=32,
+        self.pf_conv = FeatureConv(pf_features_dims, input_dims)
+        self.sv_conv = FeatureConv(sv_features_dims, input_dims)
+        self.pn = ParticleNet(input_dims=input_dims,
                               num_classes=num_classes,
+                              num_targets=num_targets,
                               conv_params=conv_params,
                               fc_params=fc_params,
                               use_fusion=use_fusion,

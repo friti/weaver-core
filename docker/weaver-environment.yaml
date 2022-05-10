@@ -57,6 +57,7 @@ dependencies:
   - pip:
     - absl-py==1.0.0
     - awkward==1.8.0
+    - awkward0==0.15.5
     - cachetools==5.0.0
     - charset-normalizer==2.0.12
     - cycler==0.11.0

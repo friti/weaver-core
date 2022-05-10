@@ -19,6 +19,8 @@ from utils.import_tools import import_module
 parser = argparse.ArgumentParser()
 parser.add_argument('--regression-mode', action='store_true', default=False,
                     help='run in regression mode if this flag is set; otherwise run in classification mode')
+parser.add_argument('--hybrid-mode', action='store_true', default=False,
+                    help='run a special task that is simultaneous regression + classification mode if this flag is set; otherwise run in classification mode')
 parser.add_argument('-c', '--data-config', type=str, default='data/ak15_points_pf_sv_v0.yaml',
                     help='data config YAML file')
 parser.add_argument('-i', '--data-train', nargs='*', default=[],
@@ -244,8 +246,9 @@ def train_load(args):
     data_config = train_data.config
     train_input_names = train_data.config.input_names
     train_label_names = train_data.config.label_names
+    train_target_names = train_data.config.target_names
 
-    return train_loader, val_loader, data_config, train_input_names, train_label_names
+    return train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names
 
 
 def test_load(args):
@@ -585,7 +588,7 @@ def iotest(args, data_loader):
         _logger.info('Monitor info written to %s' % monitor_output_path)
 
 
-def save_root(args, output_path, data_config, scores, labels, observers):
+def save_root(args, output_path, data_config, scores, labels, targets, observers):
     """
     Saves as .root
     :param data_config:
@@ -599,10 +602,17 @@ def save_root(args, output_path, data_config, scores, labels, observers):
     if args.regression_mode:
         output[data_config.label_names[0]] = labels[data_config.label_names[0]]
         output['output'] = scores
+    elif args.hybrid_mode:
+        for idx, label_name in enumerate(data_config.label_value):
+            output[label_name] = (labels[data_config.label_names[0]] == idx)
+            output['score_' + label_name] = scores[:, idx]
+        for idx, target_name in enumerate(data_config.target_value):
+            output['score_' + target_name] = scores[:, len(data_config.label_value)+idx]
     else:
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
             output['score_' + label_name] = scores[:, idx]
+
     for k, v in labels.items():
         if k == data_config.label_names[0]:
             continue
@@ -610,6 +620,13 @@ def save_root(args, output_path, data_config, scores, labels, observers):
             _logger.warning('Ignoring %s, not a 1d array.', k)
             continue
         output[k] = v
+
+    for k, v in targets.items():
+        if v.ndim > 1:
+            _logger.warning('Ignoring %s, not a 1d array.', k)
+            continue
+        output[k] = v
+
     for k, v in observers.items():
         if v.ndim > 1:
             _logger.warning('Ignoring %s, not a 1d array.', k)
@@ -618,17 +635,19 @@ def save_root(args, output_path, data_config, scores, labels, observers):
     _write_root(output_path, output)
 
 
-def save_parquet(args, output_path, scores, labels, observers):
+def save_parquet(args, output_path, scores, labels, targets, observers):
     """
     Saves as parquet file
     :param scores:
     :param labels:
+    :param targets:
     :param observers:
     :return:
     """
     import awkward as ak
     output = {'scores': scores}
     output.update(labels)
+    output.update(targets)
     output.update(observers)
     ak.to_parquet(ak.Array(output), output_path, compression='LZ4', compression_level=4)
 
@@ -644,10 +663,17 @@ def _main(args):
         _logger.info('Running in regression mode')
         from utils.nn.tools import train_regression as train
         from utils.nn.tools import evaluate_regression as evaluate
+        from utils.nn.tools import evaluate_onnx_regression as evaluate_onnx
+    elif args.hybrid_mode:
+        _logger.info('Running in combined regression + classification mode')
+        from utils.nn.tools import train_hybrid as train
+        from utils.nn.tools import evaluate_hybrid as evaluate
+        from utils.nn.tools import evaluate_onnx_hybrid as evaluate_onnx
     else:
         _logger.info('Running in classification mode')
         from utils.nn.tools import train_classification as train
         from utils.nn.tools import evaluate_classification as evaluate
+        from utils.nn.tools import evaluate_onnx_classification as evaluate_onnx
 
     # training/testing mode
     training_mode = not args.predict
@@ -671,7 +697,7 @@ def _main(args):
 
     # load data
     if training_mode:
-        train_loader, val_loader, data_config, train_input_names, train_label_names = train_load(args)
+        train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names = train_load(args)
     else:
         test_loaders, data_config = test_load(args)
 
@@ -731,13 +757,13 @@ def _main(args):
             start_lr, end_lr, num_iter = args.lr_finder.replace(' ', '').split(',')
             from utils.lr_finder import LRFinder
             lr_finder = LRFinder(model, opt, loss_func, device=dev, input_names=train_input_names,
-                                 label_names=train_label_names)
+                                 label_names=train_label_names+train_target_names)
             lr_finder.range_test(train_loader, start_lr=float(start_lr), end_lr=float(end_lr), num_iter=int(num_iter))
             lr_finder.plot(output='lr_finder.png')  # to inspect the loss-learning rate graph
             return
 
         # training loop
-        best_valid_metric = np.inf if args.regression_mode else 0
+        best_valid_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
         for epoch in range(args.num_epochs):
             if args.load_epoch is not None:
@@ -762,9 +788,8 @@ def _main(args):
             _logger.info('Epoch #%d validating' % epoch)
             valid_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func,
                                     steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb)
-            is_best_epoch = (
-                valid_metric < best_valid_metric) if args.regression_mode else(
-                valid_metric > best_valid_metric)
+
+            is_best_epoch = (valid_metric < best_valid_metric) if args.regression_mode or args.hybrid_mode else(valid_metric > best_valid_metric)
             if is_best_epoch:
                 best_valid_metric = valid_metric
                 if args.model_prefix and (args.backend is None or local_rank == 0):
@@ -802,15 +827,14 @@ def _main(args):
             # run prediction
             if args.model_prefix.endswith('.onnx'):
                 _logger.info('Loading model %s for eval' % args.model_prefix)
-                from utils.nn.tools import evaluate_onnx
-                test_metric, scores, labels, observers = evaluate_onnx(args.model_prefix, test_loader)
+                test_metric, scores, labels, targets, observers = evaluate_onnx(args.model_prefix, test_loader)
             else:
-                test_metric, scores, labels, observers = evaluate(
-                    model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)
+                test_metric, scores, labels, targets, observers = evaluate(
+                    model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)            
             _logger.info('Test metric %.5f' % test_metric, color='bold')
             del test_loader
 
-            if args.predict_output:
+            if args.predict_output and scores.ndim:
                 if '/' not in args.predict_output:
                     args.predict_output = os.path.join(
                         os.path.dirname(args.model_prefix),
@@ -822,9 +846,9 @@ def _main(args):
                     base, ext = os.path.splitext(args.predict_output)
                     output_path = base + '_' + name + ext
                 if output_path.endswith('.root'):
-                    save_root(args, output_path, data_config, scores, labels, observers)
+                    save_root(args, output_path, data_config, scores, labels, targets, observers)
                 else:
-                    save_parquet(args, output_path, scores, labels, observers)
+                    save_parquet(args, output_path, scores, labels, targets, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
 
 def main():

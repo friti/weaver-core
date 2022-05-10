@@ -39,6 +39,7 @@ class DataConfig(object):
             'new_variables': {},
             'inputs': {},
             'labels': {},
+            'targets': {},
             'observers': [],
             'monitor_variables': [],
             'weights': None,
@@ -91,16 +92,29 @@ class DataConfig(object):
                         self._missing_standardization_info = True
                     self.preprocess_params[v[0]] = params
         # labels
-        self.label_type = opts['labels']['type']
-        self.label_value = opts['labels']['value']
-        if self.label_type == 'simple':
-            assert(isinstance(self.label_value, list))
-            self.label_names = ('_label_',)
-            self.var_funcs['_label_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
-            self.var_funcs['_labelcheck_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
+        if opts['labels']:
+            self.label_type = opts['labels']['type']
+            self.label_value = opts['labels']['value']
+            if self.label_type == 'simple':
+                assert(isinstance(self.label_value, list))
+                self.label_names = ('_label_',)
+                self.var_funcs['_label_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
+                self.var_funcs['_labelcheck_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
+            else:
+                self.label_names = tuple(self.label_value.keys())
+                self.var_funcs.update(self.label_value)
         else:
-            self.label_names = tuple(self.label_value.keys())
-            self.var_funcs.update(self.label_value)
+            self.label_names = tuple();
+
+        # targets
+        if opts['targets']:
+            self.target_type = opts['targets']['type']
+            self.target_value = opts['targets']['value']
+            self.target_names = tuple(self.target_value.keys())
+            self.var_funcs.update(self.target_value)
+        else:
+            self.target_names = tuple();
+
         self.basewgt_name = '_basewgt_'
         self.weight_name = None
         if opts['weights'] is not None:
@@ -148,7 +162,10 @@ class DataConfig(object):
             _log('input_dicts:\n - %s', '\n - '.join(str(it) for it in self.input_dicts.items()))
             _log('input_shapes:\n - %s', '\n - '.join(str(it) for it in self.input_shapes.items()))
             _log('preprocess_params:\n - %s', '\n - '.join(str(it) for it in self.preprocess_params.items()))
-            _log('label_names: %s', str(self.label_names))
+            if self.label_names: 
+                _log('label_names: %s', str(self.label_names))
+            if self.target_names: 
+                _log('target_names: %s', str(self.target_names))
             _log('observer_names: %s', str(self.observer_names))
             _log('monitor_variables: %s', str(self.monitor_variables))
             if opts['weights'] is not None:
@@ -178,6 +195,8 @@ class DataConfig(object):
             self.keep_branches.update(names)
         # labels
         self.keep_branches.update(self.label_names)
+        # targets
+        self.keep_branches.update(self.target_names)
         # weight
         if self.weight_name:
             self.keep_branches.add(self.weight_name)
@@ -221,7 +240,10 @@ class DataConfig(object):
 
     def export_json(self, fp):
         import json
-        j = {'output_names': self.label_value, 'input_names': self.input_names}
+        if self.target_names:
+            j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
+        else:
+            j = {'output_names':self.label_value, 'input_names':self.input_names}
         for k, v in self.input_dicts.items():
             j[k] = {'var_names': v, 'var_infos': {}}
             for var_name in v:

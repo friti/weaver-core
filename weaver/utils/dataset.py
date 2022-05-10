@@ -21,7 +21,7 @@ def _finalize_inputs(table, data_config):
         if k in data_config.observer_names:
             output[k] = ak.to_numpy(table[k])
     # copy labels
-    for k in data_config.label_names:
+    for k in data_config.label_names+data_config.target_names:
         output[k] = ak.to_numpy(table[k])
     # transformation
     for k, params in data_config.preprocess_params.items():
@@ -255,7 +255,7 @@ class _SimpleIter(object):
         # inputs
         X = {k: self.table['_' + k][i].copy() for k in self._data_config.input_names}
         # labels
-        y = {k: self.table[k][i].copy() for k in self._data_config.label_names}
+        y = {k: self.table[k][i].copy() for k in self._data_config.label_names+self._data_config.target_names}
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
         return X, y, Z
