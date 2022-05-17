@@ -33,4 +33,4 @@ RUN conda init bash
 SHELL ["conda", "run", "-n", "weaver", "/bin/bash", "-c"]
 
 # Install torch by hand
-RUN pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
