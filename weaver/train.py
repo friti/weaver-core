@@ -691,8 +691,6 @@ def _main(args):
             torch.distributed.init_process_group(backend=args.backend)
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
-            local_rank = gpus[0]
-            torch.distributed.init_process_group(backend=args.backend)
             gpus = [int(i) for i in args.gpus.split(',')]
             dev = torch.device(gpus[0])
     else:
