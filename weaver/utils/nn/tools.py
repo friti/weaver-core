@@ -44,6 +44,8 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     label  = None
     model_output = None
     logits = None
+    preds  = None
+    correct = None
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
@@ -135,6 +137,12 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     total_correct = 0
     entry_count = 0
     count = 0
+    inputs = None
+    label  = None
+    model_output = None
+    logits = None
+    preds  = None
+    loss   = None
     scores = []
     labels = defaultdict(list)
     targets = defaultdict(list)
@@ -594,6 +602,8 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     loss_reg = None
     pred_reg = None
     pred_cat = None
+    correct = None
+    residual_reg = None
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
