@@ -78,12 +78,11 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 scheduler.step()
 
             _, preds = logits.max(1)
-            loss = loss.item()
-
+            loss = loss.detach().item()
             num_batches += 1
             count += num_examples
             correct = (preds == label).sum().item()
-            total_loss += loss.detach().item()
+            total_loss += loss
             total_correct += correct
 
             tq.set_postfix({
@@ -836,14 +835,10 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                         target = target[:,None]
                     ### true labels and true target 
                     loss_target = torch.cat((label,target),dim=1)
-                    loss, loss_cat, loss_reg = loss_func(model_output,loss_target)
+                    loss, loss_cat, loss_reg = loss_func(model_output,loss_target).detach().item()
                     ### erase useless dimensions
                     label  = label.squeeze();
                     target = target.squeeze(); 
-                    ### evaluate loss
-                    loss = loss.detach().item();
-                    loss_cat = loss_cat.detach().item();
-                    loss_reg = loss_reg.detach().item();                
 
                 total_loss += loss
                 total_cat_loss += loss_cat
@@ -998,14 +993,10 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
                     target = target[:,None]
                 ### true labels and true target 
                 loss_target = torch.cat((label,target),dim=1)
-                loss, loss_cat, loss_reg = loss_func(model_output,loss_target)
+                loss, loss_cat, loss_reg = loss_func(model_output,loss_target).detach().item()
                 ### erase useless dimensions
                 label  = label.squeeze();
                 target = target.squeeze(); 
-                ### evaluate loss
-                loss = loss.detach().item();
-                loss_cat = loss_cat.detach().item();
-                loss_reg = loss_reg.detach().item();                
 
             total_loss += loss
             total_cat_loss += loss_cat
