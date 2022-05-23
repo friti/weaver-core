@@ -748,7 +748,7 @@ def _main(args):
         elif args.backend is None:
             if gpus is not None and len(gpus) > 1:
                 #model = torch.nn.DataParallel(model, device_ids=gpus)
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
 
         # optimizer & learning rate
         opt, scheduler = optim(args, model, dev)
