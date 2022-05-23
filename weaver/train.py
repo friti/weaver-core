@@ -746,10 +746,7 @@ def _main(args):
         # DataParallel
         elif args.backend is None:
             if gpus is not None and len(gpus) > 1:
-                torch.distributed.init_process_group(backend="nccl",rank=0);
-                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-                #model = torch.nn.DataParallel(model, device_ids=gpus)
-                model = torch.nn.parallel.DistributedDataParallel(model, gradient_as_bucket_view=True)
+                model = torch.nn.DataParallel(model, device_ids=gpus)
 
         # optimizer & learning rate
         opt, scheduler = optim(args, model, dev)

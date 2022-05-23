@@ -34,12 +34,16 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     model.train()
 
     data_config = train_loader.dataset.config
-
     label_counter = Counter()
     total_loss = 0
     num_batches = 0
     total_correct = 0
     count = 0
+    loss   = None
+    inputs = None
+    label  = None
+    model_output = None
+    logits = None
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
@@ -240,6 +244,10 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
+    inputs = None
+    label  = None
+    score  = None
+    preds  = None
     start_time = time.time()
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
@@ -287,6 +295,12 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     sum_abs_err = 0
     sum_sqr_err = 0
     count = 0
+    loss   = None
+    inputs = None
+    target  = None
+    model_output = None
+    preds = None
+
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
@@ -386,6 +400,11 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
+    inputs = None
+    target = None
+    model_output = None
+    preds = None
+    loss  = None
     start_time = time.time()
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
@@ -487,6 +506,11 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
+    inputs = None
+    target = None
+    score  = None
+    preds  = None
+    loss   = None
     start_time = time.time()
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
@@ -560,6 +584,16 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     total_correct = 0
     sum_abs_err = 0
     sum_sqr_err = 0
+    inputs = None
+    label  = None
+    target = None
+    model_output = None
+    loss_target = None
+    loss_cat = None
+    loss = None
+    loss_reg = None
+    pred_reg = None
+    pred_cat = None
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
@@ -711,6 +745,13 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     count = 0
     scores_cat = []
     scores_reg = []
+    inputs = None
+    label  = None
+    target = None
+    model_output = None
+    pred_cat_output = None
+    pred_reg =None
+    loss,loss_cat,loss_reg = 0,0,0;
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
@@ -763,7 +804,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                         scores_reg.append(torch.zeros(num_examples).cpu().numpy());
                     
                 ### evaluate loss function
-                loss,loss_cat,loss_reg = 0,0,0;
                 if loss_func != None:
                     ### check dimension of labels and target. If dimension is 1 extend them
                     if label.dim() == 1:
