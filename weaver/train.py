@@ -127,7 +127,7 @@ parser.add_argument('--print', action='store_true', default=False,
                     help='do not run training/prediction but only print model information, e.g., FLOPs and number of parameters of a model')
 parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
-parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
+parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default='nccl',
                     help='backend for distributed training')
 parser.add_argument('--local_rank', type=int, default=0,
                     help='local rank variable to run distributed trainings')
@@ -691,6 +691,7 @@ def _main(args):
             torch.distributed.init_process_group(backend=args.backend)
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
+            torch.distributed.init_process_group(backend=args.backend)
             gpus = [int(i) for i in args.gpus.split(',')]
             dev = torch.device(gpus[0])
     else:
@@ -743,16 +744,14 @@ def _main(args):
         if args.backend is not None:
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
+        # DataParallel
+        elif args.backend is None:
+            if gpus is not None and len(gpus) > 1:
+                #model = torch.nn.DataParallel(model, device_ids=gpus)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus)
 
         # optimizer & learning rate
         opt, scheduler = optim(args, model, dev)
-
-        # DataParallel
-        if args.backend is None:
-            if gpus is not None and len(gpus) > 1:
-                # model becomes `torch.nn.DataParallel` w/ model.module being the original `torch.nn.Module`
-                model = torch.nn.DataParallel(model, device_ids=gpus)
-            # model = model.to(dev)
 
         # lr finder: keep it after all other setups
         if args.lr_finder is not None:
