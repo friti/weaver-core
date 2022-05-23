@@ -127,7 +127,7 @@ parser.add_argument('--print', action='store_true', default=False,
                     help='do not run training/prediction but only print model information, e.g., FLOPs and number of parameters of a model')
 parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
-parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default='nccl',
+parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
                     help='backend for distributed training')
 parser.add_argument('--local_rank', type=int, default=0,
                     help='local rank variable to run distributed trainings')
