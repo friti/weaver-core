@@ -806,7 +806,11 @@ def _main(args):
             test_loaders, data_config = test_load(args)
 
         if not args.model_prefix.endswith('.onnx'):
-            if args.predict_gpus:
+            
+            if args.predict_gpus and args.backend is not None:
+                gpus = [local_rank]
+                dev = torch.device(local_rank)            
+            elif args.predict_gpus:
                 gpus = [int(i) for i in args.predict_gpus.split(',')]
                 dev = torch.device(gpus[0])
             else:
@@ -816,9 +820,15 @@ def _main(args):
             model_path = args.model_prefix if args.model_prefix.endswith(
                 '.pt') else args.model_prefix + '_best_epoch_state.pt'
             _logger.info('Loading model %s for eval' % model_path)
-            model.load_state_dict(torch.load(model_path, map_location=dev))
-            if gpus is not None and len(gpus) > 1:
-                model = torch.nn.DataParallel(model, device_ids=gpus)
+ 
+            if args.backend is not None:
+                model.module.load_state_dict(torch.load(model_path, map_location=dev))
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank,find_unused_parameters=True)
+            else:
+                model.load_state_dict(torch.load(model_path, map_location=dev))
+                if gpus is not None and len(gpus) > 1:
+                    model = torch.nn.DataParallel(model, device_ids=gpus)
             model = model.to(dev)
 
         for name, get_test_loader in test_loaders.items():
