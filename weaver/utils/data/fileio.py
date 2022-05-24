@@ -16,7 +16,7 @@ def _read_hdf5(filepath, branches, load_range=None):
     start = math.trunc(load_range[0] * len(outputs[branches[0]]))
     stop = max(start + 1, math.trunc(load_range[1] * len(outputs[branches[0]])))
     for k, v in outputs.items():
-        outputs[k] = v[start:stop]
+        outputs[k] = v[start:stop].astype('float32')
     return ak.Array(outputs)
 
 
@@ -50,7 +50,7 @@ def _read_awkd(filepath, branches, load_range=None):
     start = math.trunc(load_range[0] * len(outputs[branches[0]]))
     stop = max(start + 1, math.trunc(load_range[1] * len(outputs[branches[0]])))
     for k, v in outputs.items():
-        outputs[k] = ak.from_awkward0(v[start:stop])
+        outputs[k] = ak.from_awkward0(v[start:stop]].astype('float32'))
     return ak.Array(outputs)
 
 
@@ -60,7 +60,7 @@ def _read_parquet(filepath, branches, load_range=None):
         start = math.trunc(load_range[0] * len(outputs))
         stop = max(start + 1, math.trunc(load_range[1] * len(outputs)))
         outputs = outputs[start:stop]
-    return outputs
+    return ak.values_astype(outputs, 'float32')
 
 
 def _read_files(filelist, branches, load_range=None, show_progressbar=False, **kwargs):
