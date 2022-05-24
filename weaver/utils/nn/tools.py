@@ -32,6 +32,7 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+
     model.train()
 
     data_config = train_loader.dataset.config
@@ -43,11 +44,13 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     loss   = None
     inputs = None
     label  = None
+    label_mask = None
     model_output = None
     logits = None
     preds  = None
     correct = None
     start_time = time.time()
+
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
             gc.collect()
@@ -61,7 +64,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             num_examples = label.shape[0]
             label_counter.update(label.cpu().numpy())
             label = label.to(dev)
-            opt.zero_grad()
+            opt.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)
                 logits = _flatten_preds(model_output, label_mask)
@@ -123,8 +126,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
-    del loss, inputs, label, model_output, logits, preds, correct
-
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
@@ -140,17 +141,19 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     entry_count = 0
     count = 0
     inputs = None
-    label  = None
+    label, label_mask  = None, None
     model_output = None
     logits = None
     preds  = None
     loss   = None
+    correct = None
     scores = []
     labels = defaultdict(list)
     targets = defaultdict(list)
     labels_counts = []
     observers = defaultdict(list)
     start_time = time.time()
+
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y, Z in tq:
@@ -222,8 +225,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
-    del inputs, label, model_output, logits, preds, loss
-
     if for_training:
         return total_correct / count
     else:
@@ -261,6 +262,7 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     label  = None
     score  = None
     preds  = None
+    correct = None
     start_time = time.time()
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
@@ -319,6 +321,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     preds = None
 
     start_time = time.time()
+
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
             gc.collect()
@@ -330,7 +333,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     target = torch.column_stack((target,y[names].float()))
             num_examples = target.shape[0]
             target = target.to(dev)
-            opt.zero_grad()
+            opt.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)
                 preds = model_output.squeeze()
@@ -400,7 +403,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
-    del loss, inputs, target, model_output, preds
 
 def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
                         eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error',
@@ -425,6 +427,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     preds = None
     loss  = None
     start_time = time.time()
+
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y, Z in tq:
@@ -637,7 +640,7 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
             ### Number of samples in the batch
             num_examples = max(label.shape[0],target.shape[0]);
             ### loss minimization
-            opt.zero_grad()
+            opt.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 ### evaluate the model
                 model_output  = model(*inputs)                
@@ -746,8 +749,6 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
 
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
-
-    del inputs, label, target, model_output, loss_target, loss_cat, loss, loss_reg, pred_reg, pred_cat, correct, residual_reg
 
 ## evaluate classification + regression task
 def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
@@ -915,8 +916,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
-    del inputs, label, target, model_output, pred_cat_output, pred_reg
-
     if for_training:
         return total_loss / count;
     else:
@@ -1046,8 +1045,6 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     observers = {k: _concat(v) for k, v in observers.items()}
-
-    del inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg;
 
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
