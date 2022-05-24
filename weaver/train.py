@@ -131,8 +131,6 @@ parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
 parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
                     help='backend for distributed training')
-parser.add_argument('--local_rank', type=int, default=0,
-                    help='local rank variable to run distributed trainings')
 
 def to_filelist(args, mode='train'):
     if mode == 'train':
@@ -162,6 +160,8 @@ def to_filelist(args, mode='train'):
     if args.local_rank is not None:
         if mode == 'train':
             local_world_size = int(os.environ['LOCAL_WORLD_SIZE'])
+            if len(gpus) > 1: 
+                local_world_size = len(local_world_size);
             new_file_dict = {}
             for name, files in file_dict.items():
                 new_files = files[args.local_rank::local_world_size]
@@ -694,6 +694,7 @@ def _main(args):
             dev = torch.device(local_rank)
             torch.distributed.init_process_group(backend=args.backend,rank=local_rank,world_size=local_world_size)
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
+            torch.distributed.barrier()
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
             dev = torch.device(gpus[0])
@@ -747,7 +748,7 @@ def _main(args):
         if args.backend is not None: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             if agpus is not None and len(gpus) > 1:
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=none, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=True, gradient_as_bucket_view=True)
         # DataParallel
         elif args.backend is None:
             if gpus is not None and len(gpus) > 1:
