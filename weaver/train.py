@@ -684,11 +684,11 @@ def _main(args):
     if args.gpus:
         # distributed training
         if args.backend is not None:
-            local_rank = args.local_rank
-            torch.cuda.set_device(local_rank)
-            gpus = [local_rank]
-            dev = torch.device(local_rank)
-            torch.distributed.init_process_group(backend=args.backend,rank=local_rank)
+            gpus = [int(i) for i in args.gpus.split(',')]
+            for i in gpus:
+                torch.cuda.set_device(i)
+            torch.distributed.init_process_group(backend=args.backend)
+            dev = torch.device(gpus[0])
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
@@ -740,9 +740,9 @@ def _main(args):
         model = orig_model.to(dev)
 
         # DistributedDataParallel
-        if args.backend is not None:
+        if args.backend is not None: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank,find_unused_parameters=True)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
         # DataParallel
         elif args.backend is None:
             if gpus is not None and len(gpus) > 1:
@@ -824,7 +824,7 @@ def _main(args):
             if args.backend is not None:
                 model.module.load_state_dict(torch.load(model_path, map_location=dev))
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank,find_unused_parameters=True)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None,find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
                 model.load_state_dict(torch.load(model_path, map_location=dev))
                 if gpus is not None and len(gpus) > 1:
