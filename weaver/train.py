@@ -660,6 +660,9 @@ def _main(args):
     if args.file_fraction < 1:
         _logger.warning('Use of `file-fraction` is not recommended in general -- prefer using `data-fraction` instead.')
 
+    if args.backend not None and args.num_workers > 0:
+        _logger.warning("You cannot set more than 0 workers if you want to perform DDP .. change it in future");
+
     # classification/regression mode
     if args.regression_mode:
         _logger.info('Running in regression mode')
@@ -684,11 +687,13 @@ def _main(args):
     if args.gpus:
         # distributed training
         if args.backend is not None:
+            gpus = [int(i) for i in args.gpus.split(',')]
             local_rank = args.local_rank;
-            torch.distributed.init_process_group(backend=args.backend)
+            local_world_size = len(gpus);
+            torch.cuda.set_device(local_rank)
             gpus = [local_rank]
-            torch.cuda.set_device(args.local_rank)
-            dev = torch.device(args.local_rank)
+            dev = torch.device(local_rank)
+            torch.distributed.init_process_group(backend=args.backend,rank=local_rank,world_size=local_world_size)
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
@@ -742,7 +747,8 @@ def _main(args):
         # DistributedDataParallel
         if args.backend is not None: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True, gradient_as_bucket_view=True)
+            if agpus is not None and len(gpus) > 1:
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=none, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
         # DataParallel
         elif args.backend is None:
             if gpus is not None and len(gpus) > 1:
@@ -824,7 +830,8 @@ def _main(args):
             if args.backend is not None:
                 model.module.load_state_dict(torch.load(model_path, map_location=dev))
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank,find_unused_parameters=True, gradient_as_bucket_view=True)
+                if agpus is not None and len(gpus) > 1:
+                    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
                 model.load_state_dict(torch.load(model_path, map_location=dev))
                 if gpus is not None and len(gpus) > 1:
@@ -908,5 +915,7 @@ def main():
     _main(args)
 
 if __name__ == '__main__':
+
     torch.backends.cudnn.benchmark = True;
+    
     main()
