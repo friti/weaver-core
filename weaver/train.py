@@ -660,9 +660,6 @@ def _main(args):
     if args.file_fraction < 1:
         _logger.warning('Use of `file-fraction` is not recommended in general -- prefer using `data-fraction` instead.')
 
-    if args.backend not None and args.num_workers > 0:
-        _logger.warning("You cannot set more than 0 workers if you want to perform DDP .. change it in future");
-
     # classification/regression mode
     if args.regression_mode:
         _logger.info('Running in regression mode')
