@@ -33,7 +33,11 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
+
     model.train()
+
+    torch.backends.cudnn.benchmark = True; 
+    torch.backends.cudnn.enabled = True;
 
     data_config = train_loader.dataset.config
     label_counter = Counter()
@@ -131,6 +135,9 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                             tb_helper=None):
     model.eval()
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     data_config = test_loader.dataset.config
 
@@ -251,6 +258,9 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
 
     data_config = test_loader.dataset.config
 
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
+
     label_counter = Counter()
     total_correct = 0
     count = 0
@@ -308,6 +318,9 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     model.train()
 
     data_config = train_loader.dataset.config
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     total_loss = 0
     num_batches = 0
@@ -409,6 +422,9 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                                       'mean_gamma_deviance'],
                         tb_helper=None):
     model.eval()
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     data_config = test_loader.dataset.config
 
@@ -521,6 +537,9 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path)
 
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
+
     data_config = test_loader.dataset.config
 
     total_loss = 0
@@ -602,6 +621,9 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
     model.train()
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     data_config = train_loader.dataset.config
     num_batches = 0
@@ -757,6 +779,9 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                     tb_helper=None):
 
     model.eval()
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
@@ -937,6 +962,9 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
 
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path)
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
