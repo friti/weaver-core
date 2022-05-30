@@ -41,12 +41,24 @@ parser.add_argument('--data-fraction', type=float, default=1,
                     help='fraction of events to load from each file; for training, the events are randomly selected for each epoch')
 parser.add_argument('--file-fraction', type=float, default=1,
                     help='fraction of files to load; for training, the files are randomly selected for each epoch')
-parser.add_argument('--fetch-by-files', action='store_true', default=False,
-                    help='When enabled, will load all events from a small number (set by ``--fetch-step``) of files for each data fetching. '
+parser.add_argument('--fetch-by-files-train', action='store_true', default=False,
+                    help='When enabled, will load all events from a small number (set by ``--fetch-step-train``) of files for each data fetching. '
                          'Otherwise (default), load a small fraction of events from all files each time, which helps reduce variations in the sample composition.')
-parser.add_argument('--fetch-step', type=float, default=0.01,
-                    help='fraction of events to load each time from every file (when ``--fetch-by-files`` is disabled); '
-                         'Or: number of files to load each time (when ``--fetch-by-files`` is enabled). Shuffling & sampling is done within these events, so set a large enough value.')
+parser.add_argument('--fetch-by-files-val', action='store_true', default=False,
+                    help='When enabled, will load all events from a small number (set by ``--fetch-step-val``) of files for each data fetching. '
+                         'Otherwise (default), load a small fraction of events from all files each time, which helps reduce variations in the sample composition.')
+parser.add_argument('--fetch-by-files-test', action='store_true', default=False,
+                    help='When enabled, will load all events from a small number (set by ``--fetch-step-test``) of files for each data fetching. '
+                         'Otherwise (default), load a small fraction of events from all files each time, which helps reduce variations in the sample composition.')
+parser.add_argument('--fetch-step-train', type=float, default=0.01,
+                    help='fraction of events to load each time from every file (when ``--fetch-by-files-train`` is disabled); '
+                         'Or: number of files to load each time (when ``--fetch-by-files-train`` is enabled). Shuffling & sampling is done within these events, so set a large enough value.')
+parser.add_argument('--fetch-step-val', type=float, default=0.01,
+                    help='fraction of events to load each time from every file (when ``--fetch-by-files-val`` is disabled); '
+                         'Or: number of files to load each time (when ``--fetch-by-files-val`` is enabled). Shuffling & sampling is done within these events, so set a large enough value.')
+parser.add_argument('--fetch-step-test', type=float, default=0.01,
+                    help='fraction of events to load each time from every file (when ``--fetch-by-files-test`` is disabled); '
+                         'Or: number of files to load each time (when ``--fetch-by-files-test`` is enabled). Shuffling & sampling is done within these events, so set a large enough value.')
 parser.add_argument('--in-memory', action='store_true', default=False,
                     help='load the whole dataset (and perform the preprocessing) only once and keep it in memory for the entire run')
 parser.add_argument('--train-val-split', type=float, default=0.8,
@@ -226,19 +238,30 @@ def train_load(args):
     train_data = SimpleIterDataset(train_file_dict, args.data_config, for_training=True,
                                    load_range_and_fraction=(train_range, args.data_fraction),
                                    file_fraction=args.file_fraction,
-                                   fetch_by_files=args.fetch_by_files,
-                                   fetch_step=args.fetch_step,
+                                   fetch_by_files=args.fetch_by_files_train,
+                                   fetch_step=args.fetch_step_train,
                                    infinity_mode=args.steps_per_epoch is not None,
                                    in_memory=args.in_memory,
                                    name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
-    val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
-                                 load_range_and_fraction=(val_range, args.data_fraction),
-                                 file_fraction=args.file_fraction,
-                                 fetch_by_files=args.fetch_by_files,
-                                 fetch_step=args.fetch_step,
-                                 infinity_mode=args.steps_per_epoch_val is not None,
-                                 in_memory=args.in_memory,
-                                 name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+    if args.data_val:
+        val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
+                                     load_range_and_fraction=(val_range, args.data_fraction),
+                                     file_fraction=args.file_fraction,
+                                     fetch_by_files=args.fetch_by_files_val,
+                                     fetch_step=args.fetch_step_val,
+                                     infinity_mode=args.steps_per_epoch_val is not None,
+                                     in_memory=args.in_memory,
+                                     name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+    else:
+        val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
+                                     load_range_and_fraction=(val_range, args.data_fraction),
+                                     file_fraction=args.file_fraction,
+                                     fetch_by_files=args.fetch_by_files_train,
+                                     fetch_step=args.fetch_step_train,
+                                     infinity_mode=args.steps_per_epoch_val is not None,
+                                     in_memory=args.in_memory,
+                                     name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+
     train_loader = DataLoader(train_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
                               num_workers=min(args.num_workers, int(len(train_files) * args.file_fraction)),
                               persistent_workers=args.num_workers > 0 and args.steps_per_epoch is not None)
@@ -293,7 +316,7 @@ def test_load(args):
         num_workers = min(args.num_workers, len(filelist))
         test_data = SimpleIterDataset({name: filelist}, args.data_config, for_training=False,
                                       load_range_and_fraction=((0, 1), args.data_fraction),
-                                      fetch_by_files=True, fetch_step=1,
+                                      fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
                                       name='test_' + name)
         test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size, drop_last=False,
                                  pin_memory=True)
