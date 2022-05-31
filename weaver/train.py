@@ -120,8 +120,12 @@ parser.add_argument('--gpus', type=str, default='0',
                     help='device for the training/testing; to use CPU, set to empty string (""); to use multiple gpu, set it as a comma separated list, e.g., `1,2,3,4`')
 parser.add_argument('--predict-gpus', type=str, default=None,
                     help='device for the testing; to use CPU, set to empty string (""); to use multiple gpu, set it as a comma separated list, e.g., `1,2,3,4`; if not set, use the same as `--gpus`')
-parser.add_argument('--num-workers', type=int, default=1,
-                    help='number of threads to load the dataset; memory consumption and disk access load increases (~linearly) with this numbers')
+parser.add_argument('--num-workers-train', type=int, default=1,
+                    help='number of threads to load the training dataset; memory consumption and disk access load increases (~linearly) with this numbers')
+parser.add_argument('--num-workers-val', type=int, default=1,
+                    help='number of threads to load the validation dataset (when provided via --data-val otherwise use num-workers-train); memory consumption and disk access load increases (~linearly) with this numbers')
+parser.add_argument('--num-workers-test', type=int, default=1,
+                    help='number of threads to load the testing dataset; memory consumption and disk access load increases (~linearly) with this numbers')
 parser.add_argument('--predict', action='store_true', default=False,
                     help='run prediction instead of training')
 parser.add_argument('--predict-output', type=str,
@@ -243,6 +247,11 @@ def train_load(args):
                                    infinity_mode=args.steps_per_epoch is not None,
                                    in_memory=args.in_memory,
                                    name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
+                              num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
+                              persistent_workers=args.num_workers_train > 0 and args.steps_per_epoch is not None)
+
     if args.data_val:
         val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
                                      load_range_and_fraction=(val_range, args.data_fraction),
@@ -252,6 +261,11 @@ def train_load(args):
                                      infinity_mode=args.steps_per_epoch_val is not None,
                                      in_memory=args.in_memory,
                                      name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+
+        val_loader = DataLoader(val_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
+                                num_workers=min(args.num_workers_val, int(len(val_files) * args.file_fraction)),
+                                persistent_workers=args.num_workers_val > 0 and args.steps_per_epoch_val is not None)
+
     else:
         val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
                                      load_range_and_fraction=(val_range, args.data_fraction),
@@ -262,12 +276,10 @@ def train_load(args):
                                      in_memory=args.in_memory,
                                      name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
-                              num_workers=min(args.num_workers, int(len(train_files) * args.file_fraction)),
-                              persistent_workers=args.num_workers > 0 and args.steps_per_epoch is not None)
-    val_loader = DataLoader(val_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
-                            num_workers=min(args.num_workers, int(len(val_files) * args.file_fraction)),
-                            persistent_workers=args.num_workers > 0 and args.steps_per_epoch_val is not None)
+        val_loader = DataLoader(val_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
+                                num_workers=min(args.num_workers_train, int(len(val_files) * args.file_fraction)),
+                                persistent_workers=args.num_workers_train > 0 and args.steps_per_epoch_val is not None)
+
     data_config = train_data.config
     train_input_names = train_data.config.input_names
     train_label_names = train_data.config.label_names
@@ -313,12 +325,12 @@ def test_load(args):
     def get_test_loader(name):
         filelist = file_dict[name]
         _logger.info('Running on test file group %s with %d files:\n...%s', name, len(filelist), '\n...'.join(filelist))
-        num_workers = min(args.num_workers, len(filelist))
+        num_workers = min(args.num_workers_test, len(filelist))
         test_data = SimpleIterDataset({name: filelist}, args.data_config, for_training=False,
                                       load_range_and_fraction=((0, 1), args.data_fraction),
                                       fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
                                       name='test_' + name)
-        test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size, drop_last=False,
+        test_loader = DataLoader(test_data, num_workers=num_workers_test, batch_size=args.batch_size, drop_last=False,
                                  pin_memory=True)
         return test_loader
 
@@ -705,9 +717,8 @@ def _main(args):
 
     # device
     if args.gpus:
-        # distributed training
+        gpus = [int(i) for i in args.gpus.split(',')]
         if args.backend is not None:
-            gpus = [int(i) for i in args.gpus.split(',')]
             local_rank = args.local_rank;
             local_world_size = len(gpus);
             torch.cuda.set_device(local_rank)
@@ -717,7 +728,6 @@ def _main(args):
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
             torch.distributed.barrier()
         else:
-            gpus = [int(i) for i in args.gpus.split(',')]
             dev = torch.device('cuda')
     else:
         gpus = None
