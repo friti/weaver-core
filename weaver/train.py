@@ -330,7 +330,7 @@ def test_load(args):
                                       load_range_and_fraction=((0, 1), args.data_fraction),
                                       fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
                                       name='test_' + name)
-        test_loader = DataLoader(test_data, num_workers=num_workers_test, batch_size=args.batch_size, drop_last=False,
+        test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size, drop_last=False,
                                  pin_memory=True)
         return test_loader
 
