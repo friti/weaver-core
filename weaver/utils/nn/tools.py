@@ -1,3 +1,4 @@
+
 import numpy as np
 import awkward as ak
 import tqdm
@@ -182,11 +183,11 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 logits = _flatten_preds(model_output, label_mask).float()
 
                 scores.append(torch.softmax(logits, dim=1).detach().cpu().numpy())
-                for k, v in y.detach().items():
-                    labels[k].append(_flatten_label(v, label_mask).cpu().numpy())
+                for k, v in y.items():
+                    labels[k].append(_flatten_label(v, label_mask).detach().cpu().numpy())
                 if not for_training:
-                    for k, v in Z.detach().items():
-                        observers[k].append(v.cpu().numpy())
+                    for k, v in Z.items():
+                        observers[k].append(v.detach().numpy())
 
                 _, preds = logits.max(1)
                 loss = 0 if loss_func is None else loss_func(logits, label).detach().item()
@@ -277,18 +278,18 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
             gc.collect()
-            inputs = {k: v.detach().cpu().numpy() for k, v in X.items()}
-            label = y[data_config.label_names[0]].detach().cpu().numpy()
+            inputs = {k: v.detach().numpy() for k, v in X.items()}
+            label = y[data_config.label_names[0]].detach().numpy()
             num_examples = label.shape[0]
             label_counter.update(label)
             score = sess.run([], inputs)[0]
             preds = score.argmax(1)
 
             scores.append(score)
-            for k, v in y.detach().items():
-                labels[k].append(v.cpu().numpy())
-            for k, v in Z.detach().items():
-                observers[k].append(v.cpu().numpy())
+            for k, v in y.items():
+                labels[k].append(v.detach().numpy())
+            for k, v in Z.items():
+                observers[k].append(v.detach().numpy())
 
             correct = (preds == label).sum()
             total_correct += correct
@@ -460,11 +461,11 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                 preds = model_output.squeeze().float()
 
                 scores.append(preds.detach().cpu().numpy())
-                for k, v in y.detach().items():
-                    targets[k].append(v.cpu().numpy())
+                for k, v in y.items():
+                    targets[k].append(v.detach().cpu().numpy())
                 if not for_training:
-                    for k, v in Z.detach().items():
-                        observers[k].append(v.cpu().numpy())
+                    for k, v in Z.items():
+                        observers[k].append(v.detach().numpy())
 
                 loss = 0 if loss_func is None else loss_func(preds, target).detach().item()
 
@@ -559,7 +560,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
             gc.collect()
-            inputs = {k: v.detach().cpu().numpy() for k, v in X.items()}
+            inputs = {k: v.detach().numpy() for k, v in X.items()}
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y[names].float();
@@ -572,9 +573,9 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
             scores.append(score)
 
             for k, v in y.detach().items():
-                targets[k].append(v.cpu().numpy())
+                targets[k].append(v.numpy())
             for k, v in Z.detach().items():
-                observers[k].append(v.cpu().numpy())
+                observers[k].append(v.numpy())
 
             loss = 0 if loss_func is None else loss_func(preds, target).detach().item()
 
@@ -835,8 +836,8 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                     targets[name].append(y[name].detach().cpu().numpy())                
                 ### observers
                 if not for_training:
-                    for k, v in Z.detach().items():
-                        observers[k].append(v.cpu().numpy())
+                    for k, v in Z.items():
+                        observers[k].append(v.detach().numpy())
                 ### build classification and regression outputs
                 pred_cat_output = model_output[:,:len(data_config.label_value)].squeeze().float()
                 pred_reg        = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();                
@@ -991,8 +992,8 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
         for X, y, Z in tq:
             ### input features for the model
             gc.collect()
-            inputs = {k: v.detach().cpu().numpy() for k, v in X.items()}
-            label = y[data_config.label_names[0]].detach().cpu().numpy()
+            inputs = {k: v.detach().numpy() for k, v in X.items()}
+            label = y[data_config.label_names[0]].detach().numpy()
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y[names].float();
@@ -1005,11 +1006,11 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
             scores_reg.append(score[:len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)]);
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
-                labels[name].append(_flatten_label(y[name],None).detach().cpu().numpy())
+                labels[name].append(_flatten_label(y[name],None).detach().numpy())
             for k, name in enumerate(data_config.target_names):
-                targets[name].append(y[name].detach().cpu().numpy())                
+                targets[name].append(y[name].detach().numpy())                
             for k, v in Z.items():
-                observers[k].append(v.detach().cpu().numpy())
+                observers[k].append(v.detach().numpy())
 
             pred_cat = score[:,:len(data_config.label_value)].argmax(1);
             pred_reg = score[:len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)];
