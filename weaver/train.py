@@ -116,6 +116,8 @@ parser.add_argument('--batch-size', type=int, default=128,
                     help='batch size')
 parser.add_argument('--use-amp', action='store_true', default=False,
                     help='use mixed precision training (fp16)')
+parser.add_argument('--persistent-workers', action='store_true', default=False,
+                    help='make workers persistent')
 parser.add_argument('--gpus', type=str, default='0',
                     help='device for the training/testing; to use CPU, set to empty string (""); to use multiple gpu, set it as a comma separated list, e.g., `1,2,3,4`')
 parser.add_argument('--predict-gpus', type=str, default=None,
@@ -250,7 +252,7 @@ def train_load(args):
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
                               num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
-                              persistent_workers=args.num_workers_train > 0 and args.steps_per_epoch is not None)
+                              persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers))
 
     if args.data_val:
         val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
@@ -264,7 +266,7 @@ def train_load(args):
 
         val_loader = DataLoader(val_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
                                 num_workers=min(args.num_workers_val, int(len(val_files) * args.file_fraction)),
-                                persistent_workers=args.num_workers_val > 0 and args.steps_per_epoch_val is not None)
+                                persistent_workers=args.num_workers_val > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers))
 
     else:
         val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
@@ -278,7 +280,7 @@ def train_load(args):
 
         val_loader = DataLoader(val_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
                                 num_workers=min(args.num_workers_train, int(len(val_files) * args.file_fraction)),
-                                persistent_workers=args.num_workers_train > 0 and args.steps_per_epoch_val is not None)
+                                persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers))
 
     data_config = train_data.config
     train_input_names = train_data.config.input_names

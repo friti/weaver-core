@@ -702,14 +702,18 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
             num_batches += 1
             count += num_examples;
             
-            ## take the classification prediction and compare with the true labels
+            ## take the classification prediction and compare with the true labels            
             if(model_output.dim() == 1) : continue;
             _, pred_cat = model_output[:,:len(data_config.label_value)].squeeze().max(1);
+            pred_cat = pred_cat.detach().item();
+            label    = label.detach().item();
             correct = (pred_cat == label).sum().item()
             total_correct += correct
 
             ## take the regression prediction and compare with true targets
             pred_reg = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
+            pred_reg = pred_reg.detach().item();
+            target   = target.detach().item();
             residual_reg = pred_reg - target;            
             abs_err = residual_reg.abs().sum().item();
             sum_abs_err += abs_err;
@@ -841,6 +845,8 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 ### build classification and regression outputs
                 pred_cat_output = model_output[:,:len(data_config.label_value)].squeeze().float()
                 pred_reg        = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();                
+                pred_cat_output = pred_cat_output.detach().item();
+                pred_reg = pred_reg.detach().item();
                 if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
                     _, pred_cat = pred_cat_output.max(1);
                     scores_cat.append(torch.softmax(pred_cat_output,dim=1).detach().cpu().numpy());
@@ -879,9 +885,11 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 ### classification accuracy
                 if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
 
+                    label = label.detach().item();
                     correct = (pred_cat == label).sum().item()
                     total_correct += correct
                     ### regression spread
+                    target = target.detach().item();
                     residual_reg = pred_reg - target;
                     abs_err = residual_reg.abs().sum().item();
                     sum_abs_err += abs_err;
@@ -945,7 +953,10 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
+    gc.collect()
+
     if for_training:
+        del scores_cat, scores_reg, labels, targets, observers
         return total_loss / count;
     else:
         observers = {k: _concat(v) for k, v in observers.items()}
@@ -1037,8 +1048,12 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
             total_reg_loss += loss_reg
             count += num_examples
 
+            pred_cat = pred_cat.detach().item();
+            label = label.detach().item();
             correct = (pred_cat == label).sum().item()
             total_correct += correct
+            pred_reg = pred_reg.detach().item();
+            target = target.detach().item();
             residual_reg = pred_reg - target;
             abs_err = residual_reg.abs().sum().item();
             sum_abs_err += abs_err;
@@ -1080,6 +1095,8 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     observers = {k: _concat(v) for k, v in observers.items()}
+
+    gc.collect()
 
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
