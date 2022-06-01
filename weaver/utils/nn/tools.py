@@ -623,6 +623,9 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
 
     model.train()
 
+    gc.collect()
+    torch.cuda.empty_cache()
+
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
 
@@ -645,7 +648,6 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
-            gc.collect()
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
@@ -777,6 +779,9 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
+    gc.collect()
+    torch.cuda.empty_cache()
+
 ## evaluate classification + regression task
 def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
                     eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
@@ -784,6 +789,9 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                     tb_helper=None):
 
     model.eval()
+
+    gc.collect()
+    torch.cuda.empty_cache()
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
@@ -814,7 +822,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
         with tqdm.tqdm(test_loader) as tq:
             for X, y, Z in tq:
                 ### input features for the model
-                gc.collect()
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
                 label  = y[data_config.label_names[0]].long()
@@ -954,6 +961,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     gc.collect()
+    torch.cuda.empty_cache()
 
     if for_training:
         del scores_cat, scores_reg, labels, targets, observers
@@ -974,6 +982,9 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
 
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path)
+
+    gc.collect()
+    torch.cuda.empty_cache()
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
@@ -998,6 +1009,7 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     loss,loss_cat,loss_reg = None, None, None;
 
     start_time = time.time()
+
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
@@ -1097,6 +1109,7 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     observers = {k: _concat(v) for k, v in observers.items()}
 
     gc.collect()
+    torch.cuda.empty_cache()
 
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
