@@ -81,7 +81,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             loss = loss.detach().item()
             label = label.detach();
             logits = logits.detach();
-            _, preds = logits..max(1)
+            _, preds = logits.max(1)
             num_batches += 1
             count += num_examples
             correct = (preds == label).sum().item()
