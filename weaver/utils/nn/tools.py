@@ -43,8 +43,8 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
     data_config = train_loader.dataset.config
     label_counter = Counter()
-    count, num_batches, total_loss, total_correct = 0
-    loss, inputs, label, label_mask, model_output, logits, preds, correct = None
+    count, num_batches, total_loss, total_correct = 0, 0, 0, 0
+    loss, inputs, label, label_mask, model_output, logits, preds, correct = None, None, None, None, None, None, None, None
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
@@ -140,8 +140,8 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     data_config = test_loader.dataset.config
 
     label_counter = Counter()
-    num_batches, count, entry_count, total_correct, total_loss = 0
-    inputs, label, label_mask, model_output, logits, preds, loss, correct = None
+    num_batches, count, entry_count, total_correct, total_loss = 0, 0, 0, 0, 0
+    inputs, label, label_mask, model_output, logits, preds, loss, correct = None, None, None, None, None, None, None, None, None
     scores = []
     labels_counts = []
     labels = defaultdict(list)
@@ -253,12 +253,12 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     torch.cuda.empty_cache()
 
     label_counter = Counter()
-    total_correct, count = 0
+    total_correct, count = 0, 0, 0
     scores = []
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
-    inputs, label, score, preds, correct = None
+    inputs, label, score, preds, correct = None, None, None, None, None
     start_time = time.time()
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
@@ -310,8 +310,8 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     gc.collect()
     torch.cuda.empty_cache()
 
-    num_batches, total_loss, sum_abs_err, sum_sqr_err, count = 0
-    loss, inputs, target, model_output, preds = None
+    num_batches, total_loss, sum_abs_err, sum_sqr_err, count = 0, 0, 0, 0, 0
+    loss, inputs, target, model_output, preds = None, None, None, None, None
 
     start_time = time.time()
 
@@ -412,10 +412,10 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
     data_config = test_loader.dataset.config
 
-    total_loss, num_batches, sum_sqr_err, sum_abs_err, count = 0
+    total_loss, num_batches, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0
     scores = []
-    labels, targets, observers = defaultdict(list)
-    inputs, target, model_output, preds, loss = None
+    labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list)
+    inputs, target, model_output, preds, loss = None, None, None, None, None
     start_time = time.time()
 
     with torch.no_grad():
@@ -518,10 +518,10 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
     data_config = test_loader.dataset.config
 
-    total_loss, sum_sqr_err, sum_abs_err, count = 0
+    total_loss, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0
     scores = []
-    labels, targets, observers = defaultdict(list)
-    inputs, target, score, preds, loss = None
+    labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list)
+    inputs, target, score, preds, loss = None, None, None, None, None
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
@@ -598,10 +598,10 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     torch.cuda.empty_cache()
 
     data_config = train_loader.dataset.config
-    num_batches, total_loss, total_cat_loss, total_reg_loss, count = 0
+    num_batches, total_loss, total_cat_loss, total_reg_loss, count = 0, 0, 0, 0, 0
     label_counter = Counter()
-    total_correct, sum_abs_err, sum_sqr_err = 0
-    inputs, target, label, model_output, loss, loss_cat, loss_target, loss_reg, pred_cat, pred_reg, residual_reg, correct = None
+    total_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0
+    inputs, target, label, model_output, loss, loss_cat, loss_target, loss_reg, pred_cat, pred_reg, residual_reg, correct = None, None, None, None, None, None, None, None, None, None, None, None
 
     start_time = time.time()
 
@@ -753,10 +753,10 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
-    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0
+    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0
     scores_cat = []
     scores_reg = []
-    inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None;
+    inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
@@ -932,16 +932,15 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
-    total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0
+    total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0
     scores_cat = []
     scores_reg = []
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
-    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None,
+    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
 
     start_time = time.time()
-
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
