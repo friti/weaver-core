@@ -57,8 +57,9 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             except KeyError:
                 label_mask = None
             label = _flatten_label(label, label_mask)
-            num_examples = label.detach().shape[0]
-            label_counter.update(label.detach().cpu().numpy())
+
+            num_examples = label.shape[0]
+            label_counter.update(label.cpu().numpy())
             label = label.to(dev,non_blocking=True)
 
             model.zero_grad(set_to_none=True)
@@ -78,10 +79,9 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             if scheduler and getattr(scheduler, '_update_per_step', False):
                 scheduler.step()
 
-            loss = loss.detach().item()
+            loss  = loss.detach().item()
             label = label.detach();
-            logits = logits.detach();
-            _, preds = logits.max(1)
+            _, preds = logits.detach().max(1)
             num_batches += 1
             count += num_examples
             correct = (preds == label).sum().item()
@@ -154,30 +154,29 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
             for X, y, Z in tq:
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 label  = y[data_config.label_names[0]].long()
-                entry_count += label.detach().shape[0]
+                entry_count += label.shape[0]
                 try:
                     label_mask = y[data_config.label_names[0] + '_mask'].bool()
                 except KeyError:
                     label_mask = None
                 if not for_training and label_mask is not None:
-                    labels_counts.append(np.squeeze(label_mask.detach().cpu().numpy().sum(axis=-1)))
+                    labels_counts.append(np.squeeze(label_mask.cpu().numpy().sum(axis=-1)))
                 label = _flatten_label(label, label_mask)
-                num_examples = label.detach().shape[0]
-                label_counter.update(label.detach().cpu().numpy())
+                num_examples = label.shape[0]
+                label_counter.update(label.cpu().numpy())
                 label = label.to(dev,non_blocking=True)
                 model_output = model(*inputs)
                 logits = _flatten_preds(model_output, label_mask).float()
 
-                scores.append(torch.softmax(logits.detach(), dim=1).detach().cpu(s).numpy())
+                scores.append(torch.softmax(logits,dim=1).detach().cpu(s).numpy())
                 for k, v in y.items():
-                    labels[k].append(_flatten_label(v.detach(), label_mask.detach()).detach().cpu().numpy())
+                    labels[k].append(_flatten_label(v,label_mask).cpu().numpy())
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.detach().numpy())
+                        observers[k].append(v.cpu().numpy())
 
-                _, preds = logits.detach().max(1)
+                _, preds = logits.max(1)
                 loss = 0 if loss_func is None else loss_func(logits, label).detach().item()
-                label = label.detach();
 
                 num_batches += 1
                 count += num_examples
@@ -221,7 +220,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        del scores, labels, targets, observers, labels_counts
+        scores.clear(); labels.clear(); targets.clear(); observers.clear(); labels_counts.clear(); 
         return total_correct / count
     else:
         # convert 2D labels/scores
@@ -262,21 +261,19 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     start_time = time.time()
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
-            inputs = {k: v.detach().numpy() for k, v in X.items()}
-            label = y[data_config.label_names[0]].detach().numpy()
-            num_examples = label.detach().shape[0]
-            label_counter.update(label.detach())
+            inputs = {k: v.cpu().numpy() for k, v in X.items()}
+            label = y[data_config.label_names[0]].cpu().numpy()
+            num_examples = label.shape[0]
+            label_counter.update(label)
             score = sess.run([], inputs)[0]
             preds = score.argmax(1)
 
             scores.append(score)
             for k, v in y.items():
-                labels[k].append(v.detach().numpy())
+                labels[k].append(v.cpu().numpy())
             for k, v in Z.items():
-                observers[k].append(v.detach().numpy())
+                observers[k].append(v.cpu().numpy())
 
-            preds = preds.detach();
-            label = label.detach();
             correct = (preds == label).sum()
             total_correct += correct
             count += num_examples
@@ -323,7 +320,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     target = y[names].float();
                 else:
                     target = torch.column_stack((target,y[names].float()))
-            num_examples = target.detach().shape[0]
+            num_examples = target.shape[0]
             target = target.to(dev,non_blocking=True)
 
             model.zero_grad(set_to_none=True)
@@ -347,9 +344,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             count += num_examples
             total_loss += loss
 
-            preds = preds.detach();
-            target = target.detach();
-            e = preds - target
+            e = preds.detach() - target.detach()
             abs_err = e.abs().sum().item()
             sum_abs_err += abs_err
             sqr_err = e.square().sum().item()
@@ -427,25 +422,23 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                         target = y[names].float();
                     else:
                         target = torch.column_stack((target,y[names].float()))
-                num_examples = target.detach().shape[0]
+                num_examples = target.shape[0]
                 target = target.to(devmnon_blocking=True)
                 model_output = model(*inputs)
                 preds = model_output.squeeze().float()
 
                 scores.append(preds.detach().cpu().numpy())
                 for k, v in y.items():
-                    targets[k].append(v.detach().cpu().numpy())
+                    targets[k].append(v.cpu().numpy())
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.detach().numpy())
+                        observers[k].append(v.cpu().numpy())
 
                 loss = 0 if loss_func is None else loss_func(preds, target).detach().item()
                 num_batches += 1
                 count += num_examples
                 total_loss += loss * num_examples
                 
-                preds = preds.detach();
-                target = target.detach();
                 e = preds - target
                 abs_err = e.abs().sum().item()
                 sum_abs_err += abs_err
@@ -497,7 +490,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        del scores, labels, targets, observers    
+        scores.clear(); labels.clear(); targets.clear(); observer.clear();
         return total_loss / count
     else:
         # convert 2D targets/scores
@@ -527,30 +520,27 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
             gc.collect()
-            inputs = {k: v.detach().numpy() for k, v in X.items()}
+            inputs = {k: v.numpy() for k, v in X.items()}
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y[names].float();
                 else:
                     target = torch.column_stack((target,y[names].float()))
-            num_examples = target.detach().shape[0]            
+            num_examples = target.shape[0]            
             score = sess.run([], inputs)
             preds = score.squeeze().float()
 
             scores.append(score)
 
-            for k, v in y.detach().items():
-                targets[k].append(v.detach().cpu().numpy())
-            for k, v in Z.detach().items():
-                observers[k].append(v.detach().cpu().numpy())
+            for k, v in y.items():
+                targets[k].append(v.cpu().numpy())
+            for k, v in Z.items():
+                observers[k].append(v.cpu().numpy())
 
-            loss = 0 if loss_func is None else loss_func(preds, target).detach().item()
+            loss = 0 if loss_func is None else loss_func(preds, target).item()
 
             count += num_examples
             total_loss += loss * num_examples
-
-            preds = preds.detach();
-            target = target.detach();
 
             e = preds - target
             abs_err = e.abs().sum().item()
@@ -612,7 +602,7 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
             ### build classification true labels (numpy argmax)
             label  = y[data_config.label_names[0]].long()
             label  = _flatten_label(label,None)
-            label_counter.update(label.detach().cpu().numpy())
+            label_counter.update(label.cpu().numpy())
             label  = label.to(dev,non_blocking=True)
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
@@ -622,7 +612,7 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
                     target = torch.column_stack((target,y[names].float()))
             target = target.to(dev,non_blocking=True)            
             ### Number of samples in the batch
-            num_examples = max(label.detach().shape[0],target.detach().shape[0]);
+            num_examples = max(label.shape[0],target.shape[0]);
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
@@ -789,19 +779,19 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.numpy())
+                        observers[k].append(v.cpu().numpy())
                 ### build classification and regression outputs
                 pred_cat_output = model_output[:,:len(data_config.label_value)].squeeze().float()
                 pred_reg        = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();                
                 if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
                     _, pred_cat = pred_cat_output.max(1);
-                    scores_cat.append(torch.softmax(pred_cat_output,dim=1).cpu().numpy());
-                    scores_reg.append(pred_reg.cpu().numpy())
+                    scores_cat.append(torch.softmax(pred_cat_output,dim=1).detach().cpu().numpy());
+                    scores_reg.append(pred_reg.detach().cpu().numpy())
                 else:
                     pred_cat = torch.zeros(num_examples).cpu().numpy();
-                    scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).cpu().numpy());
+                    scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).detach().cpu().numpy());
                     if len(data_config.target_value) > 1:
-                        scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).cpu().numpy());
+                        scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).detach().cpu().numpy());
                     else:
                         scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
                     
@@ -815,9 +805,9 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                     ### true labels and true target 
                     loss_target = torch.cat((label,target),dim=1)
                     loss, loss_cat, loss_reg = loss_func(model_output,loss_target)
-                    loss = loss.item()
-                    loss_cat = loss_cat.item()
-                    loss_reg = loss_reg.item()
+                    loss = loss.detach().item()
+                    loss_cat = loss_cat.detach().item()
+                    loss_reg = loss_reg.detach().item()
                     ### erase useless dimensions
                     label  = label.squeeze();
                     target = target.squeeze(); 
@@ -900,7 +890,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     if for_training:
-        del scores_cat, scores_reg, labels, targets, observers
+        scores_cat.clear(); scores_reg.clear(); labels.clear(); targets.clear(); observers.clear();
         return total_loss / count;
     else:
         observers = {k: _concat(v) for k, v in observers.items()}
