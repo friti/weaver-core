@@ -38,7 +38,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     model.train()
     torch.backends.cudnn.benchmark = True; 
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     data_config = train_loader.dataset.config
@@ -126,6 +125,8 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
+    gc.collect()
+
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
@@ -134,7 +135,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     data_config = test_loader.dataset.config
@@ -221,6 +221,8 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     if for_training:
         scores.clear(); labels.clear(); targets.clear(); observers.clear(); labels_counts.clear(); 
+        del scores, labels, targets, observers, labels_counts;
+        gc.collect()
         return total_correct / count
     else:
         # convert 2D labels/scores
@@ -236,6 +238,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 for k, v in labels.items():
                     labels[k] = v.reshape((entry_count, -1))
         observers = {k: _concat(v) for k, v in observers.items()}
+        gc.collect()
         return total_correct / count, scores, labels, targets, observers
 
 
@@ -293,6 +296,7 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
     observers = {k: _concat(v) for k, v in observers.items()}
     
+    gc.collect()
     return total_correct / count, scores, labels, targets, observers
 
 ## train a regression with possible multi-dimensional target i.e. a list of 1D functions (target_names) 
@@ -393,6 +397,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
+    gc.collect()
 
 def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
                         eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error',
@@ -490,11 +495,14 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        scores.clear(); labels.clear(); targets.clear(); observer.clear();
+        scores.clear(); labels.clear(); targets.clear(); observers.clear();
+        del scores, labels, targets, observers
+        gc.collect()
         return total_loss / count
     else:
         # convert 2D targets/scores
         observers = {k: _concat(v) for k, v in observers.items()}        
+        gc.collect()
         return total_loss / count, scores, labels, targets, observers
         
 ## evaluate regression via ONNX
@@ -573,7 +581,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     observers = {k: _concat(v) for k, v in observers.items()}        
-
+    gc.collect();
     return total_loss / count, scores, labels, targets, observers
 
 
@@ -724,6 +732,8 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
+    gc.collect();
+
 ## evaluate classification + regression task
 def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
                     eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
@@ -734,7 +744,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     data_config = test_loader.dataset.config
@@ -891,14 +900,18 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
 
     if for_training:
         scores_cat.clear(); scores_reg.clear(); labels.clear(); targets.clear(); observers.clear();
+        del scores_cat, scores_reg, labels, targets, observers;
+        gc.collect()
         return total_loss / count;
     else:
         observers = {k: _concat(v) for k, v in observers.items()}
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
+            gc.collect()
             return total_loss / count, scores, labels, targets, observers
         else:
+            gc.collect()
             return total_loss / count, scores_reg, labels, targets, observers
 
 
@@ -1021,8 +1034,10 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
         scores = np.concatenate((scores_cat,scores_reg),axis=1)
+        gc.collect()
         return total_loss / count, scores, labels, targets, observers
     else:
+        gc.collect()
         return total_loss / count, scores_reg, labels, targets, observers
 
 class TensorboardHelper(object):
