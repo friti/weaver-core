@@ -10,6 +10,7 @@ import functools
 import numpy as np
 import math
 import torch
+import gc
 
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
@@ -808,6 +809,7 @@ def _main(args):
         best_valid_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
         for epoch in range(args.num_epochs):
+            gc.collect();
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
                     continue
