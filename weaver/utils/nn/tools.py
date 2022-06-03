@@ -141,7 +141,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     label_counter = Counter()
     num_batches, count, entry_count, total_correct, total_loss = 0, 0, 0, 0, 0
-    inputs, label, label_mask, model_output, logits, preds, loss, correct = None, None, None, None, None, None, None, None, None
+    inputs, label, label_mask, model_output, logits, preds, loss, correct = None, None, None, None, None, None, None, None
     scores = []
     labels_counts = []
     labels = defaultdict(list)
@@ -666,16 +666,12 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
             ## take the classification prediction and compare with the true labels            
             if(model_output.dim() == 1) : continue;
             _, pred_cat = model_output[:,:len(data_config.label_value)].squeeze().max(1);
-            pred_cat = pred_cat.detach();
-            label    = label.detach();
-            correct  = (pred_cat == label).sum().item()
+            correct  = (pred_cat.detach() == label.detach()).sum().item()
             total_correct += correct
 
             ## take the regression prediction and compare with true targets
             pred_reg = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
-            pred_reg = pred_reg.detach();
-            target   = target.detach();
-            residual_reg = pred_reg - target;            
+            residual_reg = pred_reg.detach() - target.detach();            
             abs_err = residual_reg.abs().sum().item();
             sum_abs_err += abs_err;
             sqr_err = residual_reg.square().sum().item()
@@ -771,7 +767,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 ### build classification true labels
                 label  = y[data_config.label_names[0]].long()
                 label  = _flatten_label(label,None)
-                label_counter.update(label.detach().cpu().numpy())
+                label_counter.update(label.cpu().numpy())
                 label  = label.to(dev,non_blocking=True)
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
@@ -781,33 +777,31 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                         target = torch.column_stack((target,y[names].float()))
                 target = target.to(dev,non_blocking=True)            
                 ### update counters
-                num_examples = max(label.detach().shape[0],target.detach().shape[0]);
+                num_examples = max(label.shape[0],target.shape[0]);
                 entry_count += num_examples
                 ### evaluate model
                 model_output = model(*inputs)
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
-                    labels[name].append(_flatten_label(y[name],None).detach().cpu().numpy())
+                    labels[name].append(_flatten_label(y[name],None).cpu().numpy())
                 for k, name in enumerate(data_config.target_names):
-                    targets[name].append(y[name].detach().cpu().numpy())                
+                    targets[name].append(y[name].cpu().numpy())                
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.detach().numpy())
+                        observers[k].append(v.numpy())
                 ### build classification and regression outputs
                 pred_cat_output = model_output[:,:len(data_config.label_value)].squeeze().float()
                 pred_reg        = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();                
-                pred_cat_output = pred_cat_output.detach();
-                pred_reg = pred_reg.detach();
                 if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
                     _, pred_cat = pred_cat_output.max(1);
-                    scores_cat.append(torch.softmax(pred_cat_output,dim=1).detach().cpu().numpy());
+                    scores_cat.append(torch.softmax(pred_cat_output,dim=1).cpu().numpy());
                     scores_reg.append(pred_reg.cpu().numpy())
                 else:
                     pred_cat = torch.zeros(num_examples).cpu().numpy();
-                    scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).detach().cpu().numpy());
+                    scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).cpu().numpy());
                     if len(data_config.target_value) > 1:
-                        scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).detach().cpu().numpy());
+                        scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).cpu().numpy());
                     else:
                         scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
                     
@@ -821,9 +815,9 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                     ### true labels and true target 
                     loss_target = torch.cat((label,target),dim=1)
                     loss, loss_cat, loss_reg = loss_func(model_output,loss_target)
-                    loss = loss.detach().item()
-                    loss_cat = loss_cat.detach().item()
-                    loss_reg = loss_reg.detach().item()
+                    loss = loss.item()
+                    loss_cat = loss_cat.item()
+                    loss_reg = loss_reg.item()
                     ### erase useless dimensions
                     label  = label.squeeze();
                     target = target.squeeze(); 
@@ -837,11 +831,9 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 ### classification accuracy
                 if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
 
-                    label = label.detach();                    
                     correct = (pred_cat == label).sum().item()
                     total_correct += correct
                     ### regression spread
-                    target = target.detach();
                     residual_reg = pred_reg - target;
                     abs_err = residual_reg.abs().sum().item();
                     sum_abs_err += abs_err;
@@ -892,10 +884,12 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     labels  = {k: _concat(v) for k, v in labels.items()}
     targets = {k: _concat(v) for k, v in targets.items()}
     
+    _logger.info('Evaluation of metrics\n')
     metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
+    _logger.info('Evaluation of regression metrics\n')
     for idx, (name,element) in enumerate(targets.items()):
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
@@ -945,25 +939,25 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
             ### input features for the model
-            inputs = {k: v.detach().numpy() for k, v in X.items()}
-            label = y[data_config.label_names[0]].detach().numpy()
+            inputs = {k: v.numpy() for k, v in X.items()}
+            label = y[data_config.label_names[0]].numpy()
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y[names].float();
                 else:
                     target = torch.column_stack((target,y[names].float()))
-            num_examples = max(label.detach().shape[0],target.detach().shape[0]);
-            label_counter.update(label.detach().cpu().numpy())
+            num_examples = max(label.shape[0],target.shape[0]);
+            label_counter.update(label.cpu().numpy())
             score = sess.run([], inputs)
             scores_cat.append(score[:,:len(data_config.label_value)]);
             scores_reg.append(score[:len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)]);
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
-                labels[name].append(_flatten_label(y[name],None).detach().cpu().numpy())
+                labels[name].append(_flatten_label(y[name],None).cpu().numpy())
             for k, name in enumerate(data_config.target_names):
-                targets[name].append(y[name].detach().cpu().numpy())                
+                targets[name].append(y[name].cpu().numpy())                
             for k, v in Z.items():
-                observers[k].append(v.detach().cpu().numpy())
+                observers[k].append(v.cpu().numpy())
 
             pred_cat = score[:,:len(data_config.label_value)].argmax(1);
             pred_reg = score[:len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)];
@@ -978,9 +972,9 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
                 ### true labels and true target 
                 loss_target = torch.cat((label,target),dim=1)
                 loss, loss_cat, loss_reg = loss_func(model_output,loss_target);
-                loss = loss.detach().item()
-                loss_cat = loss_cat.detach().item()
-                loss_reg = loss_reg.detach().item()
+                loss = loss.item()
+                loss_cat = loss_cat.item()
+                loss_reg = loss_reg.item()
                 ### erase useless dimensions
                 label  = label.squeeze();
                 target = target.squeeze(); 
@@ -990,12 +984,8 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
             total_reg_loss += loss_reg
             count += num_examples
 
-            pred_cat = pred_cat.detach();
-            label = label.detach();
             correct = (pred_cat == label).sum().item()
             total_correct += correct
-            pred_reg = pred_reg.detach();
-            target = target.detach();
             residual_reg = pred_reg - target;
             abs_err = residual_reg.abs().sum().item();
             sum_abs_err += abs_err;

@@ -112,7 +112,11 @@ parser.add_argument('--load-epoch', type=int, default=None,
                     help='used to resume interrupted training, load model and optimizer state saved in the `epoch-%%d_state.pt` and `epoch-%%d_optimizer.pt` files')
 parser.add_argument('--start-lr', type=float, default=5e-3,
                     help='start learning rate')
-parser.add_argument('--batch-size', type=int, default=128,
+parser.add_argument('--batch-size-train', type=int, default=128,
+                    help='batch size')
+parser.add_argument('--batch-size-val', type=int, default=128,
+                    help='batch size')
+parser.add_argument('--batch-size-test', type=int, default=128,
                     help='batch size')
 parser.add_argument('--use-amp', action='store_true', default=False,
                     help='use mixed precision training (fp16)')
@@ -250,7 +254,7 @@ def train_load(args):
                                    in_memory=args.in_memory,
                                    name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
+    train_loader = DataLoader(train_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
                               num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
                               persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers))
 
@@ -264,7 +268,7 @@ def train_load(args):
                                      in_memory=args.in_memory,
                                      name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
-        val_loader = DataLoader(val_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
+        val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
                                 num_workers=min(args.num_workers_val, int(len(val_files) * args.file_fraction)),
                                 persistent_workers=args.num_workers_val > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers))
 
@@ -278,7 +282,7 @@ def train_load(args):
                                      in_memory=args.in_memory,
                                      name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
-        val_loader = DataLoader(val_data, batch_size=args.batch_size, drop_last=True, pin_memory=True,
+        val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
                                 num_workers=min(args.num_workers_train, int(len(val_files) * args.file_fraction)),
                                 persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers))
 
@@ -332,7 +336,7 @@ def test_load(args):
                                       load_range_and_fraction=((0, 1), args.data_fraction),
                                       fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
                                       name='test_' + name)
-        test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size, drop_last=False,
+        test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False,
                                  pin_memory=True)
         return test_loader
 
