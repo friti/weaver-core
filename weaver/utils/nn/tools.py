@@ -220,7 +220,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        scores.clear(); labels.clear(); targets.clear(); observers.clear(); labels_counts.clear(); 
         del scores, labels, targets, observers, labels_counts;
         gc.collect()
         return total_correct / count
@@ -495,7 +494,6 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        scores.clear(); labels.clear(); targets.clear(); observers.clear();
         del scores, labels, targets, observers
         gc.collect()
         return total_loss / count
@@ -899,7 +897,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     if for_training:
-        scores_cat.clear(); scores_reg.clear(); labels.clear(); targets.clear(); observers.clear();
         del scores_cat, scores_reg, labels, targets, observers;
         gc.collect()
         return total_loss / count;
