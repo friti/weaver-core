@@ -10,6 +10,7 @@ import functools
 import numpy as np
 import math
 import torch
+import gc
 
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
@@ -808,6 +809,7 @@ def _main(args):
         best_valid_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
         for epoch in range(args.num_epochs):
+            gc.collect();
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
                     continue
@@ -839,7 +841,8 @@ def _main(args):
                                  epoch, args.model_prefix + '_best_epoch_state.pt')
                     # torch.save(model, args.model_prefix + '_best_epoch_full.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
-                         (epoch, valid_metric, best_valid_metric), color='bold')
+                         (epoch, valid_metric, best_valid_metric), color='bold')            
+            gc.collect();
 
     if args.data_test:
         if args.backend is not None and local_rank != 0:
@@ -886,6 +889,7 @@ def _main(args):
                     model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)            
             _logger.info('Test metric %.5f' % test_metric, color='bold')
             del test_loader
+            gc.collect()
 
             if args.predict_output and scores.ndim:
                 if '/' not in args.predict_output:

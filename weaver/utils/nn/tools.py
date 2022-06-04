@@ -250,7 +250,6 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     label_counter = Counter()
@@ -307,7 +306,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     num_batches, total_loss, sum_abs_err, sum_sqr_err, count = 0, 0, 0, 0, 0
@@ -406,7 +404,6 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     data_config = test_loader.dataset.config
@@ -512,7 +509,6 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     data_config = test_loader.dataset.config
@@ -525,7 +521,6 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
-            gc.collect()
             inputs = {k: v.numpy() for k, v in X.items()}
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
@@ -590,7 +585,6 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     data_config = train_loader.dataset.config
@@ -921,7 +915,6 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.collect()
     torch.cuda.empty_cache()
 
     data_config = test_loader.dataset.config
