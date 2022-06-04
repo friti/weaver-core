@@ -215,9 +215,12 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     scores = np.concatenate(scores)
     labels = {k: _concat(v) for k, v in labels.items()}
+
+    metric_results = None;
     metric_results = evaluate_metrics(labels[data_config.label_names[0]], scores, eval_metrics=eval_metrics)
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
+    del metric_results;
 
     if for_training:
         del scores, labels, targets, observers, labels_counts;
@@ -289,9 +292,13 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
 
     scores = np.concatenate(scores)
     labels = {k: _concat(v) for k, v in labels.items()}
+
+    metric_results = None;
     metric_results = evaluate_metrics(labels[data_config.label_names[0]], scores, eval_metrics=eval_metrics)
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
+    del metric_results;
+
     observers = {k: _concat(v) for k, v in observers.items()}
     
     gc.collect()
@@ -482,13 +489,15 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     targets = {k: _concat(v) for k, v in targets.items()}
 
     for idx, (name,element) in enumerate(targets.items()):
+        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores, eval_metrics=eval_reg_metrics)
         else:
             metric_reg_results = evaluate_metrics(element, scores[:,idx], eval_metrics=eval_reg_metrics)
 
         _logger.info('Evaluation metrics: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
+            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))        
+        del metric_reg_results;
 
     if for_training:
         del scores, labels, targets, observers
@@ -565,14 +574,15 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     targets = {k: _concat(v) for k, v in targets.items()}
 
     for idx, (name,element) in enumerate(targets.items()):
+        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores, eval_metrics=eval_reg_metrics)
         else:
             metric_reg_results = evaluate_metrics(element, scores[:,idx], eval_metrics=eval_reg_metrics)
-
         _logger.info('Evaluation metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
-
+        del metric_reg_results;
+        
     observers = {k: _concat(v) for k, v in observers.items()}        
     gc.collect();
     return total_loss / count, scores, labels, targets, observers
@@ -874,14 +884,17 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     scores_reg = np.concatenate(scores_reg).squeeze()
     labels  = {k: _concat(v) for k, v in labels.items()}
     targets = {k: _concat(v) for k, v in targets.items()}
-    
+
     _logger.info('Evaluation of metrics\n')
+    metric_cat_results = None;    
     metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+    del metric_cat_results;
 
     _logger.info('Evaluation of regression metrics\n')
     for idx, (name,element) in enumerate(targets.items()):
+        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
         else:
@@ -889,6 +902,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
 
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
+        del metric_reg_results;
 
     if for_training:
         del scores_cat, scores_reg, labels, targets, observers;
@@ -1006,11 +1020,14 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     labels  = {k: _concat(v) for k, v in labels.items()}
     targets = {k: _concat(v) for k, v in targets.items()}
     
+    metric_cat_results = None;
     metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+    del metric_cat_results;
 
     for idx, (name,element) in enumerate(targets.items()):
+        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
         else:
@@ -1018,6 +1035,7 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
 
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
+        del metric_reg_results;
 
     observers = {k: _concat(v) for k, v in observers.items()}
 
