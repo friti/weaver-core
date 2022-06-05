@@ -806,7 +806,7 @@ def _main(args):
             return
 
         # training loop
-        best_valid_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
+        best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
         for epoch in range(args.num_epochs):
             if args.load_epoch is not None:
@@ -815,8 +815,8 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
             with ThreadPoolExecutor(max_workers=1) as train_executor:
-                train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb);
-                train_result = train_executor.result();
+                train_future = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb);
+                train_metric = train_future.result();
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -832,18 +832,19 @@ def _main(args):
 
             _logger.info('Epoch #%d validating' % epoch)
             with ThreadPoolExecutor(max_workers=1) as val_executor:
-                val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb);
-                valid_metric = val_executor.result();
+                val_future = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb);
+                val_metric = val_future.result();
+                print("validation metric ",val_metric);
 
-            is_best_epoch = (valid_metric < best_valid_metric) if args.regression_mode or args.hybrid_mode else(valid_metric > best_valid_metric)
+            is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
-                best_valid_metric = valid_metric
+                best_val_metric = val_metric
                 if args.model_prefix and (args.backend is None or local_rank == 0):
                     shutil.copy2(args.model_prefix + '_epoch-%d_state.pt' %
                                  epoch, args.model_prefix + '_best_epoch_state.pt')
                     # torch.save(model, args.model_prefix + '_best_epoch_full.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
-                         (epoch, valid_metric, best_valid_metric), color='bold')            
+                         (epoch, val_metric, best_val_metric), color='bold')            
 
     if args.data_test:
         if args.backend is not None and local_rank != 0:
