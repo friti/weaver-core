@@ -4,7 +4,6 @@ import awkward as ak
 import tqdm
 import time
 import torch
-import gc 
 
 from collections import defaultdict, Counter
 from .metrics import evaluate_metrics
@@ -39,11 +38,12 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     torch.backends.cudnn.benchmark = True; 
     torch.backends.cudnn.enabled = True;
     torch.cuda.empty_cache()
-
+    
     data_config = train_loader.dataset.config
     label_counter = Counter()
     count, num_batches, total_loss, total_correct = 0, 0, 0, 0
     loss, inputs, label, label_mask, model_output, logits, preds, correct = None, None, None, None, None, None, None, None
+
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
@@ -125,12 +125,9 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
-    gc.collect()
-
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
-def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
-                            eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
-                            tb_helper=None):
+def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+                            eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
     model.eval()
 
     torch.backends.cudnn.benchmark = True;
@@ -147,6 +144,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     labels = defaultdict(list)
     targets = defaultdict(list)
     observers = defaultdict(list)
+
     start_time = time.time()
 
     with torch.no_grad():
@@ -220,11 +218,8 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     metric_results = evaluate_metrics(labels[data_config.label_names[0]], scores, eval_metrics=eval_metrics)
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
-    del metric_results;
 
     if for_training:
-        del scores, labels, targets, observers, labels_counts;
-        gc.collect()
         return total_correct / count
     else:
         # convert 2D labels/scores
@@ -240,7 +235,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 for k, v in labels.items():
                     labels[k] = v.reshape((entry_count, -1))
         observers = {k: _concat(v) for k, v in observers.items()}
-        gc.collect()
         return total_correct / count, scores, labels, targets, observers
 
 
@@ -262,7 +256,8 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     targets = defaultdict(list)
     observers = defaultdict(list)
     inputs, label, score, preds, correct = None, None, None, None, None
-    start_time = time.time()
+    start_time = time.time();
+
     with tqdm.tqdm(test_loader) as tq:
         for X, y, Z in tq:
             inputs = {k: v.cpu().numpy() for k, v in X.items()}
@@ -297,11 +292,9 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     metric_results = evaluate_metrics(labels[data_config.label_names[0]], scores, eval_metrics=eval_metrics)
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
-    del metric_results;
 
     observers = {k: _concat(v) for k, v in observers.items()}
     
-    gc.collect()
     return total_correct / count, scores, labels, targets, observers
 
 ## train a regression with possible multi-dimensional target i.e. a list of 1D functions (target_names) 
@@ -317,7 +310,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     num_batches, total_loss, sum_abs_err, sum_sqr_err, count = 0, 0, 0, 0, 0
     loss, inputs, target, model_output, preds = None, None, None, None, None
-
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
@@ -401,12 +393,9 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
-    gc.collect()
+def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+                        eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
-def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
-                        eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error',
-                                      'mean_gamma_deviance'],
-                        tb_helper=None):
     model.eval()
 
     torch.backends.cudnn.benchmark = True;
@@ -488,8 +477,8 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     scores = np.concatenate(scores)
     targets = {k: _concat(v) for k, v in targets.items()}
 
+    metric_reg_results = None;
     for idx, (name,element) in enumerate(targets.items()):
-        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores, eval_metrics=eval_reg_metrics)
         else:
@@ -497,16 +486,12 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
         _logger.info('Evaluation metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))        
-        del metric_reg_results;
 
     if for_training:
-        del scores, labels, targets, observers
-        gc.collect()
         return total_loss / count
     else:
         # convert 2D targets/scores
         observers = {k: _concat(v) for k, v in observers.items()}        
-        gc.collect()
         return total_loss / count, scores, labels, targets, observers
         
 ## evaluate regression via ONNX
@@ -526,6 +511,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     scores = []
     labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list)
     inputs, target, score, preds, loss = None, None, None, None, None
+
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
@@ -584,7 +570,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
         del metric_reg_results;
         
     observers = {k: _concat(v) for k, v in observers.items()}        
-    gc.collect();
+
     return total_loss / count, scores, labels, targets, observers
 
 
@@ -734,13 +720,11 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
-    gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
+def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
                     eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
-                    eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance'],
-                    tb_helper=None):
+                    eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     model.eval()
 
@@ -890,11 +874,10 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
-    del metric_cat_results;
 
     _logger.info('Evaluation of regression metrics\n')
+    metric_reg_results = None;
     for idx, (name,element) in enumerate(targets.items()):
-        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
         else:
@@ -902,21 +885,16 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
 
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
-        del metric_reg_results;
 
     if for_training:
-        del scores_cat, scores_reg, labels, targets, observers;
-        gc.collect()
         return total_loss / count;
     else:
         observers = {k: _concat(v) for k, v in observers.items()}
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
-            gc.collect()
             return total_loss / count, scores, labels, targets, observers
         else:
-            gc.collect()
             return total_loss / count, scores_reg, labels, targets, observers
 
 
@@ -940,7 +918,7 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     targets = defaultdict(list)
     observers = defaultdict(list)
     inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
-
+    
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
@@ -1026,8 +1004,8 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
     del metric_cat_results;
 
+    metric_reg_results = None;
     for idx, (name,element) in enumerate(targets.items()):
-        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
         else:
@@ -1042,10 +1020,8 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
         scores = np.concatenate((scores_cat,scores_reg),axis=1)
-        gc.collect()
         return total_loss / count, scores, labels, targets, observers
     else:
-        gc.collect()
         return total_loss / count, scores_reg, labels, targets, observers
 
 class TensorboardHelper(object):

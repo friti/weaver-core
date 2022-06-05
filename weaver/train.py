@@ -10,7 +10,7 @@ import functools
 import numpy as np
 import math
 import torch
-import gc
+from concurrent.futures import ThreadPoolExecutor
 
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
@@ -809,14 +809,15 @@ def _main(args):
         best_valid_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
         for epoch in range(args.num_epochs):
-            gc.collect();
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
                     continue
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
-            train(model, loss_func, opt, scheduler, train_loader, dev, epoch,
-                  steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb)
+            with ThreadPoolExecutor(max_workers=1) as train_executor:
+                train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb);
+                train_result = train_executor.result();
+
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
@@ -830,8 +831,9 @@ def _main(args):
             #     save_checkpoint()
 
             _logger.info('Epoch #%d validating' % epoch)
-            valid_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func,
-                                    steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb)
+            with ThreadPoolExecutor(max_workers=1) as val_executor:
+                val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb);
+                valid_metric = val_executor.result();
 
             is_best_epoch = (valid_metric < best_valid_metric) if args.regression_mode or args.hybrid_mode else(valid_metric > best_valid_metric)
             if is_best_epoch:
@@ -842,7 +844,6 @@ def _main(args):
                     # torch.save(model, args.model_prefix + '_best_epoch_full.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
                          (epoch, valid_metric, best_valid_metric), color='bold')            
-            gc.collect();
 
     if args.data_test:
         if args.backend is not None and local_rank != 0:
