@@ -814,9 +814,8 @@ def _main(args):
                     continue
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
-            with ThreadPoolExecutor(max_workers=1) as train_executor:
-                train_future = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb);
-                train_metric = train_future.result();
+            with ProcessPoolExecutor(max_workers=1) as train_executor:
+                train_metric = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result();
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -831,10 +830,8 @@ def _main(args):
             #     save_checkpoint()
 
             _logger.info('Epoch #%d validating' % epoch)
-            with ThreadPoolExecutor(max_workers=1) as val_executor:
-                val_future = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb);
-                val_metric = val_future.result();
-                print("validation metric ",val_metric);
+            with ProcessPoolExecutorr(max_workers=1) as val_executor:
+                val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
 
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
