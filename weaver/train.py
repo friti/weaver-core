@@ -10,7 +10,7 @@ import functools
 import numpy as np
 import math
 import torch
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
@@ -814,8 +814,9 @@ def _main(args):
                     continue
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
-            with ProcessPoolExecutor(max_workers=1) as train_executor:
+            with ThreadPoolExecutor(max_workers=1) as train_executor:
                 train_metric = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result();
+                train_metric.shutdown();
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -830,8 +831,9 @@ def _main(args):
             #     save_checkpoint()
 
             _logger.info('Epoch #%d validating' % epoch)
-            with ProcessPoolExecutorr(max_workers=1) as val_executor:
+            with ThreadPoolExecutor(max_workers=1) as val_executor:
                 val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
+                val_metric.shutdown();
 
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
