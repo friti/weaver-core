@@ -816,7 +816,7 @@ def _main(args):
             _logger.info('Epoch #%d training' % epoch)
             with ThreadPoolExecutor(max_workers=1) as train_executor:
                 train_metric = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result();
-                train_metric.shutdown();
+                train_executor.shutdown();
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -826,14 +826,11 @@ def _main(args):
                     model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
-            # if args.backend is not None and local_rank == 0:
-            # TODO: save checkpoint
-            #     save_checkpoint()
 
             _logger.info('Epoch #%d validating' % epoch)
             with ThreadPoolExecutor(max_workers=1) as val_executor:
                 val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
-                val_metric.shutdown();
+                train_executor.shutdown();
 
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
