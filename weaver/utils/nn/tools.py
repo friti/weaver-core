@@ -883,7 +883,17 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
 
     #    _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
     #        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
-
+    scores.clear();
+    labels.clear();
+    targets.clear();
+    labels_counts.clear();
+    observers.clear();
+    del scores;
+    del labels_counts;
+    del labels;
+    del targets;
+    del observers;
+    
     if for_training:
         return total_loss / count;
     else:
