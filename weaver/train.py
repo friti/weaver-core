@@ -817,8 +817,9 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
             model.share_memory()
-            with ThreadPoolExecutor(max_workers=2) as train_executor:
-                train_metric = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for thread in rang(0,2)];
+            max_thread_loop = 2
+            with ThreadPoolExecutor(max_workers=max_thread_loop) as train_executor:
+                train_metric = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for thread in range(0,max_thread_loop)];
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
