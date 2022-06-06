@@ -1,9 +1,9 @@
-
 import numpy as np
 import awkward as ak
 import tqdm
 import time
 import torch
+import gc
 
 from collections import defaultdict, Counter
 from .metrics import evaluate_metrics
@@ -731,6 +731,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
     torch.cuda.empty_cache()
+    gc.enable();
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
@@ -884,25 +885,21 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
-    label_counter.clear();
-    del label_counter;
-    
+    metric_reg_results, label_counter = None;
+
     if for_training:
-        labels.clear(); targets.clear(); observers.clear();
-        del scores_cat, scores_reg;
-        del labels, targets, observers;
+        scores_cat, scores_reg, labels, targets, observers = None, None, None, None, None
+        gc.collect();
         return total_loss / count;
     else:
         observers = {k: _concat(v) for k, v in observers.items()}
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
-            scores_cat.clear(); scores_reg.clear();
-            del scores_cat, scores_reg;
+            scores_reg, scores_cat = None, None
+            gc.collect();
             return total_loss / count, scores, labels, targets, observers
         else:
-            scores_cat.clear();
-            del scores_cat;
             return total_loss / count, scores_reg, labels, targets, observers
 
 
