@@ -816,9 +816,9 @@ def _main(args):
                     continue
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
-
+            model.share_memory()
             with ThreadPoolExecutor(max_workers=2) as train_executor:
-                train_metric = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result();
+                train_metric = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for thread in rang(0,2)];
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -832,7 +832,7 @@ def _main(args):
             train_executor.shutdown(cancel_futures=True);
 
             _logger.info('Epoch #%d validating' % epoch)
-            with ThreadPoolExecutor(max_workers=2) as val_executor:
+            with ThreadPoolExecutor(max_workers=1) as val_executor:
                 val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
 
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
@@ -851,7 +851,6 @@ def _main(args):
         if args.backend is not None and local_rank != 0:
             return
         if training_mode:
-            del train_loader, val_loader
             test_loaders, data_config = test_load(args)
 
         if not args.model_prefix.endswith('.onnx'):
@@ -891,7 +890,6 @@ def _main(args):
                 test_metric, scores, labels, targets, observers = evaluate(
                     model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)            
             _logger.info('Test metric %.5f' % test_metric, color='bold')
-            del test_loader
 
             if args.predict_output and scores.ndim:
                 if '/' not in args.predict_output:
