@@ -11,8 +11,6 @@ import numpy as np
 import math
 import torch
 
-from concurrent.futures import ThreadPoolExecutor
-
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
 from utils.dataset import SimpleIterDataset
@@ -819,10 +817,19 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
-            with ThreadPoolExecutor(max_workers=args.num_workers_loop) as train_executor:
-                train_executor = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for t in range(0,args.num_workers_loop)];
-            train_executor.shutdown(cancel_futures=True);
-            del train_executor;
+            torch.multiprocessing.set_start_method('spawn')
+            model.share_memory();
+            processes = [];
+            for rank in range(args.num_workers_loop):
+                p = torch.multiprocessing.Process(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb);
+                p.start();
+                processes.append(p)
+            for p in processes:
+                p.join()
+            #with ThreadPoolExecutor(max_workers=args.num_workers_loop) as train_executor:
+            #    train_metric = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for t in range(0,args.num_workers_loop)];
+            #train_executor.shutdown(cancel_futures=True);
+            #del train_executor;
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
