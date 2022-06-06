@@ -575,7 +575,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
 
 ## train classification + regression into a total loss --> best training epoch decided on the loss function
-def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, network_model=None):
 
     model.train()
 

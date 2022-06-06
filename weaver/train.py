@@ -605,7 +605,7 @@ def model_setup(args, data_config):
         loss_func = torch.nn.CrossEntropyLoss()
         _logger.warning('Loss function not defined in %s. Will use `torch.nn.CrossEntropyLoss()` by default.',
                         args.network_config)
-    return model, model_info, loss_func
+    return model, model_info, loss_func, network_module
 
 
 def iotest(args, data_loader):
@@ -753,7 +753,7 @@ def _main(args):
         iotest(args, data_loader)
         return
 
-    model, model_info, loss_func = model_setup(args, data_config)
+    model, model_info, loss_func, network_model = model_setup(args, data_config)
 
     # TODO: load checkpoint
     # if args.backend is not None:
@@ -821,7 +821,7 @@ def _main(args):
             model.share_memory();
             processes = [];
             for rank in range(args.num_workers_loop):
-                p = torch.multiprocessing.Process(target=train,args=(model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb));
+                p = torch.multiprocessing.Process(target=train,args=(model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb,network_model));
                 p.start();
                 processes.append(p)
             for p in processes:
