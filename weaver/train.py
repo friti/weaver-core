@@ -583,6 +583,7 @@ def model_setup(args, data_config):
     :return: model, model_info, network_module, network_options
     """
     network_module = import_module(args.network_config, name='_network_module')
+    sys.modules['_network_module'] = network_module;
     network_options = {k: ast.literal_eval(v) for k, v in args.network_option}
     _logger.info('Network options: %s' % str(network_options))
     if args.export_onnx:
