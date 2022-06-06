@@ -575,12 +575,13 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
 
 ## train classification + regression into a total loss --> best training epoch decided on the loss function
-def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, network_model=None):
+def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
     model.train()
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
+    gc.enable();
     torch.cuda.empty_cache()
 
     data_config = train_loader.dataset.config
@@ -720,6 +721,7 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
+    gc.collect();
 
 ## evaluate classification + regression task
 def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,

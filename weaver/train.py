@@ -583,7 +583,6 @@ def model_setup(args, data_config):
     :return: model, model_info, network_module, network_options
     """
     network_module = import_module(args.network_config, name='_network_module')
-    sys.path.append(os.path.dirname(args.network_config));
     network_options = {k: ast.literal_eval(v) for k, v in args.network_option}
     _logger.info('Network options: %s' % str(network_options))
     if args.export_onnx:
@@ -606,7 +605,7 @@ def model_setup(args, data_config):
         loss_func = torch.nn.CrossEntropyLoss()
         _logger.warning('Loss function not defined in %s. Will use `torch.nn.CrossEntropyLoss()` by default.',
                         args.network_config)
-    return model, model_info, loss_func, network_module
+    return model, model_info, loss_func
 
 
 def iotest(args, data_loader):
@@ -754,7 +753,7 @@ def _main(args):
         iotest(args, data_loader)
         return
 
-    model, model_info, loss_func, network_model = model_setup(args, data_config)
+    model, model_info, loss_func = model_setup(args, data_config)
 
     # TODO: load checkpoint
     # if args.backend is not None:
@@ -818,19 +817,10 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
-            torch.multiprocessing.set_start_method('spawn')
-            model.share_memory();
-            processes = [];
-            for rank in range(args.num_workers_loop):
-                p = torch.multiprocessing.Process(target=train,args=(model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb,network_model));
-                p.start();
-                processes.append(p)
-            for p in processes:
-                p.join()
-            #with ThreadPoolExecutor(max_workers=args.num_workers_loop) as train_executor:
-            #    train_metric = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for t in range(0,args.num_workers_loop)];
-            #train_executor.shutdown(cancel_futures=True);
-            #del train_executor;
+            with ThreadPoolExecutor(max_workers=args.num_workers_loop) as train_executor:
+                train_metric = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for t in range(0,args.num_workers_loop)];
+            train_executor.shutdown(cancel_futures=True);
+            del train_executor;
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
