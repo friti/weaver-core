@@ -821,7 +821,7 @@ def _main(args):
             model.share_memory();
             processes = [];
             for rank in range(args.num_workers_loop):
-                p = torch.multiprocessing.Process(target=train,args(model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb));
+                p = torch.multiprocessing.Process(target=train,args=(model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb));
                 p.start();
                 processes.append(p)
             for p in processes:
