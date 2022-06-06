@@ -10,6 +10,8 @@ import functools
 import numpy as np
 import math
 import torch
+import gc
+
 from concurrent.futures import ThreadPoolExecutor
 
 from torch.utils.data import DataLoader
@@ -697,6 +699,9 @@ def save_parquet(args, output_path, scores, labels, targets, observers):
 
 
 def _main(args):
+
+    gc.enable()
+
     _logger.info('args:\n - %s', '\n - '.join(str(it) for it in args.__dict__.items()))
 
     if args.file_fraction < 1:
@@ -908,8 +913,8 @@ def _main(args):
                 _logger.info('Written output to %s' % output_path, color='bold')
 
 def main():
-    args = parser.parse_args()
 
+    args = parser.parse_args()
     if args.samples_per_epoch is not None:
         if args.steps_per_epoch is None:
             args.steps_per_epoch = args.samples_per_epoch // args.batch_size
