@@ -837,7 +837,6 @@ def _main(args):
             with ThreadPoolExecutor(max_workers=1) as val_executor:
                 val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
             val_executor.shutdown(wait=True,cancel_futures=True);
-            del val_executor, val_metric;
 
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
@@ -849,8 +848,7 @@ def _main(args):
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
                          (epoch, val_metric, best_val_metric), color='bold')            
 
-            val_executor.shutdown(cancel_futures=True);
-            del val_metric;
+            del val_executor, val_metric;
 
     if args.data_test:
         if args.backend is not None and local_rank != 0:
