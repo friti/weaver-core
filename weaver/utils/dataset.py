@@ -262,6 +262,7 @@ class _SimpleIter(object):
         y = {k: self.table[k][i].copy() for k in self._data_config.label_names+self._data_config.target_names}
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
+        return X, y, Z
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):
     r"""Base IterableDataset.
