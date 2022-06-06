@@ -883,26 +883,27 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
 
     #    _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
     #        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
-    scores_cat.clear();
-    scores_reg.clear();
-    labels.clear();
-    targets.clear();
+
     label_counter.clear();
-    observers.clear();
-    del scores_cat, scores_reg;
-    del labels, labels_counts;
-    del targets;
-    del observers;
+    del label_counter;
     
     if for_training:
+        scores_cat.clear(); scores_reg.clear();
+        labels.clear(); targets.clear(); observers.clear();
+        del scores_cat, scores_reg;
+        del labels, targets, observers;
         return total_loss / count;
     else:
         observers = {k: _concat(v) for k, v in observers.items()}
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
+            scores_cat.clear(); scores_reg.clear();
+            del scores_cat, scores_reg;
             return total_loss / count, scores, labels, targets, observers
         else:
+            scores_cat.clear();
+            del scores_cat;
             return total_loss / count, scores_reg, labels, targets, observers
 
 
