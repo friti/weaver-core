@@ -889,7 +889,6 @@ def _main(args):
                     model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)            
             _logger.info('Test metric %.5f' % test_metric, color='bold')
             del test_loader
-            gc.collect()
 
             if args.predict_output and scores.ndim:
                 if '/' not in args.predict_output:

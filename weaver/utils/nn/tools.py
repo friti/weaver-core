@@ -767,10 +767,10 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 ### evaluate model
                 model_output = model(*inputs)
                 ### define truth labels for classification and regression
-                for k, name in enumerate(data_config.label_names):                    
-                    labels[name].append(_flatten_label(y[name],None).cpu().numpy())
-                for k, name in enumerate(data_config.target_names):
-                    targets[name].append(y[name].cpu().numpy())                
+                #for k, name in enumerate(data_config.label_names):                    
+                #    labels[name].append(_flatten_label(y[name],None).cpu().numpy())
+                #for k, name in enumerate(data_config.target_names):
+                #    targets[name].append(y[name].cpu().numpy())                
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
@@ -864,27 +864,25 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             with torch.no_grad():
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode=tb_mode)
 
-    scores_cat = np.concatenate(scores_cat).squeeze()
-    scores_reg = np.concatenate(scores_reg).squeeze()
-    labels  = {k: _concat(v) for k, v in labels.items()}
-    targets = {k: _concat(v) for k, v in targets.items()}
+    #scores_cat = np.concatenate(scores_cat).squeeze()
+    #scores_reg = np.concatenate(scores_reg).squeeze()
+    #labels  = {k: _concat(v) for k, v in labels.items()}
+    #targets = {k: _concat(v) for k, v in targets.items()}
 
     _logger.info('Evaluation of metrics\n')
-    metric_cat_results = None;    
-    metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
-    _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
-        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+    #metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
+    #_logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
+    #    ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
-    _logger.info('Evaluation of regression metrics\n')
-    metric_reg_results = None;
-    for idx, (name,element) in enumerate(targets.items()):
-        if len(data_config.target_names) == 1:
-            metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
-        else:
-            metric_reg_results = evaluate_metrics(element, scores_reg[:,idx], eval_metrics=eval_reg_metrics)
+    #_logger.info('Evaluation of regression metrics\n')
+    #for idx, (name,element) in enumerate(targets.items()):
+    #    if len(data_config.target_names) == 1:
+    #        metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
+    #    else:
+    #        metric_reg_results = evaluate_metrics(element, scores_reg[:,idx], eval_metrics=eval_reg_metrics)
 
-        _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
+    #    _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
+    #        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     if for_training:
         return total_loss / count;
