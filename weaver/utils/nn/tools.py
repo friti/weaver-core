@@ -865,22 +865,22 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             with torch.no_grad():
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode=tb_mode)
 
-    scores_cat_final = np.concatenate(scores_cat).squeeze()
-    scores_reg_final = np.concatenate(scores_reg).squeeze()
-    labels_final  = {k: _concat(v) for k, v in labels.items()}
-    targets_final = {k: _concat(v) for k, v in targets.items()}
+    scores_cat = np.concatenate(scores_cat).squeeze()
+    scores_reg = np.concatenate(scores_reg).squeeze()
+    labels  = {k: _concat(v) for k, v in labels.items()}
+    targets = {k: _concat(v) for k, v in targets.items()}
 
     _logger.info('Evaluation of metrics\n')
-    metric_cat_results = evaluate_metrics(labels_final[data_config.label_names[0]], scores_cat_final, eval_metrics=eval_cat_metrics)    
+    metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
     _logger.info('Evaluation of regression metrics\n')
-    for idx, (name,element) in enumerate(targets_final.items()):
+    for idx, (name,element) in enumerate(targets.items()):
         if len(data_config.target_names) == 1:
-            metric_reg_results = evaluate_metrics(element, scores_reg_final, eval_metrics=eval_reg_metrics)
+            metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
         else:
-            metric_reg_results = evaluate_metrics(element, scores_reg_final[:,idx], eval_metrics=eval_reg_metrics)
+            metric_reg_results = evaluate_metrics(element, scores_reg[:,idx], eval_metrics=eval_reg_metrics)
 
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
@@ -888,21 +888,17 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     metric_reg_results, label_counter = None, None;
 
     if for_training:
-        scores_cat_final, scores_reg_final, labels_final, targets_final, scores_cat, scores_reg, labels, targets, observers = None, None, None, None, None, None, None, None, None
+        scores_cat, scores_reg, labels, targets, observers = None, None, None, None, None, None, None, None, None
         gc.collect();
         return total_loss / count;
     else:
-        observers_final = {k: _concat(v) for k, v in observers.items()}
-        if scores_reg_final.ndim and scores_cat_final.ndim: 
-            scores_reg_final = scores_reg_final.reshape(len(scores_reg_final),len(data_config.target_names))
-            scores_final = np.concatenate((scores_cat_final,scores_reg_final),axis=1)
-            scores_reg_final, scores_cat_final, scores_reg, scores_cat, observers, targets, labels = None, None, None, None, None, None, None
-            gc.collect();
-            return total_loss / count, scores_final, labels_final, targets_final, observers_final
+        observers = {k: _concat(v) for k, v in observers.items()}
+        if scores_reg.ndim and scores_cat.ndim: 
+            scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
+            scores = np.concatenate((scores_cat,scores_reg),axis=1)
+            return total_loss / count, scores, labels, targets, observers
         else:
-            scores_reg_final, scores_reg, scores_cat, observers, targets, labels = None, None, None, None, None, None, None
-            gc.collect();
-            return total_loss / count, scores_reg_final, labels_final, targets_final, observers_final;
+            return total_loss / count, scores_reg, labels, targets, observers;
 
 
 def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
