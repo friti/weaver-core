@@ -10,9 +10,8 @@ import functools
 import numpy as np
 import math
 import torch
-import gc
 
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
@@ -700,8 +699,6 @@ def save_parquet(args, output_path, scores, labels, targets, observers):
 
 def _main(args):
 
-    gc.enable()
-
     _logger.info('args:\n - %s', '\n - '.join(str(it) for it in args.__dict__.items()))
 
     if args.file_fraction < 1:
@@ -819,8 +816,8 @@ def _main(args):
                     continue
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
-            model.share_memory();
-            with ProcessPoolExecutor(max_workers=1) as train_executor:
+
+            with ThreadPoolExecutor(max_workers=2) as train_executor:
                 train_metric = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result();
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
@@ -835,7 +832,7 @@ def _main(args):
             train_executor.shutdown(cancel_futures=True);
 
             _logger.info('Epoch #%d validating' % epoch)
-            with ProcessPoolExecutor(max_workers=1) as val_executor:
+            with ThreadPoolExecutor(max_workers=2) as val_executor:
                 val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
 
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
