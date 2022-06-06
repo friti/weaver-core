@@ -888,7 +888,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     del label_counter;
     
     if for_training:
-        scores_cat.clear(); scores_reg.clear();
         labels.clear(); targets.clear(); observers.clear();
         del scores_cat, scores_reg;
         del labels, targets, observers;
