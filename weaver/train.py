@@ -134,6 +134,8 @@ parser.add_argument('--num-workers-val', type=int, default=1,
                     help='number of threads to load the validation dataset (when provided via --data-val otherwise use num-workers-train); memory consumption and disk access load increases (~linearly) with this numbers')
 parser.add_argument('--num-workers-test', type=int, default=1,
                     help='number of threads to load the testing dataset; memory consumption and disk access load increases (~linearly) with this numbers')
+parser.add_argument('--num-workers-loop', type=int, default=1,
+                    help='number of threads to perform training loop');
 parser.add_argument('--predict', action='store_true', default=False,
                     help='run prediction instead of training')
 parser.add_argument('--predict-output', type=str,
@@ -816,10 +818,11 @@ def _main(args):
                     continue
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
-            model.share_memory()
-            max_thread_loop = 2
-            with ThreadPoolExecutor(max_workers=max_thread_loop) as train_executor:
-                train_metric = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for thread in range(0,max_thread_loop)];
+
+            with ThreadPoolExecutor(max_workers=args.num_workers_loop) as train_executor:
+                train_executor = [train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result() for t in range(0,args.num_workers_loop)];
+            train_executor.shutdown(cancel_futures=True);
+            del train_executor;
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -829,8 +832,7 @@ def _main(args):
                     model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
-
-            train_executor.shutdown(cancel_futures=True);
+                
 
             _logger.info('Epoch #%d validating' % epoch)
             with ThreadPoolExecutor(max_workers=1) as val_executor:
@@ -847,6 +849,7 @@ def _main(args):
                          (epoch, val_metric, best_val_metric), color='bold')            
 
             val_executor.shutdown(cancel_futures=True);
+            del val_metric;
 
     if args.data_test:
         if args.backend is not None and local_rank != 0:
