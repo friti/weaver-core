@@ -767,10 +767,10 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 ### evaluate model
                 model_output = model(*inputs)
                 ### define truth labels for classification and regression
-                #for k, name in enumerate(data_config.label_names):                    
-                #    labels[name].append(_flatten_label(y[name],None).cpu().numpy())
-                #for k, name in enumerate(data_config.target_names):
-                #    targets[name].append(y[name].cpu().numpy())                
+                for k, name in enumerate(data_config.label_names):                    
+                    labels[name].append(_flatten_label(y[name],None).cpu().numpy())
+                for k, name in enumerate(data_config.target_names):
+                    targets[name].append(y[name].cpu().numpy())                
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
@@ -780,15 +780,15 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                 pred_reg        = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();                
                 if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
                     _, pred_cat = pred_cat_output.max(1);
-                    scores_cat.append(torch.softmax(pred_cat_output,dim=1).detach().cpu().numpy());
-                    scores_reg.append(pred_reg.detach().cpu().numpy())
+                    #scores_cat.append(torch.softmax(pred_cat_output,dim=1).detach().cpu().numpy());
+                    #scores_reg.append(pred_reg.detach().cpu().numpy())
                 else:
                     pred_cat = torch.zeros(num_examples).cpu().numpy();
-                    scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).detach().cpu().numpy());
-                    if len(data_config.target_value) > 1:
-                        scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).detach().cpu().numpy());
-                    else:
-                        scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
+                    #scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).detach().cpu().numpy());
+                    #if len(data_config.target_value) > 1:
+                    #    scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).detach().cpu().numpy());
+                    #else:
+                    #    scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
                     
                 ### evaluate loss function
                 if loss_func != None:
