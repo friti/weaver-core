@@ -890,7 +890,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     metric_reg_results, label_counter = None, None;
 
     if for_training:
-        scores_cat, scores_reg, labels, targets, observers = None, None, None, None, None, None, None, None, None
+        scores_cat, scores_reg, labels, targets, observers = None, None, None, None, None
         gc.collect();
         return total_loss / count;
     else:
