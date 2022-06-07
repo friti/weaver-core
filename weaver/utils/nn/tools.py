@@ -31,7 +31,6 @@ def _flatten_preds(preds, mask=None, label_axis=1):
     return preds
 
 
-
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
@@ -128,8 +127,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
-    del label_counter, count, num_batches, total_loss, total_correct;
-    del loss, inputs, label, label_mask, model_output, logits, preds, correct
     gc.collect();
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
@@ -222,14 +219,13 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     scores = np.concatenate(scores)
     labels = {k: _concat(v) for k, v in labels.items()}
 
-    metric_results = None;
     metric_results = evaluate_metrics(labels[data_config.label_names[0]], scores, eval_metrics=eval_metrics)
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        del label_counter, num_batches, entry_count, total_loss;
-        del inputs, label, label_mask, model_output, logits, preds, loss, correct;
+        labels_counts.clear(); labels.clear(); targets.clear(); observers.clear();
+        scores = np.array([]);
         del scores, labels_counts, labels, targets, observers;
         gc.collect();
         return total_correct / count
@@ -247,8 +243,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 for k, v in labels.items():
                     labels[k] = v.reshape((entry_count, -1))
         observers = {k: _concat(v) for k, v in observers.items()}
-        del label_counter, num_batches, entry_count, total_loss;
-        del inputs, label, label_mask, model_output, logits, preds, loss, correct;
         gc.collect();
         return total_correct / count, scores, labels, targets, observers
 
@@ -311,9 +305,7 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
 
     observers = {k: _concat(v) for k, v in observers.items()}
 
-    del label_counter;
     gc.collect();
-
     return total_correct / count, scores, labels, targets, observers
 
 ## train a regression with possible multi-dimensional target i.e. a list of 1D functions (target_names) 
@@ -413,8 +405,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
         
-    del num_batches, total_loss, sum_abs_err, sum_sqr_err, count;
-    del loss, inputs, target, model_output, preds;
     gc.collect();
 
 def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
@@ -502,7 +492,6 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     scores = np.concatenate(scores)
     targets = {k: _concat(v) for k, v in targets.items()}
 
-    metric_reg_results = None;
     for idx, (name,element) in enumerate(targets.items()):
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores, eval_metrics=eval_reg_metrics)
@@ -513,16 +502,13 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))        
 
     if for_training:
-        del num_batches, sum_sqr_err, sum_abs_err;
-        del scores, inputs, target, model_output, preds, loss;
-        del labels, targets, observers;
+        scores = np.array([]);
+        labels.clear(); targets.clear(); observers.clear();
         gc.collect();
         return total_loss / count
     else:
         # convert 2D targets/scores
         observers = {k: _concat(v) for k, v in observers.items()}        
-        del num_batches, sum_sqr_err, sum_abs_err;
-        del inputs, target, model_output, preds, loss;
         gc.collect();
         return total_loss / count, scores, labels, targets, observers
         
@@ -593,7 +579,6 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     targets = {k: _concat(v) for k, v in targets.items()}
 
     for idx, (name,element) in enumerate(targets.items()):
-        metric_reg_results = None;
         if len(data_config.target_names) == 1:
             metric_reg_results = evaluate_metrics(element, scores, eval_metrics=eval_reg_metrics)
         else:
@@ -604,8 +589,6 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
         
     observers = {k: _concat(v) for k, v in observers.items()}        
 
-    del sum_sqr_err, sum_abs_err;
-    del inputs, target, score, preds, loss;
     gc.collect();
 
     return total_loss / count, scores, labels, targets, observers
@@ -1056,12 +1039,10 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
 
     observers = {k: _concat(v) for k, v in observers.items()}
     
-    del label_counter, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err;
-    del inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg;
-
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
         scores = np.concatenate((scores_cat,scores_reg),axis=1)        
+        scores_cat, scores_reg = np.array([]), np.array([]);
         del scores_cat, scores_reg;
         gc.collect();
         return total_loss / count, scores, labels, targets, observers

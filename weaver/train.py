@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import os
 import ast
 import sys
@@ -845,7 +844,6 @@ def _main(args):
                                  epoch, args.model_prefix + '_best_epoch_state.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
                          (epoch, val_metric, best_val_metric), color='bold')            
-
             del val_executor, val_metric;
 
     if args.data_test:
