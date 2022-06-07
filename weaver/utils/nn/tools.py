@@ -756,9 +756,6 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
-    del num_batches, total_loss, total_cat_loss, total_reg_loss, count;
-    del label_counter, total_correct, sum_abs_err, sum_sqr_err;
-    del inputs, target, label, model_output, loss, loss_cat, loss_target, loss_reg, pred_cat, pred_reg, residual_reg, correct;    
     gc.collect();
 
 ## evaluate classification + regression task
@@ -776,8 +773,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     data_config = test_loader.dataset.config
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0
-    scores_cat = []
-    scores_reg = []
+    scores_cat, scores_reg = [], [];
     inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None
     labels = defaultdict(list)
     targets = defaultdict(list)
@@ -926,9 +922,8 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     if for_training:
-        del label_counter, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count;
+        scores_cat.clear(); scores_reg.clear(); labels.clear(); targets.clear(); observers.clear();
         del scores_cat, scores_reg, labels, targets, observers;
-        del inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg;
         gc.collect();
         return total_loss / count;
     else:
