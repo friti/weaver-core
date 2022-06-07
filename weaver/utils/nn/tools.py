@@ -777,13 +777,8 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0
     inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None
-    global scores_cat;
-    global scores_reg;
-    global labels;
-    global targets;
-    global observers;
     scores_cat, scores_reg = [], [];
-    labels, targets, targets = defaultdict(list), defaultdict(list), defaultdict(list);
+    labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list);
     start_time = time.time()
 
     with torch.no_grad():
@@ -937,7 +932,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
         observers = {k: _concat(v) for k, v in observers.items()}
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
-            global scores;
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
             scores_cat, scores_reg = np.array([]), np.array([]);
             gc.collect();
@@ -962,11 +956,6 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     data_config = test_loader.dataset.config
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0
-    global scores_cat;
-    global scores_reg;
-    global labels;
-    global targets;
-    global observers;
     scores_cat, scores_reg = [], []
     labels, targets, observers = defaultdict(list)
     inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
