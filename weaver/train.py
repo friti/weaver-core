@@ -809,6 +809,9 @@ def _main(args):
         # training loop
         best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
+        scores, scores_cat, scores_reg = [], [], [];
+        labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list);
+
         for epoch in range(args.num_epochs):
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
@@ -842,7 +845,6 @@ def _main(args):
                 if args.model_prefix and (args.backend is None or local_rank == 0):
                     shutil.copy2(args.model_prefix + '_epoch-%d_state.pt' %
                                  epoch, args.model_prefix + '_best_epoch_state.pt')
-                    # torch.save(model, args.model_prefix + '_best_epoch_full.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
                          (epoch, val_metric, best_val_metric), color='bold')            
 

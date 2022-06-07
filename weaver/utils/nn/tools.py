@@ -30,6 +30,8 @@ def _flatten_preds(preds, mask=None, label_axis=1):
     # print('preds', preds.shape, preds)
     return preds
 
+
+
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
@@ -620,6 +622,7 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     gc.enable();
 
     data_config = train_loader.dataset.config
+
     num_batches, total_loss, total_cat_loss, total_reg_loss, count = 0, 0, 0, 0, 0
     label_counter = Counter()
     total_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0
@@ -773,12 +776,12 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     data_config = test_loader.dataset.config
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0
-    scores_cat, scores_reg = [], [];
     inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None
-    labels = defaultdict(list)
-    targets = defaultdict(list)
-    observers = defaultdict(list)
-
+    global scores_cat = [];
+    global scores_reg = [];
+    global labels = defaultdict(list)
+    global targets = defaultdict(list)
+    global observers = defaultdict(list)
     start_time = time.time()
 
     with torch.no_grad():
@@ -922,9 +925,8 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     if for_training:
-        labels.clear(); targets.clear(); observers.clear();
+        labels.clear(); targets.clear(); observers.clear();        
         scores_cat, scores_reg = np.array([]), np.array([]);
-        del scores_cat, scores_reg, labels, targets, observers;
         gc.collect();
         return total_loss / count;
     else:
@@ -933,6 +935,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
         observers = {k: _concat(v) for k, v in observers.items()}
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
+            global scores;
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
             scores_cat, scores_reg = np.array([]), np.array([]);
             gc.collect();
@@ -957,11 +960,11 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     data_config = test_loader.dataset.config
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0
-    scores_cat = []
-    scores_reg = []
-    labels = defaultdict(list)
-    targets = defaultdict(list)
-    observers = defaultdict(list)
+    global scores_cat = []
+    global scores_reg = []
+    global labels = defaultdict(list)
+    global targets = defaultdict(list)
+    global observers = defaultdict(list)
     inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
     
     start_time = time.time()
