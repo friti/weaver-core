@@ -922,7 +922,8 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     if for_training:
-        scores_cat.clear(); scores_reg.clear(); labels.clear(); targets.clear(); observers.clear();
+        labels.clear(); targets.clear(); observers.clear();
+        scores_cat, scores_reg = np.array([]), np.array([]);
         del scores_cat, scores_reg, labels, targets, observers;
         gc.collect();
         return total_loss / count;
@@ -933,6 +934,7 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
+            scores_cat, scores_reg = np.array([]), np.array([]);
             gc.collect();
             return total_loss / count, scores, labels, targets, observers
         else:
