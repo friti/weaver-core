@@ -777,11 +777,13 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0
     inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None
-    global scores_cat = [];
-    global scores_reg = [];
-    global labels = defaultdict(list)
-    global targets = defaultdict(list)
-    global observers = defaultdict(list)
+    global scores_cat;
+    global scores_reg;
+    global labels;
+    global targets;
+    global observers;
+    scores_cat, scores_reg = [], [];
+    labels, targets, targets = defaultdict(list), defaultdict(list), defaultdict(list);
     start_time = time.time()
 
     with torch.no_grad():
