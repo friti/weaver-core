@@ -962,11 +962,13 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
     data_config = test_loader.dataset.config
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0
-    global scores_cat = []
-    global scores_reg = []
-    global labels = defaultdict(list)
-    global targets = defaultdict(list)
-    global observers = defaultdict(list)
+    global scores_cat;
+    global scores_reg;
+    global labels;
+    global targets;
+    global observers;
+    scores_cat, scores_reg = [], []
+    labels, targets, observers = defaultdict(list)
     inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
     
     start_time = time.time()
