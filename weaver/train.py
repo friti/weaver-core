@@ -133,8 +133,6 @@ parser.add_argument('--num-workers-val', type=int, default=1,
                     help='number of threads to load the validation dataset (when provided via --data-val otherwise use num-workers-train); memory consumption and disk access load increases (~linearly) with this numbers')
 parser.add_argument('--num-workers-test', type=int, default=1,
                     help='number of threads to load the testing dataset; memory consumption and disk access load increases (~linearly) with this numbers')
-parser.add_argument('--num-workers-loop', type=int, default=1,
-                    help='number of threads to perform training loop');
 parser.add_argument('--predict', action='store_true', default=False,
                     help='run prediction instead of training')
 parser.add_argument('--predict-output', type=str,
