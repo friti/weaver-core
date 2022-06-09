@@ -818,11 +818,11 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
                     loss_reg = loss_reg.detach().item()
                     ### erase useless dimensions
                     label  = label.squeeze();
-                    target = target.squeeze(); 
+                    target = target.squeeze();                     
+                    total_loss += loss
+                    total_cat_loss += loss_cat
+                    total_reg_loss += loss_reg
 
-                total_loss += loss
-                total_cat_loss += loss_cat
-                total_reg_loss += loss_reg
                 num_batches += 1
                 count += num_examples
 
@@ -976,10 +976,10 @@ def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
                 ### erase useless dimensions
                 label  = label.squeeze();
                 target = target.squeeze(); 
+                total_loss += loss
+                total_cat_loss += loss_cat
+                total_reg_loss += loss_reg
 
-            total_loss += loss
-            total_cat_loss += loss_cat
-            total_reg_loss += loss_reg
             count += num_examples
 
             correct = (pred_cat == label).sum().item()
