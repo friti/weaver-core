@@ -816,10 +816,11 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
+            gc.enable()
             with ThreadPoolExecutor(max_workers=1) as train_executor:
                 train_metric = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result();
             train_executor.shutdown(wait=True,cancel_futures=True);
-            del train_executor, train_metric;
+            gc.collect();
 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -832,10 +833,12 @@ def _main(args):
                 
             _logger.info('Epoch #%d validating' % epoch)
 
+            gc.enable()
             with ThreadPoolExecutor(max_workers=1) as val_executor:
                 val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
             val_executor.shutdown(wait=True,cancel_futures=True);
-
+            gc.collect();
+            
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
                 best_val_metric = val_metric
@@ -844,7 +847,6 @@ def _main(args):
                                  epoch, args.model_prefix + '_best_epoch_state.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
                          (epoch, val_metric, best_val_metric), color='bold')            
-            del val_executor, val_metric;
 
     if args.data_test:
         if args.backend is not None and local_rank != 0:
