@@ -10,7 +10,7 @@ import numpy as np
 import math
 import torch
 from concurrent.futures import ThreadPoolExecutor
-
+import gc
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
 from utils.dataset import SimpleIterDataset
