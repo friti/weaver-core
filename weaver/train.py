@@ -110,6 +110,8 @@ parser.add_argument('--warmup-steps', type=int, default=0,
                     help='number of warm-up steps, only valid for `flat+linear` and `flat+cos` lr schedulers')
 parser.add_argument('--load-epoch', type=int, default=None,
                     help='used to resume interrupted training, load model and optimizer state saved in the `epoch-%%d_state.pt` and `epoch-%%d_optimizer.pt` files')
+parser.add_argument('--load-best-metric', type=float, default=None,
+                    help='best metric of the resumed training')
 parser.add_argument('--start-lr', type=float, default=5e-3,
                     help='start learning rate')
 parser.add_argument('--batch-size-train', type=int, default=128,
@@ -749,7 +751,7 @@ def _main(args):
     if args.io_test:
         data_loader = train_loader if training_mode else list(test_loaders.values())[0]()
         iotest(args, data_loader)
-        return
+        sys.exit(0);
 
     model, model_info, loss_func = model_setup(args, data_config)
 
@@ -758,16 +760,17 @@ def _main(args):
     #     load_checkpoint()
 
     if args.print:
-        return
+        sys.exit(0);
 
     if args.profile:
         profile(args, model, model_info, device=dev)
-        return
+        sys.exit(0);
+        
 
     # export to ONNX
     if args.export_onnx:
         onnx(args, model, data_config, model_info)
-        return
+        sys.exit(0);
 
     if args.tensorboard:
         from utils.nn.tools import TensorboardHelper
@@ -778,6 +781,7 @@ def _main(args):
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
     orig_model = model
+    metric_to_return = np.inf if args.regression_mode or args.hybrid_mode else 0;
 
     if training_mode:
         model = orig_model.to(dev)
@@ -803,16 +807,20 @@ def _main(args):
                                  label_names=train_label_names+train_target_names)
             lr_finder.range_test(train_loader, start_lr=float(start_lr), end_lr=float(end_lr), num_iter=int(num_iter))
             lr_finder.plot(output='lr_finder.png')  # to inspect the loss-learning rate graph
-            return
+            sys.exit(0);
 
         # training loop
-        best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
 
         for epoch in range(args.num_epochs):
+            
+            best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
                     continue
+                if args.load_best_metric is not None:
+                    best_val_metric = args.load_best_metric
+                    
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
@@ -841,16 +849,18 @@ def _main(args):
             
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
+                metric_to_return = best_val_metric;
                 best_val_metric = val_metric
                 if args.model_prefix and (args.backend is None or local_rank == 0):
                     shutil.copy2(args.model_prefix + '_epoch-%d_state.pt' %
                                  epoch, args.model_prefix + '_best_epoch_state.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
-                         (epoch, val_metric, best_val_metric), color='bold')            
-
+                         (epoch, val_metric, best_val_metric), color='bold')    
+            _logger.info('Best validation metric: %f',best_val_metric)
+            
     if args.data_test:
         if args.backend is not None and local_rank != 0:
-            return
+            sys.exit(0);
         if training_mode:
             test_loaders, data_config = test_load(args)
 
@@ -908,6 +918,8 @@ def _main(args):
                 else:
                     save_parquet(args, output_path, scores, labels, targets, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
+            metric_to_return = test_metric;
+        print("Best metric: %f",metric_to_return);
 
 def main():
 

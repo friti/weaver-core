@@ -105,6 +105,8 @@ class DataConfig(object):
                 self.var_funcs.update(self.label_value)
         else:
             self.label_names = tuple();
+            self.label_type  = None;
+            self.label_value = None;
 
         # targets
         if opts['targets']:
@@ -114,6 +116,8 @@ class DataConfig(object):
             self.var_funcs.update(self.target_value)
         else:
             self.target_names = tuple();
+            self.target_type  = None;
+            self.target_value = None;
 
         self.basewgt_name = '_basewgt_'
         self.weight_name = None
