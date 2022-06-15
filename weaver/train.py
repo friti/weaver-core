@@ -919,7 +919,8 @@ def _main(args):
                     save_parquet(args, output_path, scores, labels, targets, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
             metric_to_return = test_metric;
-        print("Best metric: %f",metric_to_return);
+        with open('%s/best_metric.log'%(args.model_prefix), 'w') as f:
+            f.write("Best-metric = %f",metric_to_return);
 
 def main():
 
