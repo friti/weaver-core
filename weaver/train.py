@@ -781,7 +781,6 @@ def _main(args):
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
     orig_model = model
-    metric_to_return = np.inf if args.regression_mode or args.hybrid_mode else 0;
 
     if training_mode:
         model = orig_model.to(dev)
@@ -849,7 +848,6 @@ def _main(args):
             
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
             if is_best_epoch:
-                metric_to_return = best_val_metric;
                 best_val_metric = val_metric
                 if args.model_prefix and (args.backend is None or local_rank == 0):
                     shutil.copy2(args.model_prefix + '_epoch-%d_state.pt' %
@@ -918,9 +916,6 @@ def _main(args):
                 else:
                     save_parquet(args, output_path, scores, labels, targets, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
-            metric_to_return = test_metric;
-        with open('%s/best_metric.log'%(args.model_prefix), 'w') as f:
-            f.write("Best-metric = %f",metric_to_return);
 
 def main():
 
