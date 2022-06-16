@@ -511,11 +511,13 @@ def optim(args, model, device):
     # load previous training and resume if `--load-epoch` is set
     if args.load_epoch is not None:
         _logger.info('Resume training from epoch %d' % args.load_epoch)
+        _logger.info('Open model state file '+args.model_prefix+'_epoch-%d_state.pt' % args.load_epoch)
         model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch, map_location=device)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(model_state)
         else:
             model.load_state_dict(model_state)
+        _logger.info('Open optimizer state file '+args.model_prefix+'_epoch-%d_optimizer.pt' % args.load_epoch)
         opt_state_file = args.model_prefix + '_epoch-%d_optimizer.pt' % args.load_epoch
         if os.path.exists(opt_state_file):
             opt_state = torch.load(opt_state_file, map_location=device)
@@ -816,6 +818,7 @@ def _main(args):
             best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
+                     _logger.info('Skip Epoch #%d in training' % epoch)
                     continue
                 if args.load_best_metric is not None:
                     best_val_metric = args.load_best_metric
