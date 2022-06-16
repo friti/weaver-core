@@ -735,13 +735,13 @@ def _main(args):
             local_world_size = len(gpus);
             torch.cuda.set_device(local_rank)
             gpus = [local_rank]
-            dev = torch.device('cuda',local_rank)
+            dev = torch.device(local_rank)
             torch.distributed.init_process_group(backend=args.backend,rank=local_rank,world_size=local_world_size)
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
             torch.distributed.barrier()
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
-            dev = torch.device('cuda')
+            dev = torch.device(gpus[0])
     else:
         gpus = None
         dev = torch.device('cpu')
