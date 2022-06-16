@@ -359,7 +359,7 @@ def onnx(args, model, data_config, model_info):
     assert (args.export_onnx.endswith('.onnx'))
     model_path = args.model_prefix
     _logger.info('Exporting model %s to ONNX' % model_path)
-    model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
+    model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model = model.cpu()
     model.eval()
 
@@ -514,9 +514,9 @@ def optim(args, model, device):
         _logger.info('Open model state file '+args.model_prefix+'_epoch-%d_state.pt' % args.load_epoch)
         model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch, map_location=device)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model.module.load_state_dict(model_state,strict=False)
+            model.module.load_state_dict(model_state)
         else:
-            model.load_state_dict(model_state,strict=False)
+            model.load_state_dict(model_state)
 
         _logger.info('Open optimizer state file '+args.model_prefix+'_epoch-%d_optimizer.pt' % args.load_epoch)
         opt_state_file = args.model_prefix + '_epoch-%d_optimizer.pt' % args.load_epoch
@@ -838,8 +838,8 @@ def _main(args):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
                     os.makedirs(dirname)
-                state_dict = model.module.state_dict() if isinstance(
-                    model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
+                state_dict = model.state_dict() if isinstance(
+                    model, (torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
                 
@@ -884,12 +884,12 @@ def _main(args):
             _logger.info('Loading model %s for eval' % model_path)
  
             if args.backend is not None:
-                model.module.load_state_dict(torch.load(model_path, map_location=dev),strict=False)
+                model.module.load_state_dict(torch.load(model_path, map_location=dev))
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
                 if agpus is not None and len(gpus) > 1:
                     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
-                model.load_state_dict(torch.load(model_path, map_location=dev),strict=False)
+                model.load_state_dict(torch.load(model_path, map_location=dev))
                 if gpus is not None and len(gpus) > 1:
                     model = torch.nn.DataParallel(model, device_ids=gpus)
             model = model.to(dev)
