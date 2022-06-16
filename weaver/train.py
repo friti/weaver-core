@@ -874,10 +874,11 @@ def _main(args):
                 dev = torch.device(local_rank)            
             elif args.predict_gpus:
                 gpus = [int(i) for i in args.predict_gpus.split(',')]
-                dev = torch.device('cuda')
+                dev = gpus[0];
             else:
                 gpus = None
                 dev = torch.device('cpu')
+
             model = orig_model.to(dev)
             model_path = args.model_prefix if args.model_prefix.endswith(
                 '.pt') else args.model_prefix + '_best_epoch_state.pt'
