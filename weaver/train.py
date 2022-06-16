@@ -514,9 +514,9 @@ def optim(args, model, device):
         _logger.info('Open model state file '+args.model_prefix+'_epoch-%d_state.pt' % args.load_epoch)
         model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch, map_location=device)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model.module.load_state_dict(model_state)
+            model.module.load_state_dict(model_state,strict=False)
         else:
-            model.load_state_dict(model_state)
+            model.load_state_dict(model_state,strict=False)
 
         _logger.info('Open optimizer state file '+args.model_prefix+'_epoch-%d_optimizer.pt' % args.load_epoch)
         opt_state_file = args.model_prefix + '_epoch-%d_optimizer.pt' % args.load_epoch
