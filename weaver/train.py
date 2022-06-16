@@ -818,7 +818,7 @@ def _main(args):
             best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
-                     _logger.info('Skip Epoch #%d in training' % epoch)
+                    _logger.info('Skip Epoch #%d in training' % epoch)
                     continue
                 if args.load_best_metric is not None:
                     best_val_metric = args.load_best_metric
