@@ -359,7 +359,7 @@ def onnx(args, model, data_config, model_info):
     assert (args.export_onnx.endswith('.onnx'))
     model_path = args.model_prefix
     _logger.info('Exporting model %s to ONNX' % model_path)
-    model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
     model = model.cpu()
     model.eval()
 
@@ -741,7 +741,7 @@ def _main(args):
             torch.distributed.barrier()
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
-            dev = torch.device('cuda',gpus[0])
+            dev = torch.device('cuda')
     else:
         gpus = None
         dev = torch.device('cpu')
@@ -874,7 +874,7 @@ def _main(args):
                 dev = torch.device(local_rank)            
             elif args.predict_gpus:
                 gpus = [int(i) for i in args.predict_gpus.split(',')]
-                dev = torch.device('cuda',gpus[0])
+                dev = torch.device('cuda')
             else:
                 gpus = None
                 dev = torch.device('cpu')
@@ -884,12 +884,12 @@ def _main(args):
             _logger.info('Loading model %s for eval' % model_path)
  
             if args.backend is not None:
-                model.module.load_state_dict(torch.load(model_path, map_location=dev))
+                model.module.load_state_dict(torch.load(model_path, map_location=dev),strict=False)
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
                 if agpus is not None and len(gpus) > 1:
                     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
-                model.load_state_dict(torch.load(model_path, map_location=dev))
+                model.load_state_dict(torch.load(model_path, map_location=dev),strict=False)
                 if gpus is not None and len(gpus) > 1:
                     model = torch.nn.DataParallel(model, device_ids=gpus)
             model = model.to(dev)
