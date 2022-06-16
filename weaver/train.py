@@ -513,7 +513,7 @@ def optim(args, model, device):
         _logger.info('Resume training from epoch %d' % args.load_epoch)
         _logger.info('Open model state file '+args.model_prefix+'_epoch-%d_state.pt' % args.load_epoch)
         model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch, map_location=device)
-        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        if isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
             model.module.load_state_dict(model_state)
         else:
             model.load_state_dict(model_state)
@@ -741,7 +741,7 @@ def _main(args):
             torch.distributed.barrier()
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
-            dev = torch.device(gpus[0])
+            dev = torch.device('cuda')
     else:
         gpus = None
         dev = torch.device('cpu')
@@ -838,8 +838,8 @@ def _main(args):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
                     os.makedirs(dirname)
-                state_dict = model.state_dict() if isinstance(
-                    model, (torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
+                state_dict = model.module.state_dict() if isinstance(
+                    model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
                 
@@ -874,7 +874,7 @@ def _main(args):
                 dev = torch.device(local_rank)            
             elif args.predict_gpus:
                 gpus = [int(i) for i in args.predict_gpus.split(',')]
-                dev = torch.device(gpus[0]);
+                dev = torch.device('cuda');
             else:
                 gpus = None
                 dev = torch.device('cpu')
@@ -892,9 +892,12 @@ def _main(args):
                     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
                 _logger.info('Loading from model.load_state_dict')
-                model.load_state_dict(torch.load(model_path, map_location=dev))
                 if gpus is not None and len(gpus) > 1:
+                    model.module.load_state_dict(torch.load(model_path, map_location=dev))
                     model = torch.nn.DataParallel(model, device_ids=gpus)
+                else:
+                    model.load_state_dict(torch.load(model_path, map_location=dev))
+                    
             model = model.to(dev)
 
         for name, get_test_loader in test_loaders.items():
