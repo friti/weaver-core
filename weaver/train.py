@@ -787,12 +787,13 @@ def _main(args):
     orig_model = model
 
     if training_mode:
+
         model = orig_model.to(dev)
 
         # DistributedDataParallel
         if args.backend is not None: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            if agpus is not None and len(gpus) > 1:
+            if gpus is not None and len(gpus) > 1:
                 model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=True, gradient_as_bucket_view=True)
         # DataParallel
         elif args.backend is None:
@@ -862,44 +863,33 @@ def _main(args):
             _logger.info('Best validation metric: %f',best_val_metric)
             
     if args.data_test:
+
         if args.backend is not None and local_rank != 0:
             sys.exit(0);
         if training_mode:
             test_loaders, data_config = test_load(args)
 
-        if not args.model_prefix.endswith('.onnx'):
-            
-            if args.predict_gpus and args.backend is not None:
-                gpus = [local_rank]
-                dev = torch.device(local_rank)            
-            elif args.predict_gpus:
-                gpus = [int(i) for i in args.predict_gpus.split(',')]
-                dev = torch.device('cuda');
-            else:
-                gpus = None
-                dev = torch.device('cpu')
+        model = orig_model.to(dev)
 
-            model = orig_model.to(dev)
+        if not args.model_prefix.endswith('.onnx'):
+
             model_path = args.model_prefix if args.model_prefix.endswith(
                 '.pt') else args.model_prefix + '_best_epoch_state.pt'
             _logger.info('Loading model %s for eval' % model_path)
  
-            if args.backend is not None:
-                _logger.info('Loading from model.module.load_state_dict')
+            if isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
                 model.module.load_state_dict(torch.load(model_path, map_location=dev))
-                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-                if agpus is not None and len(gpus) > 1:
-                    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
-            else:
-                _logger.info('Loading from model.load_state_dict')
-                if gpus is not None and len(gpus) > 1:
-                    model.module.load_state_dict(torch.load(model_path, map_location=dev))
-                    model = torch.nn.DataParallel(model, device_ids=gpus)
+                if args.backend is not None:
+                    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+                    if gpus is not None and len(gpus) > 1:
+                        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
                 else:
-                    model.load_state_dict(torch.load(model_path, map_location=dev))
+                    model.module.load_state_dict(torch.load(model_path, map_location=dev))
+                    if gpus is not None and len(gpus) > 1:
+                        model = torch.nn.DataParallel(model, device_ids=gpus)
+            else:
+                model.load_state_dict(torch.load(model_path, map_location=dev))
                     
-            model = model.to(dev)
-
         for name, get_test_loader in test_loaders.items():
             test_loader = get_test_loader()
             # run prediction
