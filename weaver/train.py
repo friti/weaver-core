@@ -512,24 +512,19 @@ def optim(args, model, device):
     if args.load_epoch is not None:
         _logger.info('Resume training from epoch %d' % args.load_epoch)
         _logger.info('Open model state file '+args.model_prefix+'_epoch-%d_state.pt' % args.load_epoch)
+        model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch, map_location=device)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch, map_location=device)
             model.module.load_state_dict(model_state)
-            _logger.info('Open optimizer state file '+args.model_prefix+'_epoch-%d_optimizer.pt' % args.load_epoch)
-            opt_state_file = args.model_prefix + '_epoch-%d_optimizer.pt' % args.load_epoch
-            if os.path.exists(opt_state_file):
-                opt_state = torch.load(opt_state_file, map_location=device)
-                opt.load_state_dict(opt_state)
-            else:
-                _logger.warning('Optimizer state file %s NOT found!' % opt_state_file)
         else:
-            model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch)
             model.load_state_dict(model_state)
-            if os.path.exists(opt_state_file):
-                opt_state = torch.load(opt_state_file)
-                opt.load_state_dict(opt_state)
-            else:
-                _logger.warning('Optimizer state file %s NOT found!' % opt_state_file)
+
+        _logger.info('Open optimizer state file '+args.model_prefix+'_epoch-%d_optimizer.pt' % args.load_epoch)
+        opt_state_file = args.model_prefix + '_epoch-%d_optimizer.pt' % args.load_epoch
+        if os.path.exists(opt_state_file):
+            opt_state = torch.load(opt_state_file, map_location=device)
+            opt.load_state_dict(opt_state)
+        else:
+            _logger.warning('Optimizer state file %s NOT found!' % opt_state_file)
 
     scheduler = None
     if args.lr_finder is None:
@@ -746,7 +741,7 @@ def _main(args):
             torch.distributed.barrier()
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
-            dev = torch.device('cuda')
+            dev = torch.device('cuda',gpus[0])
     else:
         gpus = None
         dev = torch.device('cpu')
@@ -879,7 +874,7 @@ def _main(args):
                 dev = torch.device(local_rank)            
             elif args.predict_gpus:
                 gpus = [int(i) for i in args.predict_gpus.split(',')]
-                dev = torch.device('cuda')
+                dev = torch.device('cuda',gpus[0])
             else:
                 gpus = None
                 dev = torch.device('cpu')
@@ -894,7 +889,7 @@ def _main(args):
                 if agpus is not None and len(gpus) > 1:
                     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
-                model.load_state_dict(torch.load(model_path))
+                model.load_state_dict(torch.load(model_path, map_location=dev))
                 if gpus is not None and len(gpus) > 1:
                     model = torch.nn.DataParallel(model, device_ids=gpus)
             model = model.to(dev)
