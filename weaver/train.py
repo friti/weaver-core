@@ -885,11 +885,13 @@ def _main(args):
             _logger.info('Loading model %s for eval' % model_path)
  
             if args.backend is not None:
+                _logger.info('Loading from model.module.load_state_dict')
                 model.module.load_state_dict(torch.load(model_path, map_location=dev))
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
                 if agpus is not None and len(gpus) > 1:
                     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
+                _logger.info('Loading from model.load_state_dict')
                 model.load_state_dict(torch.load(model_path, map_location=dev))
                 if gpus is not None and len(gpus) > 1:
                     model = torch.nn.DataParallel(model, device_ids=gpus)
