@@ -874,7 +874,7 @@ def _main(args):
                 dev = torch.device(local_rank)            
             elif args.predict_gpus:
                 gpus = [int(i) for i in args.predict_gpus.split(',')]
-                dev = gpus[0];
+                dev = torch.device(gpus[0]);
             else:
                 gpus = None
                 dev = torch.device('cpu')
