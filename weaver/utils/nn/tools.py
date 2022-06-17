@@ -431,7 +431,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                     else:
                         target = torch.column_stack((target,y[names].float()))
                 num_examples = target.shape[0]
-                target = target.to(devmnon_blocking=True)
+                target = target.to(dev,non_blocking=True)
                 model_output = model(*inputs)
                 preds = model_output.squeeze().float()
 
