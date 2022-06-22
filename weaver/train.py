@@ -104,6 +104,8 @@ parser.add_argument('--optimizer-option', nargs=2, action='append', default=[],
 parser.add_argument('--lr-scheduler', type=str, default='flat+decay',
                     choices=['none', 'steps', 'flat+decay', 'flat+linear', 'flat+cos', 'one-cycle'],
                     help='learning rate scheduler')
+parser.add_argument('--lr-epochs', type=int, default=20,
+                    help='number of epochs to be considered by lr optimizer')
 parser.add_argument('--warmup-steps', type=int, default=0,
                     help='number of warm-up steps, only valid for `flat+linear` and `flat+cos` lr schedulers')
 parser.add_argument('--load-epoch', type=int, default=None,
@@ -527,13 +529,13 @@ def optim(args, model, device):
     scheduler = None
     if args.lr_finder is None:
         if args.lr_scheduler == 'steps':
-            lr_step = round(args.num_epochs / 3)
+            lr_step = round(args.lr_epochs / 3)
             scheduler = torch.optim.lr_scheduler.MultiStepLR(
                 opt, milestones=[lr_step, 2 * lr_step], gamma=0.1,
                 last_epoch=-1 if args.load_epoch is None else args.load_epoch)
         elif args.lr_scheduler == 'flat+decay':
-            num_decay_epochs = max(1, int(args.num_epochs * 0.3))
-            milestones = list(range(args.num_epochs - num_decay_epochs, args.num_epochs))
+            num_decay_epochs = max(1, int(args.lr_epochs * 0.3))
+            milestones = list(range(args.lr_epochs - num_decay_epochs, args.lr_epochs))
             gamma = 0.01 ** (1. / num_decay_epochs)
             if len(names_lr_mult):
                 def get_lr(epoch): return gamma ** max(0, epoch - milestones[0] + 1)  # noqa
@@ -545,7 +547,7 @@ def optim(args, model, device):
                     opt, milestones=milestones, gamma=gamma,
                     last_epoch=-1 if args.load_epoch is None else args.load_epoch)
         elif args.lr_scheduler == 'flat+linear' or args.lr_scheduler == 'flat+cos':
-            total_steps = args.num_epochs * args.steps_per_epoch
+            total_steps = args.lr_epochs * args.steps_per_epoch
             warmup_steps = args.warmup_steps
             flat_steps = total_steps * 0.7 - 1
             min_factor = 0.001
@@ -570,7 +572,7 @@ def optim(args, model, device):
             scheduler._update_per_step = True  # mark it to update the lr every step, instead of every epoch
         elif args.lr_scheduler == 'one-cycle':
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
-                opt, max_lr=args.start_lr, epochs=args.num_epochs, steps_per_epoch=args.steps_per_epoch, pct_start=0.3,
+                opt, max_lr=args.start_lr, epochs=args.lr_epochs, steps_per_epoch=args.steps_per_epoch, pct_start=0.3,
                 anneal_strategy='cos', div_factor=25.0, last_epoch=-1 if args.load_epoch is None else args.load_epoch)
             scheduler._update_per_step = True  # mark it to update the lr every step, instead of every epoch
     return opt, scheduler
