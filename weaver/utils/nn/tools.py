@@ -491,9 +491,9 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
     for idx, (name,element) in enumerate(targets.items()):
         if len(data_config.target_names) == 1:
-            metric_reg_results = evaluate_metrics(element, scores, eval_metrics=eval_metrics)
+            metric_results = evaluate_metrics(element, scores, eval_metrics=eval_metrics)
         else:
-            metric_reg_results = evaluate_metrics(element, scores[:,idx], eval_metrics=eval_metrics)
+            metric_results = evaluate_metrics(element, scores[:,idx], eval_metrics=eval_metrics)
 
         _logger.info('Evaluation metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))        
@@ -576,9 +576,9 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
     for idx, (name,element) in enumerate(targets.items()):
         if len(data_config.target_names) == 1:
-            metric_reg_results = evaluate_metrics(element, scores, eval_metrics=eval_metrics)
+            metric_results = evaluate_metrics(element, scores, eval_metrics=eval_metrics)
         else:
-            metric_reg_results = evaluate_metrics(element, scores[:,idx], eval_metrics=eval_metrics)
+            metric_results = evaluate_metrics(element, scores[:,idx], eval_metrics=eval_metrics)
         _logger.info('Evaluation metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
         
