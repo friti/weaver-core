@@ -9,8 +9,6 @@ import functools
 import numpy as np
 import math
 import torch
-from concurrent.futures import ThreadPoolExecutor
-import gc
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
 from utils.dataset import SimpleIterDataset
@@ -729,7 +727,6 @@ def _main(args):
 
     # device
     if args.gpus:
-        gpus = [int(i) for i in args.gpus.split(',')]
         if args.backend is not None:
             local_rank = args.local_rank;
             local_world_size = len(gpus);
@@ -741,7 +738,7 @@ def _main(args):
             torch.distributed.barrier()
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
-            dev = torch.device('cuda')
+            dev = torch.device(gpus[0])
     else:
         gpus = None
         dev = torch.device('cpu')
@@ -793,7 +790,7 @@ def _main(args):
         # DistributedDataParallel
         if args.backend is not None: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            if gpus is not None and len(gpus) > 1:
+            if gpus is not None:
                 model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=True, gradient_as_bucket_view=True)
         # DataParallel
         elif args.backend is None:
@@ -815,10 +812,10 @@ def _main(args):
 
         # training loop
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
+        best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
 
         for epoch in range(args.num_epochs):
             
-            best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
             if args.load_epoch is not None:
                 if epoch <= args.load_epoch:
                     _logger.info('Skip Epoch #%d in training' % epoch)
@@ -829,12 +826,8 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
-            gc.enable()
-            with ThreadPoolExecutor(max_workers=1) as train_executor:
-                train_metric = train_executor.submit(train,model,loss_func,opt,scheduler,train_loader,dev,epoch,args.steps_per_epoch,grad_scaler,tb).result();
-            train_executor.shutdown(wait=True,cancel_futures=True);
-            gc.collect();
-
+            train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
+            
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
@@ -845,14 +838,9 @@ def _main(args):
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
                 
             _logger.info('Epoch #%d validating' % epoch)
-
-            gc.enable()
-            with ThreadPoolExecutor(max_workers=1) as val_executor:
-                val_metric = val_executor.submit(evaluate,model,val_loader,dev,epoch,True,loss_func,args.steps_per_epoch_val,tb).result();
-            val_executor.shutdown(wait=True,cancel_futures=True);
-            gc.collect();
-            
+            val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb)            
             is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
+
             if is_best_epoch:
                 best_val_metric = val_metric
                 if args.model_prefix and (args.backend is None or local_rank == 0):
