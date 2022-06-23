@@ -50,7 +50,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
-            if num_batches >= 1 : break;
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             label  = y[data_config.label_names[0]].long()
             try:
@@ -152,7 +151,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y, Z in tq:
-                if num_batches >= 1: break;
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 label  = y[data_config.label_names[0]].long()
                 entry_count += label.shape[0]
