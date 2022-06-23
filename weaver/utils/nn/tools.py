@@ -50,7 +50,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y, _ in tq:
-
+            if num_batches >= 1 : break;
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             label  = y[data_config.label_names[0]].long()
             try:
@@ -77,7 +77,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 grad_scaler.step(opt)
                 grad_scaler.update()
 
-            if scheduler and getattr(scheduler, '_update_per_step', False):
+            if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
 
             loss  = loss.detach().item()
@@ -124,9 +124,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
-    if scheduler and not getattr(scheduler, '_update_per_step', False):
-        scheduler.step()
-
     gc.collect();
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
@@ -155,6 +152,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y, Z in tq:
+                if num_batches >= 1: break;
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 label  = y[data_config.label_names[0]].long()
                 entry_count += label.shape[0]
@@ -344,7 +342,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 grad_scaler.step(opt)
                 grad_scaler.update()
 
-            if scheduler and getattr(scheduler, '_update_per_step', False):
+            if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
 
             loss = loss.detach().item()
@@ -398,9 +396,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
-    if scheduler and not getattr(scheduler, '_update_per_step', False):
-        scheduler.step()
-        
     gc.collect();
 
 def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
@@ -651,7 +646,7 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
                 grad_scaler.step(opt)
                 grad_scaler.update()
 
-            if scheduler and getattr(scheduler, '_update_per_step', False):
+            if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
 
             ### evaluate loss function and counters
@@ -731,9 +726,6 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode='train')
         # update the batch state
         tb_helper.batch_train_count += num_batches
-
-    if scheduler and not getattr(scheduler, '_update_per_step', False):
-        scheduler.step()
 
     gc.collect();
 

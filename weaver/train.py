@@ -525,33 +525,34 @@ def optim(args, model, device):
             opt.load_state_dict(opt_state)
         else:
             _logger.warning('Optimizer state file %s NOT found!' % opt_state_file)
-
+            
     scheduler = None
     if args.lr_finder is None:
         if args.lr_scheduler == 'steps':
             lr_step = round(args.lr_epochs / 3)
             scheduler = torch.optim.lr_scheduler.MultiStepLR(
-                opt, milestones=[lr_step, 2 * lr_step], gamma=0.1,
+                opt, milestones=[lr_step, 2 * lr_step], gamma=0.25,
                 last_epoch=-1 if args.load_epoch is None else args.load_epoch)
+            scheduler._update_per_step = False;
         elif args.lr_scheduler == 'flat+decay':
-            num_decay_epochs = max(1, int(args.lr_epochs * 0.3))
+            num_decay_epochs = max(1, round(args.lr_epochs / 3))
             milestones = list(range(args.lr_epochs - num_decay_epochs, args.lr_epochs))
             gamma = 0.01 ** (1. / num_decay_epochs)
             if len(names_lr_mult):
                 def get_lr(epoch): return gamma ** max(0, epoch - milestones[0] + 1)  # noqa
                 scheduler = torch.optim.lr_scheduler.LambdaLR(
                     opt, (lambda _: 1, lambda _: 1, get_lr, get_lr),
-                    last_epoch=-1 if args.load_epoch is None else args.load_epoch, verbose=True)
+                    last_epoch=-1 if args.load_epoch is None else args.load_epoch)
             else:
                 scheduler = torch.optim.lr_scheduler.MultiStepLR(
                     opt, milestones=milestones, gamma=gamma,
-                    last_epoch=-1 if args.load_epoch is None else args.load_epoch)
+                    last_epoch= -1 if args.load_epoch is None else args.load_epoch)
+            scheduler._update_per_step = False;
         elif args.lr_scheduler == 'flat+linear' or args.lr_scheduler == 'flat+cos':
             total_steps = args.lr_epochs * args.steps_per_epoch
             warmup_steps = args.warmup_steps
             flat_steps = total_steps * 0.7 - 1
             min_factor = 0.001
-
             def lr_fn(step_num):
                 if step_num > total_steps:
                     raise ValueError(
@@ -566,7 +567,6 @@ def optim(args, model, device):
                     return max(min_factor, 1 - pct)
                 else:
                     return max(min_factor, 0.5 * (math.cos(math.pi * pct) + 1))
-
             scheduler = torch.optim.lr_scheduler.LambdaLR(
                 opt, lr_fn, last_epoch=-1 if args.load_epoch is None else args.load_epoch * args.steps_per_epoch)
             scheduler._update_per_step = True  # mark it to update the lr every step, instead of every epoch
@@ -851,6 +851,9 @@ def _main(args):
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
                          (epoch, val_metric, best_val_metric), color='bold')    
             _logger.info('Best validation metric: %f',best_val_metric)
+
+            if scheduler and not getattr(scheduler, '_update_per_step', False):
+                scheduler.step()
             
     if args.data_test:
 
