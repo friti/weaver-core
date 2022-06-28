@@ -96,7 +96,10 @@ def _preprocess(table, data_config, options):
         indices = _get_reweight_indices(wgts, up_sample=options['up_sample'],
                                         weight_scale=options['weight_scale'], max_resample=options['max_resample'])
     else:
-        indices = np.arange(len(table[data_config.label_names[0]]))
+        if len(data_config.label_names) > 0:
+            indices = np.arange(len(table[data_config.label_names[0]]))
+        elif len(data_config.target_names)> 0:
+            indices = np.arange(len(table[data_config.target_names[0]]))
     # shuffle
     if options['shuffle']:
         np.random.shuffle(indices)
