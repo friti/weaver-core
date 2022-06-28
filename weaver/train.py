@@ -648,8 +648,8 @@ def save_root(args, output_path, data_config, scores, labels, targets, observers
     from utils.data.fileio import _write_root
     output = {}
     if args.regression_mode:
-        output[data_config.label_names[0]] = labels[data_config.label_names[0]]
-        output['output'] = scores
+        for idx, target_name in enumerate(data_config.target_value):
+            output['score_' + target_name] = scores[:, idx]
     elif args.hybrid_mode:
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
