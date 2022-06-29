@@ -649,10 +649,7 @@ def save_root(args, output_path, data_config, scores, labels, targets, observers
     output = {}
     if args.regression_mode:
         for idx, target_name in enumerate(data_config.target_value):
-            if len(data_config.target_names) == 1:
-                output['score_' + target_name] = scores[idx]
-            else:
-                output['score_' + target_name] = scores[:, idx]
+            output['score_' + target_name] = scores[:, idx]
     elif args.hybrid_mode:
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)

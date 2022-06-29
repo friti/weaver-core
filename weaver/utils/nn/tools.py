@@ -221,7 +221,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        labels_counts.clear(); labels.clear(); targets.clear(); observers.clear();
         gc.collect();
         return total_correct / count
     else:
@@ -492,11 +491,11 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))        
 
     if for_training:
-        labels.clear(); targets.clear(); observers.clear();
         gc.collect();
         return total_loss / count
     else:
         # convert 2D targets/scores
+        scores = scores.reshape(len(scores),len(data_config.target_names))
         gc.collect();
         return total_loss / count, scores, labels, targets, observers
         
@@ -577,6 +576,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
         
     gc.collect();
 
+    scores = scores.reshape(len(scores),len(data_config.target_names))
     return total_loss / count, scores, labels, targets, observers
 
 
@@ -894,7 +894,6 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     if for_training:
-        labels.clear(); targets.clear(); observers.clear();        
         gc.collect();
         return total_loss / count;
     else:
