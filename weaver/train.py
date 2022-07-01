@@ -215,6 +215,8 @@ def to_filelist(args, mode='train'):
     assert(len(filelist) == len(set(filelist)))
     return file_dict, filelist
 
+def set_worker_sharing_strategy(worker_id: int) -> None:
+    torch.multiprocessing.set_sharing_strategy("file_system")
 
 def train_load(args):
     """
@@ -258,7 +260,9 @@ def train_load(args):
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
                               num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
-                              persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers))
+                              persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers),
+                              worker_init_fn=set_worker_sharing_strategy
+    )
 
     if args.data_val:
         val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
@@ -272,7 +276,9 @@ def train_load(args):
 
         val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
                                 num_workers=min(args.num_workers_val, int(len(val_files) * args.file_fraction)),
-                                persistent_workers=args.num_workers_val > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers))
+                                persistent_workers=args.num_workers_val > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers),
+                                worker_init_fn=set_worker_sharing_strategy
+        )
 
     else:
         val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
@@ -286,7 +292,9 @@ def train_load(args):
 
         val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
                                 num_workers=min(args.num_workers_train, int(len(val_files) * args.file_fraction)),
-                                persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers))
+                                persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers),
+                                worker_init_fn=set_worker_sharing_strategy
+        )
 
     data_config = train_data.config
     train_input_names = train_data.config.input_names
@@ -338,8 +346,8 @@ def test_load(args):
                                       load_range_and_fraction=((0, 1), args.data_fraction),
                                       fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
                                       name='test_' + name)
-        test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False,
-                                 pin_memory=True)
+        test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False, 
+                                 pin_memory=True,worker_init_fn=set_worker_sharing_strategy)
         return test_loader
 
     test_loaders = {name: functools.partial(get_test_loader, name) for name in file_dict}
@@ -746,6 +754,7 @@ def _main(args):
         dev = torch.device('cpu')
 
     # load data
+    torch.multiprocessing.set_sharing_strategy("file_system");
     if training_mode:
         train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names = train_load(args)
     else:
