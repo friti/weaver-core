@@ -17,8 +17,10 @@ from utils.import_tools import import_module
 parser = argparse.ArgumentParser()
 parser.add_argument('--regression-mode', action='store_true', default=False,
                     help='run in regression mode if this flag is set; otherwise run in classification mode')
-parser.add_argument('--hybrid-mode', action='store_true', default=False,
+parser.add_argument('--classreg-mode', action='store_true', default=False,
                     help='run a special task that is simultaneous regression + classification mode if this flag is set; otherwise run in classification mode')
+parser.add_argument('--preprocess-mode', action='store_true', default=False,
+                    help='run only the pre-processing of the dataset to store the yaml weight file')
 parser.add_argument('-c', '--data-config', type=str, default='data/ak15_points_pf_sv_v0.yaml',
                     help='data config YAML file')
 parser.add_argument('-i', '--data-train', nargs='*', default=[],
@@ -302,6 +304,35 @@ def train_load(args):
     train_target_names = train_data.config.target_names
 
     return train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names
+
+def preprocess_load(args):
+
+    """
+    Loads all events for pre-processing.
+    """
+
+    preprocess_file_dict, preprocess_files = to_filelist(args, 'train')
+    preprocess_range = (0,1)
+    _logger.info('Using %d files for pre-processing, range: %s' % (len(preprocess_files), str(preprocess_range)))
+
+    if args.in_memory and (args.steps_per_epoch is None or args.steps_per_epoch_val is None):
+        raise RuntimeError('Must set --steps-per-epoch when using --in-memory!')
+
+    preprocess_data = SimpleIterDataset(preprocess_file_dict, args.data_config, for_training=True,
+                                        load_range_and_fraction=(preprocess_range, args.data_fraction),
+                                        file_fraction=args.file_fraction,
+                                        fetch_by_files=args.fetch_by_files_train,
+                                        fetch_step=args.fetch_step_train,
+                                        infinity_mode=args.steps_per_epoch is not None,
+                                        in_memory=args.in_memory,
+                                        name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+
+    preprocess_loader = DataLoader(preprocess_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
+                                   num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
+                                   persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers),
+                               )
+    
+    return preprocess_loader;
 
 
 def test_load(args):
@@ -658,7 +689,7 @@ def save_root(args, output_path, data_config, scores, labels, targets, observers
     if args.regression_mode:
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:, idx]
-    elif args.hybrid_mode:
+    elif args.classreg_mode:
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
             output['score_' + label_name] = scores[:, idx]
@@ -721,11 +752,11 @@ def _main(args):
         from utils.nn.tools import train_regression as train
         from utils.nn.tools import evaluate_regression as evaluate
         from utils.nn.tools import evaluate_onnx_regression as evaluate_onnx
-    elif args.hybrid_mode:
+    elif args.classreg_mode:
         _logger.info('Running in combined regression + classification mode')
-        from utils.nn.tools import train_hybrid as train
-        from utils.nn.tools import evaluate_hybrid as evaluate
-        from utils.nn.tools import evaluate_onnx_hybrid as evaluate_onnx
+        from utils.nn.tools import train_classreg as train
+        from utils.nn.tools import evaluate_classreg as evaluate
+        from utils.nn.tools import evaluate_onnx_classreg as evaluate_onnx
     else:
         _logger.info('Running in classification mode')
         from utils.nn.tools import train_classification as train
@@ -754,11 +785,15 @@ def _main(args):
         dev = torch.device('cpu')
 
     # load data
-    torch.multiprocessing.set_sharing_strategy("file_system");
-    if training_mode:
-        train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names = train_load(args)
+    if args.preprocess_mode:
+        preprocess_loader = preprocess_load(args);
+        sys.exit(0);
     else:
-        test_loaders, data_config = test_load(args)
+        torch.multiprocessing.set_sharing_strategy("file_system");
+        if training_mode:
+            train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names = train_load(args)
+        else:
+            test_loaders, data_config = test_load(args)
 
     if args.io_test:
         data_loader = train_loader if training_mode else list(test_loaders.values())[0]()
@@ -823,7 +858,7 @@ def _main(args):
 
         # training loop
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
-        best_val_metric = np.inf if args.regression_mode or args.hybrid_mode else 0
+        best_val_metric = np.inf if args.regression_mode or args.classreg_mode else 0
 
         for epoch in range(args.num_epochs):
             
@@ -850,7 +885,7 @@ def _main(args):
                 
             _logger.info('Epoch #%d validating' % epoch)
             val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb)            
-            is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.hybrid_mode else(val_metric > best_val_metric)
+            is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.classreg_mode else(val_metric > best_val_metric)
 
             if is_best_epoch:
                 best_val_metric = val_metric

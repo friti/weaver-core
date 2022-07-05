@@ -581,7 +581,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
 
 ## train classification + regression into a total loss --> best training epoch decided on the loss function
-def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
     model.train()
 
@@ -728,9 +728,9 @@ def train_hybrid(model, loss_func, opt, scheduler, train_loader, dev, epoch, ste
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
-                    eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
-                    eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+                      eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
+                      eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     model.eval()
 
@@ -907,9 +907,9 @@ def evaluate_hybrid(model, test_loader, dev, epoch, for_training=True, loss_func
             return total_loss / count, scores_reg, labels, targets, observers;
 
 
-def evaluate_onnx_hybrid(model_path, test_loader, loss_func=None,
-                         eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
-                         eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
+def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
+                           eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
+                           eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path)
