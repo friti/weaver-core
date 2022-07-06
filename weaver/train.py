@@ -328,7 +328,7 @@ def preprocess_load(args):
                                         name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
     preprocess_loader = DataLoader(preprocess_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
-                                   num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
+                                   num_workers=min(args.num_workers_train, int(len(preprocess_files) * args.file_fraction)),
                                    persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers),
                                )
     
@@ -409,7 +409,7 @@ def onnx(args, model, data_config, model_info):
                       input_names=model_info['input_names'],
                       output_names=model_info['output_names'],
                       dynamic_axes=model_info.get('dynamic_axes', None),
-                      opset_version=13)
+                      opset_version=12)
     _logger.info('ONNX model saved to %s', args.export_onnx)
 
     preprocessing_json = os.path.join(os.path.dirname(args.export_onnx), 'preprocess.json')
