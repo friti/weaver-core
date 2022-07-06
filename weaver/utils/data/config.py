@@ -244,10 +244,13 @@ class DataConfig(object):
 
     def export_json(self, fp):
         import json
-        if self.target_names:
+        if self.target_names and self.label_names:
             j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
-        else:
+        elif not self.target_names and self.label_names:
             j = {'output_names':self.label_value, 'input_names':self.input_names}
+        elif self.target_names and not self.label_names:
+            j = {'output_names':list(self.target_value.keys()), 'input_names':self.input_names}
+
         for k, v in self.input_dicts.items():
             j[k] = {'var_names': v, 'var_infos': {}}
             for var_name in v:

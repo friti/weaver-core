@@ -658,6 +658,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             count += num_examples;
             
             ## take the classification prediction and compare with the true labels            
+            label = label.detach()
+            target = target.detach()
             if(model_output.dim() == 1) : continue;
             _, pred_cat = model_output[:,:len(data_config.label_value)].squeeze().max(1);
             correct  = (pred_cat.detach() == label.detach()).sum().item()
