@@ -38,6 +38,7 @@ def _read_root(filepath, branches, load_range=None, treename=None):
         else:
             start, stop = None, None
         outputs = tree.arrays(filter_name=branches, entry_start=start, entry_stop=stop)
+        f.close();
     return outputs
 
 
