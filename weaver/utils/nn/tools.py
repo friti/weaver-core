@@ -38,7 +38,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     model.train()
     torch.backends.cudnn.benchmark = True; 
     torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
     gc.enable();
 
     data_config = train_loader.dataset.config
@@ -123,6 +122,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
+    torch.cuda.empty_cache()
     gc.collect();
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
@@ -130,9 +130,12 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
     model.eval()
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
+    if for_training:
+        torch.backends.cudnn.benchmark = True;
+        torch.backends.cudnn.enabled = True;
+    else:
+        torch.backends.cudnn.enabled = False;
+
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -220,6 +223,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
+    torch.cuda.empty_cache()
     if for_training:
         gc.collect();
         return total_correct / count
@@ -246,10 +250,6 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     sess = onnxruntime.InferenceSession(model_path)
 
     data_config = test_loader.dataset.config
-
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
     gc.enable();
 
     label_counter = Counter()
@@ -308,7 +308,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
     gc.enable();
 
     num_batches, total_loss, sum_abs_err, sum_sqr_err, count = 0, 0, 0, 0, 0
@@ -393,6 +392,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
+    torch.cuda.empty_cache()
     gc.collect();
 
 def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
@@ -400,9 +400,11 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
     model.eval()
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
+    if for_training:
+        torch.backends.cudnn.benchmark = True;
+        torch.backends.cudnn.enabled = True;
+    else:
+        torch.backends.cudnn.enabled = False;
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -490,6 +492,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
         _logger.info('Evaluation metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))        
 
+    torch.cuda.empty_cache()
     if for_training:
         gc.collect();
         return total_loss / count
@@ -506,9 +509,6 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path)
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -587,7 +587,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
     gc.enable();
 
     data_config = train_loader.dataset.config
@@ -727,6 +726,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
+    torch.cuda.empty_cache()
     gc.collect();
 
 ## evaluate classification + regression task
@@ -736,9 +736,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     model.eval()
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
+    if for_training:
+        torch.backends.cudnn.benchmark = True;
+        torch.backends.cudnn.enabled = True;
+    else:
+        torch.backends.cudnn.enabled = False;
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -895,6 +897,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
+    torch.cuda.empty_cache()
     if for_training:
         gc.collect();
         return total_loss / count;
@@ -916,9 +919,6 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path)
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-    torch.cuda.empty_cache()
     gc.enable();
 
     data_config = test_loader.dataset.config
