@@ -129,6 +129,10 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
     model.eval()
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
+
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -181,7 +185,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
                 tq.set_postfix({
                     'Loss': '%.5f' % loss,
-                    'AvgLoss': '%.5f' % (total_loss / count),
+                    'AvgLoss': '%.5f' % (total_loss / num_batches),
                     'Acc': '%.5f' % (correct / num_examples),
                     'AvgAcc': '%.5f' % (total_correct / count)})
 
@@ -201,7 +205,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     if tb_helper:
         tb_mode = 'eval' if for_training else 'test'
         tb_helper.write_scalars([
-            ("Loss/%s (epoch)" % tb_mode, total_loss / count, epoch),
+            ("Loss/%s (epoch)" % tb_mode, total_loss / num_batches, epoch),
             ("Acc/%s (epoch)" % tb_mode, total_correct / count, epoch),
             ])
         if tb_helper.custom_fn:
@@ -297,11 +301,12 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     model.train()
 
-    data_config = train_loader.dataset.config
-
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
+
     gc.enable();
+
+    data_config = train_loader.dataset.config
 
     num_batches, total_loss, sum_abs_err, sum_sqr_err, count = 0, 0, 0, 0, 0
     loss, inputs, target, model_output, preds = None, None, None, None, None
@@ -394,6 +399,9 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     model.eval()
     gc.enable();
 
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
+
     data_config = test_loader.dataset.config
 
     total_loss, num_batches, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0
@@ -426,7 +434,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                 loss = 0 if loss_func is None else loss_func(preds, target).detach().item()
                 num_batches += 1
                 count += num_examples
-                total_loss += loss * num_examples
+                total_loss += loss
                 
                 e = preds - target
                 abs_err = e.abs().sum().item()
@@ -436,7 +444,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
                 tq.set_postfix({
                     'Loss': '%.5f' % loss,
-                    'AvgLoss': '%.5f' % (total_loss / count),
+                    'AvgLoss': '%.5f' % (total_loss / num_batches),
                     'MSE': '%.5f' % (sqr_err / num_examples),
                     'AvgMSE': '%.5f' % (sum_sqr_err / count),
                     'MAE': '%.5f' % (abs_err / num_examples),
@@ -458,7 +466,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     if tb_helper:
         tb_mode = 'eval' if for_training else 'test'
         tb_helper.write_scalars([
-            ("Loss/%s (epoch)" % tb_mode, total_loss / count, epoch),
+            ("Loss/%s (epoch)" % tb_mode, total_loss / num_batches, epoch),
             ("MSE/%s (epoch)" % tb_mode, sum_sqr_err / count, epoch),
             ("MAE/%s (epoch)" % tb_mode, sum_abs_err / count, epoch),
             ])
@@ -482,12 +490,12 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     torch.cuda.empty_cache()
     if for_training:
         gc.collect();
-        return total_loss / count
+        return total_loss / num_batches
     else:
         # convert 2D targets/scores
         scores = scores.reshape(len(scores),len(data_config.target_names))
         gc.collect();
-        return total_loss / count, scores, labels, targets, observers
+        return total_loss / num_batches, scores, labels, targets, observers
         
 ## evaluate regression via ONNX
 def evaluate_onnx_regression(model_path, test_loader, loss_func=None, 
@@ -500,7 +508,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
     data_config = test_loader.dataset.config
 
-    total_loss, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0
+    num_batches, total_loss, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0
     scores = []
     labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list)
     inputs, target, score, preds, loss = None, None, None, None, None
@@ -528,8 +536,9 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
             loss = 0 if loss_func is None else loss_func(preds, target).item()
 
+            num_batches += 1;
             count += num_examples
-            total_loss += loss * num_examples
+            total_loss += loss;
 
             e = preds - target
             abs_err = e.abs().sum().item()
@@ -539,7 +548,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
 
             tq.set_postfix({
                 'Loss': '%.5f' % loss,
-                'AvgLoss': '%.5f' % (total_loss / count),
+                'AvgLoss': '%.5f' % (total_loss / num_batches),
                 'MSE': '%.5f' % (sqr_err / num_examples),
                 'AvgMSE': '%.5f' % (sum_sqr_err / count),
                 'MAE': '%.5f' % (abs_err / num_examples),
@@ -564,7 +573,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     gc.collect();
 
     scores = scores.reshape(len(scores),len(data_config.target_names))
-    return total_loss / count, scores, labels, targets, observers
+    return total_loss / num_batches, scores, labels, targets, observers
 
 
 ## train classification + regression into a total loss --> best training epoch decided on the loss function
@@ -574,6 +583,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
+
     gc.enable();
 
     data_config = train_loader.dataset.config
@@ -722,6 +732,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     model.eval()
+
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
+
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -846,7 +860,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if tb_helper:
         tb_mode = 'eval' if for_training else 'test'
         tb_helper.write_scalars([
-            ("Loss/%s (epoch)"%(tb_mode), total_loss / count, epoch),
+            ("Loss/%s (epoch)"%(tb_mode), total_loss / num_batches, epoch),
             ("Loss Cat/%s (epoch)"%(tb_mode), total_cat_loss / num_batches, epoch),
             ("Loss Reg/%s (epoch)"%(tb_mode), total_reg_loss / num_batches, epoch),
             ("Acc/%s (epoch)"%(tb_mode), total_correct / count, epoch),
@@ -881,16 +895,16 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     torch.cuda.empty_cache()
     if for_training:
         gc.collect();
-        return total_loss / count;
+        return total_loss / num_batches;
     else:
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
             gc.collect();
-            return total_loss / count, scores, labels, targets, observers
+            return total_loss / num_batches, scores, labels, targets, observers
         else:
             gc.collect();
-            return total_loss / count, scores_reg, labels, targets, observers;
+            return total_loss / num_batches, scores_reg, labels, targets, observers;
 
 
 def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
@@ -904,7 +918,7 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
-    total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0
+    num_batches, total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0, 0
     scores_cat, scores_reg = [], []
     labels, targets, observers = defaultdict(list)
     inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
@@ -964,6 +978,7 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
 
 
             count += num_examples
+            num_batches += 1;
 
             correct = (pred_cat == label).sum().item()
             total_correct += correct
@@ -1013,10 +1028,10 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
         scores = np.concatenate((scores_cat,scores_reg),axis=1)        
         gc.collect();
-        return total_loss / count, scores, labels, targets, observers
+        return total_loss / num_batches, scores, labels, targets, observers
     else:
         gc.collect();
-        return total_loss / count, scores_reg, labels, targets, observers
+        return total_loss / num_batches, scores_reg, labels, targets, observers
 
 class TensorboardHelper(object):
 
