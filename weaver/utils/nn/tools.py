@@ -130,9 +130,9 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
     model.eval()
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-
+    if for_training:
+        torch.backends.cudnn.benchmark = True;
+        torch.backends.cudnn.enabled = True;
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -399,8 +399,9 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     model.eval()
     gc.enable();
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
+    if for_training:
+        torch.backends.cudnn.benchmark = True;
+        torch.backends.cudnn.enabled = True;
 
     data_config = test_loader.dataset.config
 
@@ -733,8 +734,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     model.eval()
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
+    if for_training:
+        torch.backends.cudnn.benchmark = True;
+        torch.backends.cudnn.enabled = True;
 
     gc.enable();
 
