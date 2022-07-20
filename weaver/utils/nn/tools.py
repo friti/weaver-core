@@ -133,6 +133,10 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
+    else:
+        torch.backends.cudnn.benchmark = False;
+        torch.backends.cudnn.enabled = False;
+
     gc.enable();
 
     data_config = test_loader.dataset.config
@@ -402,6 +406,9 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
+    else:
+        torch.backends.cudnn.benchmark = False;
+        torch.backends.cudnn.enabled = False;
 
     data_config = test_loader.dataset.config
 
@@ -737,6 +744,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
+    else:
+        torch.backends.cudnn.benchmark = False;
+        torch.backends.cudnn.enabled = False;
 
     gc.enable();
 
