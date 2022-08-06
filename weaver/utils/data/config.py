@@ -112,12 +112,17 @@ class DataConfig(object):
         if opts['targets']:
             self.target_type = opts['targets']['type']
             self.target_value = opts['targets']['value']
+            if 'quantile' in opts['targets']:
+                self.target_quantile = opts['targets']['quantile']
+            else:
+                self.target_quantile = None;
             self.target_names = tuple(self.target_value.keys())
             self.var_funcs.update(self.target_value)
         else:
             self.target_names = tuple();
             self.target_type  = None;
             self.target_value = None;
+            self.target_quantile = None;
 
         self.basewgt_name = '_basewgt_'
         self.weight_name = None
@@ -170,6 +175,8 @@ class DataConfig(object):
                 _log('label_names: %s', str(self.label_names))
             if self.target_names: 
                 _log('target_names: %s', str(self.target_names))
+            if self.target_quantile:
+                _log('target_quantile: %s',' '.join([str(elem) for elem in self.target_quantile])) 
             _log('observer_names: %s', str(self.observer_names))
             _log('monitor_variables: %s', str(self.monitor_variables))
             if opts['weights'] is not None:

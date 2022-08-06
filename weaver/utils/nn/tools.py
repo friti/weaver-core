@@ -48,11 +48,11 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, y, _ in tq:
+        for X, y_cat, _, _ in tq:
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-            label  = y[data_config.label_names[0]].long()
+            label  = y_cat[data_config.label_names[0]].long()
             try:
-                label_mask = y[data_config.label_names[0] + '_mask'].bool()
+                label_mask = y_cat[data_config.label_names[0] + '_mask'].bool()
             except KeyError:
                 label_mask = None
             label = _flatten_label(label, label_mask)
@@ -154,12 +154,12 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y, Z in tq:
+            for X, y_cat, _, Z in tq:
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-                label  = y[data_config.label_names[0]].long()
+                label  = y_cat[data_config.label_names[0]].long()
                 entry_count += label.shape[0]
                 try:
-                    label_mask = y[data_config.label_names[0] + '_mask'].bool()
+                    label_mask = y_cat[data_config.label_names[0] + '_mask'].bool()
                 except KeyError:
                     label_mask = None
                 if not for_training and label_mask is not None:
@@ -172,7 +172,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 logits = _flatten_preds(model_output, label_mask).float()
 
                 scores.append(torch.softmax(logits,dim=1).detach().cpu().numpy())
-                for k, v in y.items():
+                for k, v in y_cat.items():
                     labels[k].append(_flatten_label(v,label_mask).cpu().numpy())
                 if not for_training:
                     for k, v in Z.items():
@@ -263,16 +263,16 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     start_time = time.time();
 
     with tqdm.tqdm(test_loader) as tq:
-        for X, y, Z in tq:
+        for X, y_cat, _, Z in tq:
             inputs = {k: v.cpu().numpy() for k, v in X.items()}
-            label = y[data_config.label_names[0]].cpu().numpy()
+            label = y_cat[data_config.label_names[0]].cpu().numpy()
             num_examples = label.shape[0]
             label_counter.update(label)
             score = sess.run([], inputs)[0]
             preds = score.argmax(1)
 
             scores.append(score)
-            for k, v in y.items():
+            for k, v in y_cat.items():
                 labels[k].append(v.cpu().numpy())
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
@@ -300,6 +300,7 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     gc.collect();
     return total_correct / count, scores, labels, targets, observers
 
+
 ## train a regression with possible multi-dimensional target i.e. a list of 1D functions (target_names) 
 def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
@@ -317,21 +318,21 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, y, _ in tq:
+        for X, _, y_reg, _ in tq:
+            if num_batches > 1: break
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
-                    target = y[names].float();
+                    target = y_reg[names].float();
                 else:
-                    target = torch.column_stack((target,y[names].float()))
+                    target = torch.column_stack((target,y_reg[names].float()))
             num_examples = target.shape[0]
             target = target.to(dev,non_blocking=True)
-
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)
                 preds = model_output.squeeze()
-                loss = loss_func(preds, target)
+                loss  = loss_func(preds, target)
             if grad_scaler is None:
                 loss.backward()
                 opt.step()
@@ -420,26 +421,27 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y, Z in tq:
+            for X, _, y_reg, Z in tq:
+                if num_batches > 1: break
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
-                        target = y[names].float();
+                        target = y_reg[names].float();
                     else:
-                        target = torch.column_stack((target,y[names].float()))
+                        target = torch.column_stack((target,y_reg[names].float()))
                 num_examples = target.shape[0]
                 target = target.to(dev,non_blocking=True)
                 model_output = model(*inputs)
                 preds = model_output.squeeze().float()
 
                 scores.append(preds.detach().cpu().numpy())
-                for k, v in y.items():
+                for k, v in y_reg.items():
                     targets[k].append(v.cpu().numpy())
                 if not for_training:
                     for k, v in Z.items():
                         observers[k].append(v.cpu().numpy())
-
-                loss = 0 if loss_func is None else loss_func(preds, target).detach().item()
+                        
+                loss = loss_func(preds, target).detach().item()
                 num_batches += 1
                 count += num_examples
                 total_loss += loss
@@ -524,7 +526,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
-        for X, y, Z in tq:
+        for X, _, y_reg, Z in tq:
             inputs = {k: v.numpy() for k, v in X.items()}
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
@@ -542,8 +544,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
 
-            loss = 0 if loss_func is None else loss_func(preds, target).item()
-
+            loss = loss_func(preds, target).item()
             num_batches += 1;
             count += num_examples
             total_loss += loss;
@@ -584,7 +585,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     return total_loss / num_batches, scores, labels, targets, observers
 
 
-## train classification + regression into a total loss --> best training epoch decided on the loss function
+## train classification + regssion into a total loss --> best training epoch decided on the loss function
 def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
     model.train()
@@ -599,25 +600,26 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     num_batches, total_loss, total_cat_loss, total_reg_loss, count = 0, 0, 0, 0, 0
     label_counter = Counter()
     total_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0
-    inputs, target, label, model_output, loss, loss_cat, loss_target, loss_reg, pred_cat, pred_reg, residual_reg, correct = None, None, None, None, None, None, None, None, None, None, None, None
+    inputs, target, label, model_output = None, None, None, None;
+    loss, loss_cat, loss_reg, pred_cat, pred_reg, residual_reg, correct = None, None, None, None, None, None, None;
 
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, y, _ in tq:
+        for X, y_cat, y_reg, _ in tq:
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
-            label  = y[data_config.label_names[0]].long()
+            label  = y_cat[data_config.label_names[0]].long()
             label  = _flatten_label(label,None)
             label_counter.update(label.cpu().numpy())
             label  = label.to(dev,non_blocking=True)
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
-                    target = y[names].float();
+                    target = y_reg[names].float();
                 else:
-                    target = torch.column_stack((target,y[names].float()))
+                    target = torch.column_stack((target,y_reg[names].float()))
             target = target.to(dev,non_blocking=True)            
             ### Number of samples in the batch
             num_examples = max(label.shape[0],target.shape[0]);
@@ -631,13 +633,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     label = label[:,None]
                 if target.dim() == 1:
                     target = target[:,None]
-                ### true labels and true target merged
-                loss_target = torch.cat((label,target),dim=1)
                 ### erase uselss dimensions
                 label  = label.squeeze();
                 target = target.squeeze();
                 ### evaluate loss function
-                loss, loss_cat, loss_reg = loss_func(model_output,loss_target);
+                loss, loss_cat, loss_reg = loss_func(model_output,label,target);
 
             ### back propagation
             if grad_scaler is None:
@@ -752,28 +752,28 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
-    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0
-    inputs, label, target, model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None
+    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0;
+    inputs, label, target,  model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None;
     scores_cat, scores_reg = [], [];
     labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list);
     start_time = time.time()
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y, Z in tq:
+            for X, y_cat, y_reg, Z in tq:
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
-                label  = y[data_config.label_names[0]].long()
+                label  = y_cat[data_config.label_names[0]].long()
                 label  = _flatten_label(label,None)
                 label_counter.update(label.cpu().numpy())
                 label  = label.to(dev,non_blocking=True)
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
-                        target = y[names].float();
+                        target = y_reg[names].float();
                     else:
-                        target = torch.column_stack((target,y[names].float()))
+                        target = torch.column_stack((target,y_reg[names].float()))
                 target = target.to(dev,non_blocking=True)            
                 ### update counters
                 num_examples = max(label.shape[0],target.shape[0]);
@@ -782,9 +782,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 model_output = model(*inputs)
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
-                    labels[name].append(_flatten_label(y[name],None).cpu().numpy())
+                    labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
                 for k, name in enumerate(data_config.target_names):
-                    targets[name].append(y[name].cpu().numpy())                
+                    targets[name].append(y_reg[name].cpu().numpy())                
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
@@ -812,8 +812,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     if target.dim() == 1:
                         target = target[:,None]
                     ### true labels and true target 
-                    loss_target = torch.cat((label,target),dim=1)
-                    loss, loss_cat, loss_reg = loss_func(model_output,loss_target)
+                    loss, loss_cat, loss_reg = loss_func(model_output,label,target)
                     loss = loss.detach().item()
                     loss_cat = loss_cat.detach().item()
                     loss_reg = loss_reg.detach().item()
@@ -933,20 +932,20 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0, 0
     scores_cat, scores_reg = [], []
     labels, targets, observers = defaultdict(list)
-    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
+    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None;
     
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
-        for X, y, Z in tq:
+        for X, y_cat, y_reg, Z in tq:
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
-            label = y[data_config.label_names[0]].numpy()
+            label = y_class[data_config.label_names[0]].numpy()
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
-                    target = y[names].float();
+                    target = y_reg[names].float();
                 else:
-                    target = torch.column_stack((target,y[names].float()))
+                    target = torch.column_stack((target,y_reg[names].float()))
             num_examples = max(label.shape[0],target.shape[0]);
             label_counter.update(label.cpu().numpy())
             score = sess.run([], inputs)
@@ -954,9 +953,9 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
             scores_reg.append(score[:len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)]);
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
-                labels[name].append(_flatten_label(y[name],None).cpu().numpy())
+                labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
             for k, name in enumerate(data_config.target_names):
-                targets[name].append(y[name].cpu().numpy())                
+                targets[name].append(y_reg[name].cpu().numpy())                
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
 
@@ -971,8 +970,7 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
                 if target.dim() == 1:
                     target = target[:,None]
                 ### true labels and true target 
-                loss_target = torch.cat((label,target),dim=1)
-                loss, loss_cat, loss_reg = loss_func(model_output,loss_target);
+                loss, loss_cat, loss_reg = loss_func(model_output,label,target);
                 loss = loss.item()
                 loss_cat = loss_cat.item()
                 loss_reg = loss_reg.item()

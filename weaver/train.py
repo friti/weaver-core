@@ -454,7 +454,7 @@ def profile(args, model, model_info, device):
     model.eval()
 
     inputs = tuple(
-        torch.ones((args.batch_size,) + model_info['input_shapes'][k][1:],
+        torch.ones((args.batch_size_train,) + model_info['input_shapes'][k][1:],
                    dtype=torch.float32).to(device) for k in model_info['input_names'])
     for x in inputs:
         print(x.shape, x.device)
@@ -663,7 +663,7 @@ def iotest(args, data_loader):
     _logger.info('Start running IO test')
     monitor_info = defaultdict(list)
 
-    for X, y, Z in tqdm(data_loader):
+    for X, y_cat, y_reg, y_quant, Z in tqdm(data_loader):
         for k, v in Z.items():
             monitor_info[k].append(v.cpu().numpy())
     monitor_info = {k: _concat(v) for k, v in monitor_info.items()}
@@ -960,13 +960,13 @@ def main():
     args = parser.parse_args()
     if args.samples_per_epoch is not None:
         if args.steps_per_epoch is None:
-            args.steps_per_epoch = args.samples_per_epoch // args.batch_size
+            args.steps_per_epoch = args.samples_per_epoch // args.batch_size+train
         else:
             raise RuntimeError('Please use either `--steps-per-epoch` or `--samples-per-epoch`, but not both!')
 
     if args.samples_per_epoch_val is not None:
         if args.steps_per_epoch_val is None:
-            args.steps_per_epoch_val = args.samples_per_epoch_val // args.batch_size
+            args.steps_per_epoch_val = args.samples_per_epoch_val // args.batch_size_train
         else:
             raise RuntimeError('Please use either `--steps-per-epoch-val` or `--samples-per-epoch-val`, but not both!')
 
@@ -982,7 +982,7 @@ def main():
         if len(args.network_option):
             model_name = model_name + "_" + hashlib.md5(str(args.network_option).encode('utf-8')).hexdigest()
         model_name += '_{optim}_lr{lr}_batch{batch}'.format(lr=args.start_lr,
-                                                            optim=args.optimizer, batch=args.batch_size)
+                                                            optim=args.optimizer, batch=args.batch_size_train)
         args._auto_model_name = model_name
         args.model_prefix = args.model_prefix.replace('{auto}', model_name)
         args.log = args.log.replace('{auto}', model_name)

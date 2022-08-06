@@ -261,11 +261,13 @@ class _SimpleIter(object):
     def get_data(self, i):
         # inputs
         X = {k: self.table['_' + k][i].copy() for k in self._data_config.input_names}
-        # labels
-        y = {k: self.table[k][i].copy() for k in self._data_config.label_names+self._data_config.target_names}
+        # labels for classification
+        y_cat = {k: self.table[k][i].copy() for k in self._data_config.label_names}
+        # target for regression
+        y_reg = {k: self.table[k][i].copy() for k in self._data_config.target_names}        
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
-        return X, y, Z
+        return X, y_cat, y_reg, Z
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):
     r"""Base IterableDataset.
