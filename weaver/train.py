@@ -574,7 +574,7 @@ def optim(args, model, device):
                 last_epoch=-1 if args.load_epoch is None else args.load_epoch)
             scheduler._update_per_step = False;
         elif args.lr_scheduler == 'flat+decay':
-            num_decay_epochs = max(1, round(args.lr_epochs / 3))
+            num_decay_epochs = max(1, round(args.lr_epochs / 1.5))
             milestones = list(range(args.lr_epochs - num_decay_epochs, args.lr_epochs))
             gamma = 0.01 ** (1. / num_decay_epochs)
             if len(names_lr_mult):
