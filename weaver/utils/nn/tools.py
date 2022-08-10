@@ -319,7 +319,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     with tqdm.tqdm(train_loader) as tq:
         for X, _, y_reg, _ in tq:
-            if num_batches > 1: break
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
@@ -422,7 +421,6 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, _, y_reg, Z in tq:
-                if num_batches > 1: break
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:

@@ -104,10 +104,14 @@ parser.add_argument('--optimizer', type=str, default='ranger', choices=['adam', 
 parser.add_argument('--optimizer-option', nargs=2, action='append', default=[],
                     help='options to pass to the optimizer class constructor, e.g., `--optimizer-option weight_decay 1e-4`')
 parser.add_argument('--lr-scheduler', type=str, default='flat+decay',
-                    choices=['none', 'steps', 'flat+decay', 'flat+linear', 'flat+cos', 'one-cycle'],
+                    choices=['none', 'steps', 'flat+decay', 'flat+linear', 'flat+cos', 'one-cycle', 'custom'],
                     help='learning rate scheduler')
 parser.add_argument('--lr-epochs', type=int, default=20,
                     help='number of epochs to be considered by lr optimizer')
+parser.add_argument('--lr-epoch-to-start-decay', type=int, default=3,
+                    help='in the decay lr-scheduler start decaying the lr from this epoch, while in flat+decay or flat+linear start decay from lr-epochs-1/lr-epoch-to-start-decay')
+parser.add_argument('--lr-decay-rate', type=int, default=0.7,
+                    help='used in the decay lr-scheduler')
 parser.add_argument('--warmup-steps', type=int, default=0,
                     help='number of warm-up steps, only valid for `flat+linear` and `flat+cos` lr schedulers')
 parser.add_argument('--load-epoch', type=int, default=None,
@@ -315,7 +319,7 @@ def preprocess_load(args):
     preprocess_range = (0,1)
     _logger.info('Using %d files for pre-processing, range: %s' % (len(preprocess_files), str(preprocess_range)))
 
-    if args.in_memory and (args.steps_per_epoch is None or args.steps_per_epoch_val is None):
+    if args.in_memory and (args.steps_per_epoch is Nsone or args.steps_per_epoch_val is None):
         raise RuntimeError('Must set --steps-per-epoch when using --in-memory!')
 
     preprocess_data = SimpleIterDataset(preprocess_file_dict, args.data_config, for_training=True,
@@ -568,24 +572,28 @@ def optim(args, model, device):
     scheduler = None
     if args.lr_finder is None:
         if args.lr_scheduler == 'steps':
-            lr_step = round(args.lr_epochs / 3)
+            lr_step = round(args.lr_epochs / args.lr_epoch_to_start_decay)
             scheduler = torch.optim.lr_scheduler.MultiStepLR(
-                opt, milestones=[lr_step, 2 * lr_step], gamma=0.25,
-                last_epoch=-1 if args.load_epoch is None else args.load_epoch)
+                opt, milestones=[lr_step, 2 * lr_step], gamma=0.25, last_epoch=-1 if args.load_epoch is None else args.load_epoch)
             scheduler._update_per_step = False;
         elif args.lr_scheduler == 'flat+decay':
-            num_decay_epochs = max(1, round(args.lr_epochs / 1.5))
+            num_decay_epochs = max(1, round(args.lr_epochs / args.lr_epoch_to_start_decay))
             milestones = list(range(args.lr_epochs - num_decay_epochs, args.lr_epochs))
             gamma = 0.01 ** (1. / num_decay_epochs)
             if len(names_lr_mult):
                 def get_lr(epoch): return gamma ** max(0, epoch - milestones[0] + 1)  # noqa
                 scheduler = torch.optim.lr_scheduler.LambdaLR(
-                    opt, (lambda _: 1, lambda _: 1, get_lr, get_lr),
-                    last_epoch=-1 if args.load_epoch is None else args.load_epoch)
+                    opt, (lambda _: 1, lambda _: 1, get_lr, get_lr), last_epoch= -1 if args.load_epoch is None else args.load_epoch)
             else:
                 scheduler = torch.optim.lr_scheduler.MultiStepLR(
-                    opt, milestones=milestones, gamma=gamma,
-                    last_epoch= -1 if args.load_epoch is None else args.load_epoch)
+                    opt, milestones=milestones, gamma=gamma, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
+            scheduler._update_per_step = False;
+        elif args.lr_scheduler == 'custom':
+            scheduler1 = torch.optim.lr_scheduler.ConstantLR(
+                opt,args.start_lr,args.lr_epoch_to_start_decay, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
+            learnfunc  = lambda epoch: args.lr_decay_rate ** max(0,epoch-args.lr_epoch_to_start_decay+1);
+            scheduler2 = torch.optim.lr_scheduler.LambdaLR(opt, learnfunc, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
+            scheduler  = torch.optim.lr_scheduler.ChainedScheduler([scheduler1,scheduler2])
             scheduler._update_per_step = False;
         elif args.lr_scheduler == 'flat+linear' or args.lr_scheduler == 'flat+cos':
             total_steps = args.lr_epochs * args.steps_per_epoch
@@ -606,13 +614,13 @@ def optim(args, model, device):
                     return max(min_factor, 1 - pct)
                 else:
                     return max(min_factor, 0.5 * (math.cos(math.pi * pct) + 1))
-            scheduler = torch.optim.lr_scheduler.LambdaLR(
-                opt, lr_fn, last_epoch=-1 if args.load_epoch is None else args.load_epoch * args.steps_per_epoch)
+                scheduler = torch.optim.lr_scheduler.LambdaLR(
+                    opt, lr_fn, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
             scheduler._update_per_step = True  # mark it to update the lr every step, instead of every epoch
         elif args.lr_scheduler == 'one-cycle':
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 opt, max_lr=args.start_lr, epochs=args.lr_epochs, steps_per_epoch=args.steps_per_epoch, pct_start=0.3,
-                anneal_strategy='cos', div_factor=25.0, last_epoch=-1 if args.load_epoch is None else args.load_epoch)
+                anneal_strategy='cos', div_factor=25.0, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
             scheduler._update_per_step = True  # mark it to update the lr every step, instead of every epoch
     return opt, scheduler
 
@@ -863,9 +871,11 @@ def _main(args):
         for epoch in range(args.num_epochs):
             
             if args.load_epoch is not None:
+
                 if epoch <= args.load_epoch:
                     _logger.info('Skip Epoch #%d in training' % epoch)
                     continue
+
                 if args.load_best_metric is not None:
                     best_val_metric = args.load_best_metric
                     
