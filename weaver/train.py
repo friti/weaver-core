@@ -63,6 +63,8 @@ parser.add_argument('--in-memory', action='store_true', default=False,
                     help='load the whole dataset (and perform the preprocessing) only once and keep it in memory for the entire run')
 parser.add_argument('--train-val-split', type=float, default=0.8,
                     help='training/validation split fraction')
+parser.add_argument('--no-remake-weights', action='store_true', default=False,
+                     help='do not remake weights for sampling (reweighting), use existing ones in the previous auto-generated data config YAML file')
 parser.add_argument('--demo', action='store_true', default=False,
                     help='quickly test the setup by running over only a small number of events')
 parser.add_argument('--lr-finder', type=str, default=None,
@@ -390,7 +392,7 @@ def test_load(args):
     return test_loaders, data_config
 
 
-def onnx(args, model, data_config, model_info):
+def onnx(args):
     """
     Saving model as ONNX.
     :param args:
@@ -402,6 +404,10 @@ def onnx(args, model, data_config, model_info):
     assert (args.export_onnx.endswith('.onnx'))
     model_path = args.model_prefix
     _logger.info('Exporting model %s to ONNX' % model_path)
+
+    from utils.dataset import DataConfig
+    data_config = DataConfig.load(args.data_config, load_observers=False, load_reweight_info=False)
+    model, model_info, _ = model_setup(args, data_config)
     model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model = model.cpu()
     model.eval()
@@ -413,7 +419,8 @@ def onnx(args, model, data_config, model_info):
                       input_names=model_info['input_names'],
                       output_names=model_info['output_names'],
                       dynamic_axes=model_info.get('dynamic_axes', None),
-                      opset_version=12)
+                      opset_version=12
+    )
     _logger.info('ONNX model saved to %s', args.export_onnx)
 
     preprocessing_json = os.path.join(os.path.dirname(args.export_onnx), 'preprocess.json')
@@ -529,11 +536,12 @@ def optim(args, model, device):
             assert(len(no_decay_1x) + len(no_decay_mult) == len(no_decay))
         else:
             decay_1x, no_decay_1x = list(decay.values()), list(no_decay.values())
+        wd = optimizer_options.pop('weight_decay', 0.)
         parameters = [
             {'params': no_decay_1x, 'weight_decay': 0.},
-            {'params': decay_1x, 'weight_decay': optimizer_options.pop('weight_decay', 0.)},
+            {'params': decay_1x, 'weight_decay': wd},
             {'params': no_decay_mult, 'weight_decay': 0., 'lr': args.start_lr * mult_factor},
-            {'params': decay_mult, 'weight_decay': optimizer_options.pop('weight_decay', 0.), 'lr': args.start_lr * mult_factor},
+            {'params': decay_mult, 'weight_decay': wd, 'lr': args.start_lr * mult_factor},
         ]
         _logger.info('Parameters excluded from weight decay:\n - %s', '\n - '.join(names_no_decay))
         if len(names_lr_mult):
@@ -824,7 +832,7 @@ def _main(args):
 
     # export to ONNX
     if args.export_onnx:
-        onnx(args, model, data_config, model_info)
+        onnx(args);
         sys.exit(0);
 
     if args.tensorboard:
@@ -931,7 +939,6 @@ def _main(args):
                     if gpus is not None and len(gpus) > 1:
                         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
                 else:
-                    model.module.load_state_dict(torch.load(model_path, map_location=dev))
                     if gpus is not None and len(gpus) > 1:
                         model = torch.nn.DataParallel(model, device_ids=gpus)
             else:
