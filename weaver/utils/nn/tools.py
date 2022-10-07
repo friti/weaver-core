@@ -16,7 +16,6 @@ def _flatten_label(label, mask=None):
         label = label.view(-1)
         if mask is not None:
             label = label[mask.view(-1)]
-    # print('label', label.shape, label)
     return label
 
 
@@ -27,7 +26,6 @@ def _flatten_preds(preds, mask=None, label_axis=1):
         preds = preds.view((-1, preds.shape[-1]))
         if mask is not None:
             preds = preds[mask.view(-1)]
-    # print('preds', preds.shape, preds)
     return preds
 
 
@@ -248,7 +246,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
 
     import onnxruntime
-    sess = onnxruntime.InferenceSession(model_path)
+    sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
     data_config = test_loader.dataset.config
     gc.enable();
@@ -265,13 +263,14 @@ def evaluate_onnx_classification(model_path, test_loader, loss_func=None, eval_m
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, _, Z in tq:
             inputs = {k: v.cpu().numpy() for k, v in X.items()}
-            label = y_cat[data_config.label_names[0]].cpu().numpy()
+            label = y_cat[data_config.label_names[0]].long()
             num_examples = label.shape[0]
-            label_counter.update(label)
-            score = sess.run([], inputs)[0]
+            label_counter.update(label.cpu.numpy())
+            score = sess.run([], inputs)
+            score = torch.as_tensor(np.array(score)).squeeze();
             preds = score.argmax(1)
-
             scores.append(score)
+
             for k, v in y_cat.items():
                 labels[k].append(v.cpu().numpy())
             for k, v in Z.items():
@@ -510,7 +509,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
                              eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error',
                                            'mean_gamma_deviance']):
     import onnxruntime
-    sess = onnxruntime.InferenceSession(model_path)
+    sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
     gc.enable();
 
@@ -533,8 +532,8 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
                     target = torch.column_stack((target,y[names].float()))
             num_examples = target.shape[0]            
             score = sess.run([], inputs)
-            preds = score.squeeze().float()
-
+            score = torch.as_tensor(np.array(score)).squeeze().float();
+            preds = score
             scores.append(score)
 
             for k, v in y.items():
@@ -542,10 +541,8 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
 
-            loss = loss_func(preds, target).item()
             num_batches += 1;
             count += num_examples
-            total_loss += loss;
 
             e = preds - target
             abs_err = e.abs().sum().item()
@@ -554,8 +551,6 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
             sum_sqr_err += sqr_err
 
             tq.set_postfix({
-                'Loss': '%.5f' % loss,
-                'AvgLoss': '%.5f' % (total_loss / num_batches),
                 'MSE': '%.5f' % (sqr_err / num_examples),
                 'AvgMSE': '%.5f' % (sum_sqr_err / count),
                 'MAE': '%.5f' % (abs_err / num_examples),
@@ -580,7 +575,7 @@ def evaluate_onnx_regression(model_path, test_loader, loss_func=None,
     gc.collect();
 
     scores = scores.reshape(len(scores),len(data_config.target_names))
-    return total_loss / num_batches, scores, labels, targets, observers
+    return total_loos/num_batches, scores, labels, targets, observers
 
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
@@ -921,7 +916,7 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
                            eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     import onnxruntime
-    sess = onnxruntime.InferenceSession(model_path)
+    sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
     gc.enable();
 
@@ -929,8 +924,8 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
     label_counter = Counter()
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0, 0
     scores_cat, scores_reg = [], []
-    labels, targets, observers = defaultdict(list)
-    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None;
+    labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list)
+    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None;
     
     start_time = time.time()
 
@@ -938,7 +933,7 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
         for X, y_cat, y_reg, Z in tq:
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
-            label = y_class[data_config.label_names[0]].numpy()
+            label = y_cat[data_config.label_names[0]].long();
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y_reg[names].float();
@@ -947,8 +942,9 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
             num_examples = max(label.shape[0],target.shape[0]);
             label_counter.update(label.cpu().numpy())
             score = sess.run([], inputs)
+            score = torch.as_tensor(np.array(score)).squeeze();
             scores_cat.append(score[:,:len(data_config.label_value)]);
-            scores_reg.append(score[:len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)]);
+            scores_reg.append(score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)]);            
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
                 labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
@@ -957,49 +953,30 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
 
-            pred_cat = score[:,:len(data_config.label_value)].argmax(1);
-            pred_reg = score[:len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)];
-            
-            ### evaluate loss function
-            if loss_func != None:
-                ### check dimension of labels and target. If dimension is 1 extend them
-                if label.dim() == 1:
-                    label = label[:,None]
-                if target.dim() == 1:
-                    target = target[:,None]
-                ### true labels and true target 
-                loss, loss_cat, loss_reg = loss_func(model_output,label,target);
-                loss = loss.item()
-                loss_cat = loss_cat.item()
-                loss_reg = loss_reg.item()
-                ### erase useless dimensions
-                label  = label.squeeze();
-                target = target.squeeze(); 
-                total_loss += loss
-                total_cat_loss += loss_cat
-                total_reg_loss += loss_reg
-            else:
-                loss,loss_cat,loss_reg = 0,0,0;
-                total_loss += loss
-                total_cat_loss += loss_cat
-                total_reg_loss += loss_reg
-
-
+            pred_cat = score[:,:len(data_config.label_value)].argmax(1).squeeze();
+            pred_reg = score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
             count += num_examples
             num_batches += 1;
+            
+            if label.dim() == 1:
+                label = label[:,None]
+            if target.dim() == 1:
+                target = target[:,None]
 
-            correct = (pred_cat == label).sum().item()
-            total_correct += correct
-            residual_reg = pred_reg - target;
-            abs_err = residual_reg.abs().sum().item();
-            sum_abs_err += abs_err;
-            sqr_err = residual_reg.square().sum().item()
-            sum_sqr_err += sqr_err
+            ### erase uselss dimensions                                                                                                                                                            
+            label  = label.squeeze();
+        
+            if pred_cat.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
+                correct = (pred_cat == label).sum().item()
+                total_correct += correct
+                residual_reg = pred_reg - target;
+                abs_err = residual_reg.abs().sum().item();
+                sum_abs_err += abs_err;
+                sqr_err = residual_reg.square().sum().item()
+                sum_sqr_err += sqr_err
 
             ### monitor results
             tq.set_postfix({
-                'Loss': '%.5f' % loss,
-                'AvgLoss': '%.5f' % (total_loss / num_batches),
                 'Acc': '%.5f' % (correct / num_examples),
                 'AvgAcc': '%.5f' % (total_correct / count),
                 'MSE': '%.5f' % (sqr_err / num_examples),
@@ -1011,13 +988,13 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
     time_diff = time.time() - start_time
     _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
     _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_counter.items())))
-
+    
     scores_cat = np.concatenate(scores_cat).squeeze()
     scores_reg = np.concatenate(scores_reg).squeeze()
     labels  = {k: _concat(v) for k, v in labels.items()}
     targets = {k: _concat(v) for k, v in targets.items()}
     observers = {k: _concat(v) for k, v in observers.items()}
-    
+
     metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
@@ -1030,7 +1007,6 @@ def evaluate_onnx_classreg(model_path, test_loader, loss_func=None,
 
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
-
     
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
