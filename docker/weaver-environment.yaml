@@ -1,71 +1,42 @@
 name: weaver
 channels:
-  - conda-forge
   - defaults
 dependencies:
-  - _libgcc_mutex=0.1=conda_forge
-  - _openmp_mutex=4.5=2_gnu
-  - bzip2=1.0.8=h7f98852_4
-  - c-ares=1.18.1=h7f98852_0
-  - ca-certificates=2022.6.15=ha878542_0
-  - certifi=2022.6.15=py39hf3d152e_0
-  - curl=7.83.1=h2283fc2_0
-  - expat=2.4.8=h27087fc_0
-  - gettext=0.19.8.1=h73d1719_1008
-  - git=2.37.0=pl5321h04cb727_0
-  - keyutils=1.6.1=h166bdaf_0
-  - krb5=1.19.3=h08a2579_0
-  - ld_impl_linux-64=2.36.1=hea4e1c9_2
-  - libcbor=0.9.0=h9c3ff4c_0
-  - libcurl=7.83.1=h2283fc2_0
-  - libedit=3.1.20191231=he28a2e2_2
-  - libev=4.33=h516909a_1
-  - libevent=2.1.10=h28343ad_4
-  - libffi=3.4.2=h7f98852_5
-  - libfido2=1.11.0=he49606f_0
-  - libgcc-ng=12.1.0=h8d9b700_16
-  - libgomp=12.1.0=h8d9b700_16
-  - libiconv=1.16=h516909a_0
-  - libnghttp2=1.47.0=he49606f_0
-  - libnsl=2.0.0=h7f98852_0
-  - libssh2=1.10.0=ha35d2d1_2
-  - libstdcxx-ng=12.1.0=ha89aaad_16
-  - libudev1=249=h166bdaf_4
-  - libuuid=2.32.1=h7f98852_1000
-  - libzlib=1.2.12=h166bdaf_1
-  - lz4-c=1.9.3=h9c3ff4c_1
-  - ncurses=6.3=h27087fc_1
-  - openssh=9.0p1=h67c24c5_0
-  - openssl=3.0.4=h166bdaf_2
-  - pcre2=10.37=h032f7d1_0
-  - perl=5.32.1=2_h7f98852_perl5
-  - pip=22.1.2=pyhd8ed1ab_0
-  - popt=1.16=h0b475e3_2002
-  - python=3.9.13=h2660328_0_cpython
-  - python_abi=3.9=2_cp39
-  - readline=8.1.2=h0f457ee_0
-  - rsync=3.2.3=h36cecd6_4
-  - setuptools=63.1.0=py39hf3d152e_0
-  - sqlite=3.39.0=h4ff8645_0
-  - tk=8.6.12=h27826a3_0
-  - tmux=3.3=h385fc29_0
-  - tzdata=2022a=h191b570_0
-  - wheel=0.37.1=pyhd8ed1ab_0
-  - xz=5.2.5=h516909a_1
-  - zlib=1.2.12=h166bdaf_1
-  - zstd=1.5.2=h8a70e8d_2
+  - _libgcc_mutex=0.1=main
+  - _openmp_mutex=5.1=1_gnu
+  - ca-certificates=2022.4.26=h06a4308_0
+  - certifi=2022.6.15=py39h06a4308_0
+  - ld_impl_linux-64=2.38=h1181459_1
+  - libffi=3.3=he6710b0_2
+  - libgcc-ng=11.2.0=h1234567_1
+  - libgomp=11.2.0=h1234567_1
+  - libstdcxx-ng=11.2.0=h1234567_1
+  - ncurses=6.3=h5eee18b_3
+  - openssl=1.1.1p=h5eee18b_0
+  - pip=21.2.4=py39h06a4308_0
+  - python=3.9.12=h12debd9_1
+  - readline=8.1.2=h7f8727e_1
+  - setuptools=61.2.0=py39h06a4308_0
+  - sqlite=3.38.5=hc218d9a_0
+  - tk=8.6.12=h1ccaba5_0
+  - tzdata=2022a=hda174b7_0
+  - wheel=0.37.1=pyhd3eb1b0_0
+  - xz=5.2.5=h7f8727e_1
+  - zlib=1.2.12=h7f8727e_2
   - pip:
     - absl-py==1.1.0
     - awkward==1.8.0
     - awkward0==0.15.5
     - cachetools==5.2.0
     - charset-normalizer==2.1.0
+    - coloredlogs==15.0.1
     - cycler==0.11.0
     - flatbuffers==2.0
     - fonttools==4.33.3
     - google-auth==2.9.0
     - google-auth-oauthlib==0.4.6
     - grpcio==1.47.0
+    - humanfriendly==10.0
     - idna==3.3
     - importlib-metadata==4.12.0
     - joblib==1.1.0
@@ -73,9 +44,12 @@ dependencies:
     - lz4==4.0.1
     - markdown==3.3.7
     - matplotlib==3.5.2
+    - mpmath==1.2.1
     - numexpr==2.8.3
     - numpy==1.23.0
     - oauthlib==3.2.0
+    - onnx==1.12.0
+    - onnxruntime==1.12.1
     - onnxruntime-gpu==1.11.1
     - packaging==21.3
     - pandas==1.4.3
@@ -93,6 +67,7 @@ dependencies:
     - scikit-learn==1.1.1
     - scipy==1.8.1
     - six==1.16.0
+    - sympy==1.11.1
     - tables==3.7.0
     - tensorboard==2.9.1
     - tensorboard-data-server==0.6.1
@@ -109,4 +84,4 @@ dependencies:
     - werkzeug==2.1.2
     - xxhash==3.0.0
     - zipp==3.8.0
-prefix: /afs/cern.ch/user/r/rgerosa/work/miniconda3/envs/weaver
+prefix: /afs/cern.ch/work/r/rgerosa/miniconda3/envs/weaver
