@@ -19,6 +19,10 @@ parser.add_argument('--regression-mode', action='store_true', default=False,
                     help='run in regression mode if this flag is set; otherwise run in classification mode')
 parser.add_argument('--classreg-mode', action='store_true', default=False,
                     help='run a special task that is simultaneous regression + classification mode if this flag is set; otherwise run in classification mode')
+parser.add_argument('--domain-mode', action='store_true', default=False,
+                    help='run a special task that is simultaneous classification + domain mode if this flag is set; otherwise run in classification mode')
+parser.add_argument('--classreg-domain-mode', action='store_true', default=False,
+                    help='run a special task that is simultaneous regression + classification + domain mode if this flag is set; otherwise run in classification mode')
 parser.add_argument('--preprocess-mode', action='store_true', default=False,
                     help='run only the pre-processing of the dataset to store the yaml weight file')
 parser.add_argument('-c', '--data-config', type=str, default='data/ak15_points_pf_sv_v0.yaml',
@@ -711,6 +715,22 @@ def save_root(args, output_path, data_config, scores, labels, targets, observers
             output['score_' + label_name] = scores[:, idx]
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:, len(data_config.label_value)+idx]
+    elif args.classreg_domain_mode:
+        for idx, label_name in enumerate(data_config.label_value):
+            output[label_name] = (labels[data_config.label_names[0]] == idx)
+            output['score_' + label_name] = scores[:, idx]
+        for idx, target_name in enumerate(data_config.target_value):
+            output['score_' + target_name] = scores[:, len(data_config.label_value)+idx]
+        for idx, label_name in enumerate(data_config.label_doamin_value):
+            output[label_name] = (labels[data_config.label_domain_names[0]] == idx)
+            output['score_' + label_name] = scores[:, len(data_config.label_value)+len(data_config.label_value+idx]
+    elif args.domain_mode:
+        for idx, label_name in enumerate(data_config.label_value):
+            output[label_name] = (labels[data_config.label_names[0]] == idx)
+            output['score_' + label_name] = scores[:, idx]
+        for idx, label_name in enumerate(data_config.label_doamin_value):
+            output[label_name] = (labels[data_config.label_domain_names[0]] == idx)
+            output['score_' + label_name] = scores[:, len(data_config.label_value)+idx]    
     else:
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
@@ -773,6 +793,16 @@ def _main(args):
         from utils.nn.tools import train_classreg as train
         from utils.nn.tools import evaluate_classreg as evaluate
         from utils.nn.tools import evaluate_onnx_classreg as evaluate_onnx
+    elif args.classreg_domain_mode:
+        _logger.info('Running in combined regression + classification + domain mode')
+        from utils.nn.tools import train_classreg_domain as train
+        from utils.nn.tools import evaluate_classreg_domain as evaluate
+        from utils.nn.tools import evaluate_onnx_classreg_domain as evaluate_onnx
+    elif args.domain_mode:
+        _logger.info('Running in combined classification + domain')
+        from utils.nn.tools import train_domain as train
+        from utils.nn.tools import evaluate_domain as evaluate
+        from utils.nn.tools import evaluate_onnx_domain as evaluate_onnx
     else:
         _logger.info('Running in classification mode')
         from utils.nn.tools import train_classification as train
@@ -874,7 +904,7 @@ def _main(args):
 
         # training loop
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
-        best_val_metric = np.inf if args.regression_mode or args.classreg_mode else 0
+        best_val_metric = np.inf if args.regression_mode or args.classreg_mode or args.classreg_domain_mode else 0
 
         for epoch in range(args.num_epochs):
             

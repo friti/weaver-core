@@ -40,6 +40,7 @@ class DataConfig(object):
             'inputs': {},
             'labels': {},
             'targets': {},
+            'labels_domain': {},
             'observers': [],
             'monitor_variables': [],
             'weights': None,
@@ -107,6 +108,23 @@ class DataConfig(object):
             self.label_names = tuple();
             self.label_type  = None;
             self.label_value = None;
+
+        ## domain
+        if opts['labels_domain']:
+            self.label_domain_type = opts['labels_domain']['type']
+            self.label_domain_value = opts['labels_domain']['value']
+            if self.label_domain_type == 'simple':
+                assert(isinstance(self.label_domain_value, list))
+                self.label_domain_names = ('_label_domain_',)
+                self.var_funcs['_label_domain_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_domain_value))
+                self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_domain_value))
+            else:
+                self.label_domain_names = tuple(self.label_domain_value.keys())
+                self.var_funcs.update(self.label_label_value)
+        else:
+            self.label_domain_names = tuple();
+            self.label_domain_type  = None;
+            self.label_domain_value = None;
 
         # targets
         if opts['targets']:
@@ -177,6 +195,8 @@ class DataConfig(object):
                 _log('target_names: %s', str(self.target_names))
             if self.target_quantile:
                 _log('target_quantile: %s',' '.join([str(elem) for elem in self.target_quantile])) 
+            if self.label_domain_names: 
+                _log('label_domain_names: %s', str(self.label_domain_names))
             _log('observer_names: %s', str(self.observer_names))
             _log('monitor_variables: %s', str(self.monitor_variables))
             if opts['weights'] is not None:
@@ -208,6 +228,8 @@ class DataConfig(object):
         self.keep_branches.update(self.label_names)
         # targets
         self.keep_branches.update(self.target_names)
+        # labels
+        self.keep_branches.update(self.label_domain_names)
         # weight
         if self.weight_name:
             self.keep_branches.add(self.weight_name)
@@ -253,12 +275,24 @@ class DataConfig(object):
 
     def export_json(self, fp):
         import json
-        if self.target_names and self.label_names:
+        ## class+reg+domain
+        if self.target_names and self.label_names and self.label_domain:
+            j = {'output_names':self.label_value+list(self.target_value.keys())+self.label_domain_value, 'input_names':self.input_names}
+        ## class+reg
+        elif self.target_names and self.label_names and not self.label_domain:
             j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
-        elif not self.target_names and self.label_names:
+        ## pure class
+        elif not self.target_names and not self.label_domain and self.label_names:
             j = {'output_names':self.label_value, 'input_names':self.input_names}
-        elif self.target_names and not self.label_names:
+        ## pure regression
+        elif self.target_names and not self.label_names and not self.label_domain:
             j = {'output_names':list(self.target_value.keys()), 'input_names':self.input_names}
+        ## class + domain
+        elif self.label_names and self.label_domain and not self.target_names:
+            j = {'output_names':self.label_value+self.label_domain_value, 'input_names':self.input_names}
+        ## reg + domain
+        elif self.target_names and self.label_domain:
+            j = {'output_names':list(self.target_value.keys())+self.label_domain_value, 'input_names':self.input_names}
 
         for k, v in self.input_dicts.items():
             j[k] = {'var_names': v, 'var_infos': {}}

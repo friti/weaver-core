@@ -119,6 +119,35 @@ class EdgeConvBlock(nn.Module):
 
         return self.sc_act(sc + fts)  # (N, C_out, P)
 
+## function and module to flip gradient
+class RevGrad(torch.autograd.Function):
+   @staticmethod
+    def forward(ctx, input_, alpha_):
+        ctx.save_for_backward(input_, alpha_)
+        output = input_
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pragma: no cover
+        grad_input = None
+        _, alpha_ = ctx.saved_tensors
+        if ctx.needs_input_grad[0]:
+            grad_input = -grad_output * alpha_
+        return grad_input, None
+
+class GradientReverse(nn.Module):
+    def __init__(self, alpha=1., *args, **kwargs):
+        """
+        A gradient reversal layer.
+        This layer has no parameters, and simply reverses the gradient
+        in the backward pass.
+        """
+        super().__init__(*args, **kwargs)
+
+        self._alpha = tensor(alpha, requires_grad=False)
+
+    def forward(self, input_):
+        return RevGrad.apply(input_, self._alpha)
 
 class ParticleNet(nn.Module):
 
@@ -126,8 +155,10 @@ class ParticleNet(nn.Module):
                  input_dims,
                  num_classes,
                  num_targets,
+                 num_domains=0,
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
+                 fc_domain_params=[(128, 0.1)],
                  use_fusion=True,
                  use_fts_bn=True,
                  use_counts=True,
@@ -137,6 +168,7 @@ class ParticleNet(nn.Module):
         super(ParticleNet, self).__init__(**kwargs)
         self.num_classes = num_classes;
         self.num_targets = num_targets;
+        self.num_domains = num_domains;
 
         self.use_fts_bn = use_fts_bn
         if self.use_fts_bn:
@@ -158,6 +190,7 @@ class ParticleNet(nn.Module):
 
         self.for_segmentation = for_segmentation
 
+        ## fully connected layers for classification
         fcs = []
         for idx, layer_param in enumerate(fc_params):
             channels, drop_rate = layer_param
@@ -165,20 +198,55 @@ class ParticleNet(nn.Module):
                 in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
             else:
                 in_chn = fc_params[idx - 1][0]
+
             if self.for_segmentation:
-                fcs.append(nn.Sequential(nn.Conv1d(in_chn, channels, kernel_size=1, bias=False),
-                                         nn.BatchNorm1d(channels), 
-                                         nn.ReLU(), 
-                                         nn.Dropout(drop_rate)))
+                fcs.append(nn.Sequential(
+                    nn.Conv1d(in_chn, channels, kernel_size=1, bias=False),
+                    nn.BatchNorm1d(channels), 
+                    nn.ReLU(), 
+                    nn.Dropout(drop_rate)))
             else:
-                fcs.append(nn.Sequential(nn.Linear(in_chn, channels), 
-                                         nn.ReLU(), 
-                                         nn.Dropout(drop_rate)))
+                fcs.append(nn.Sequential(
+                    nn.Linear(in_chn, channels), 
+                    nn.ReLU(), 
+                    nn.Dropout(drop_rate)))
+        
         if self.for_segmentation:
             fcs.append(nn.Conv1d(fc_params[-1][0], num_classes+num_targets, kernel_size=1))
         else:
             fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
+
         self.fc = nn.Sequential(*fcs)
+
+        ## fully connected domain layers
+        fcs_domain = []
+        if num_domains!=0:
+            for idx, layer_param in enumerate(fc_domain_params):
+                channels, drop_rate = layer_param
+                if idx == 0:
+                    in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
+                else:
+                    in_chn = fc_domain_params[idx - 1][0]
+                if self.for_segmentation:
+                    fcs_domain.append(nn.Sequential(
+                        GradientReverse(),
+                        nn.Conv1d(in_chn, channels, kernel_size=1, bias=False),
+                        nn.BatchNorm1d(channels),
+                        nn.ReLU(),
+                        nn.Dropout(drop_rate)))
+                    
+                else:
+                    fcs_domain.append(nn.Sequential(
+                        GradientReverse(),
+                        nn.Linear(in_chn, channels), 
+                        nn.ReLU(), 
+                        nn.Dropout(drop_rate)))
+
+            if self.for_segmentation:
+                fcs.append(nn.Conv1d(fc_domain_params[-1][0], num_domains, kernel_size=1))
+            else:
+                fcs.append(nn.Linear(fc_domain_params[-1][0], num_domains)) 
+            self.fc_domain = nn.Sequential(*fcs_domain)
 
         self.for_inference = for_inference
 
@@ -205,8 +273,6 @@ class ParticleNet(nn.Module):
         if self.use_fusion:
             fts = self.fusion_block(torch.cat(outputs, dim=1)) * mask
 
-#         assert(((fts.abs().sum(dim=1, keepdim=True) != 0).float() - mask.float()).abs().sum().item() == 0)
-        
         if self.for_segmentation:
             x = fts
         else:
@@ -214,8 +280,10 @@ class ParticleNet(nn.Module):
                 x = fts.sum(dim=-1) / counts  # divide by the real counts
             else:
                 x = fts.mean(dim=-1)
-
+        
         output = self.fc(x)
+        if num_domains!=0:
+            output_domain = self.fc_domain(x)
 
         if self.for_inference:
             if self.num_targets == 0 and self.num_classes != 0:
@@ -224,9 +292,10 @@ class ParticleNet(nn.Module):
                 output_class = torch.softmax(output[:,:self.num_classes],dim=1)
                 output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
                 output = torch.cat((output_class,output_reg),dim=1);
+            if num_domains!=0:
+                output_domain = torch.softmax(output_domain,dim=1);
+                output = torch.cat((output,output_domain),dim=1);
         return output
-
-
 
 class FeatureConv(nn.Module):
 
@@ -250,8 +319,10 @@ class ParticleNetTagger(nn.Module):
                  sv_features_dims,
                  num_classes,
                  num_targets,
+                 num_domains=0,
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
+                 fc_domain_params=[(128, 0.1)],
                  input_dims=32,
                  use_fusion=True,
                  use_fts_bn=True,
@@ -268,8 +339,10 @@ class ParticleNetTagger(nn.Module):
         self.pn = ParticleNet(input_dims=input_dims,
                               num_classes=num_classes,
                               num_targets=num_targets,
+                              num_domains=num_domains,
                               conv_params=conv_params,
                               fc_params=fc_params,
+                              fc_domain_params=fc_domain_params,
                               use_fusion=use_fusion,
                               use_fts_bn=use_fts_bn,
                               use_counts=use_counts,

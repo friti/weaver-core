@@ -60,6 +60,11 @@ def _build_weights(table, data_config, reweight_hists=None, warn=_logger.warning
                 rwgt_y_vals, y_bins) - 1, a_min=0, a_max=len(y_bins) - 2)
             wgt[pos] = hist[x_indices, y_indices]
             sum_evts += np.sum(pos)
+        ## loop oover the domain label and fix weights to 1 in order to be always sampled
+        for label in self.label_domain_names:
+            pos = table[label] == 1
+            wgt[pos] = 1;
+            sum_evts += np.sum(pos)
         if sum_evts != len(table):
             warn(
                 'Not all selected events used in the reweighting. '

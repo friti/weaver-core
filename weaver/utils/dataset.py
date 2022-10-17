@@ -71,14 +71,22 @@ def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale
 
 
 def _check_labels(table):
-    if np.all(table['_labelcheck_'] == 1):
-        return
+    if table.get_node('_labelcheck_domain_'):
+        if np.all(table['_labelcheck_']+table['_labelcheck_domain_'] == 1):
+            return
+        else:
+            if np.any(table['_labelcheck_']+table['_labelcheck_domain_'] == 0):
+                raise RuntimeError('Inconsistent label definition: some of the entries are not assigned to any classes!')
+            if np.any(table['_labelcheck_']+table['_labelcheck_domain_']  > 1):
+                raise RuntimeError('Inconsistent label definition: some of the entries are assigned to multiple classes!')
     else:
-        if np.any(table['_labelcheck_'] == 0):
-            raise RuntimeError('Inconsistent label definition: some of the entries are not assigned to any classes!')
-        if np.any(table['_labelcheck_'] > 1):
-            raise RuntimeError('Inconsistent label definition: some of the entries are assigned to multiple classes!')
-
+        if np.all(table['_labelcheck_'] == 1):
+            return
+        else:
+            if np.any(table['_labelcheck_'] == 0):
+                raise RuntimeError('Inconsistent label definition: some of the entries are not assigned to any classes!')
+            if np.any(table['_labelcheck_'] > 1):
+                raise RuntimeError('Inconsistent label definition: some of the entries are assigned to multiple classes!')
 
 def _preprocess(table, data_config, options):
     # apply selection
@@ -98,8 +106,10 @@ def _preprocess(table, data_config, options):
     else:
         if len(data_config.label_names) > 0:
             indices = np.arange(len(table[data_config.label_names[0]]))
-        elif len(data_config.target_names)> 0:
-            indices = np.arange(len(table[data_config.target_names[0]]))
+        if len(data_config.label_names) > 0:
+            indices = np.arange(len(table[data_config.label_names[0]]))
+        if len(data_config.label_domain_names)> 0:
+            indices = np.arange(len(table[data_config.label_domain_names[0]]))
     # shuffle
     if options['shuffle']:
         np.random.shuffle(indices)
@@ -265,9 +275,11 @@ class _SimpleIter(object):
         y_cat = {k: self.table[k][i].copy() for k in self._data_config.label_names}
         # target for regression
         y_reg = {k: self.table[k][i].copy() for k in self._data_config.target_names}        
+        # labels for domain
+        y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
-        return X, y_cat, y_reg, Z
+        return X, y_cat, y_reg, Z, y_domain
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):
     r"""Base IterableDataset.
