@@ -282,6 +282,7 @@ class ParticleNet(nn.Module):
                 x = fts.mean(dim=-1)
         
         output = self.fc(x)
+
         if num_domains!=0:
             output_domain = self.fc_domain(x)
 
@@ -295,6 +296,7 @@ class ParticleNet(nn.Module):
             if num_domains!=0:
                 output_domain = torch.softmax(output_domain,dim=1);
                 output = torch.cat((output,output_domain),dim=1);
+
         return output
 
 class FeatureConv(nn.Module):

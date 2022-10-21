@@ -15,16 +15,11 @@ from utils.dataset import SimpleIterDataset
 from utils.import_tools import import_module
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--regression-mode', action='store_true', default=False,
-                    help='run in regression mode if this flag is set; otherwise run in classification mode')
-parser.add_argument('--classreg-mode', action='store_true', default=False,
-                    help='run a special task that is simultaneous regression + classification mode if this flag is set; otherwise run in classification mode')
-parser.add_argument('--domain-mode', action='store_true', default=False,
-                    help='run a special task that is simultaneous classification + domain mode if this flag is set; otherwise run in classification mode')
-parser.add_argument('--classreg-domain-mode', action='store_true', default=False,
-                    help='run a special task that is simultaneous regression + classification + domain mode if this flag is set; otherwise run in classification mode')
-parser.add_argument('--preprocess-mode', action='store_true', default=False,
-                    help='run only the pre-processing of the dataset to store the yaml weight file')
+parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classdomain', 'classregdomain','preprocess'],  # TODO: add more  
+                    help='class: classification task, reg: regression task, classreg: classification+regression,' 
+                    'classdomain: classification with domain adversarial, '
+                    'classregdomain: classification+regression with domain adversarial, preprocess: only run re-weight step and produce the new yaml file'
+                )
 parser.add_argument('-c', '--data-config', type=str, default='data/ak15_points_pf_sv_v0.yaml',
                     help='data config YAML file')
 parser.add_argument('-i', '--data-train', nargs='*', default=[],
@@ -695,7 +690,7 @@ def iotest(args, data_loader):
         _logger.info('Monitor info written to %s' % monitor_output_path)
 
 
-def save_root(args, output_path, data_config, scores, labels, targets, observers):
+def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers):
     """
     Saves as .root
     :param data_config:
@@ -706,35 +701,39 @@ def save_root(args, output_path, data_config, scores, labels, targets, observers
     """
     from utils.data.fileio import _write_root
     output = {}
-    if args.regression_mode:
-        for idx, target_name in enumerate(data_config.target_value):
-            output['score_' + target_name] = scores[:, idx]
-    elif args.classreg_mode:
+
+    if args.weaver_mode == "class":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
-            output['score_' + label_name] = scores[:, idx]
+            output['score_' + label_name] = scores[:,idx]
+    elif args.weaver_mode == "reg":
         for idx, target_name in enumerate(data_config.target_value):
-            output['score_' + target_name] = scores[:, len(data_config.label_value)+idx]
-    elif args.classreg_domain_mode:
+            output['score_' + target_name] = scores[:,idx]
+    elif args.weaver_mode == "classreg":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
-            output['score_' + label_name] = scores[:, idx]
+            output['score_' + label_name] = scores[:,idx]
         for idx, target_name in enumerate(data_config.target_value):
-            output['score_' + target_name] = scores[:, len(data_config.label_value)+idx]
-        for idx, label_name in enumerate(data_config.label_doamin_value):
-            output[label_name] = (labels[data_config.label_domain_names[0]] == idx)
-            output['score_' + label_name] = scores[:, len(data_config.label_value)+len(data_config.label_value+idx]
-    elif args.domain_mode:
+            output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
+    elif args.weaver_mode == "classdomain":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
-            output['score_' + label_name] = scores[:, idx]
-        for idx, label_name in enumerate(data_config.label_doamin_value):
-            output[label_name] = (labels[data_config.label_domain_names[0]] == idx)
-            output['score_' + label_name] = scores[:, len(data_config.label_value)+idx]    
+            output['score_' + label_name] = scores[:,idx]
+        for idx, label_name in enumerate(data_config.label_domain_value):
+            output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
+            output['score_' + label_name] = scores[:,len(data_config.label_value)+idx]
+    elif args.weaver_mode == "classregdomain":
+        for idx, label_name in enumerate(data_config.label_value):
+            output[label_name] = (labels[data_config.label_names[0]] == idx)
+            output['score_' + label_name] = scores[:,idx]
+        for idx, target_name in enumerate(data_config.target_value):
+            output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
+        for idx, label_name in enumerate(data_config.label_domain_value):
+            output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
+            output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]    
     else:
-        for idx, label_name in enumerate(data_config.label_value):
-            output[label_name] = (labels[data_config.label_names[0]] == idx)
-            output['score_' + label_name] = scores[:, idx]
+        _logger.warning("Weaver mode not recognized when saving output file --> abort")
+        sys.exit(0);
 
     for k, v in labels.items():
         if k == data_config.label_names[0]:
@@ -750,15 +749,24 @@ def save_root(args, output_path, data_config, scores, labels, targets, observers
             continue
         output[k] = v
 
+    for k, v in labels_domain.items():
+        if k == data_config.label_domain_names[0]:
+            continue
+        if v.ndim > 1:
+            _logger.warning('Ignoring %s, not a 1d array.', k)
+            continue
+        output[k] = v
+
     for k, v in observers.items():
         if v.ndim > 1:
             _logger.warning('Ignoring %s, not a 1d array.', k)
             continue
         output[k] = v
+
     _write_root(output_path, output)
 
 
-def save_parquet(args, output_path, scores, labels, targets, observers):
+def save_parquet(args, output_path, scores, labels, targets, labels_domain, observers):
     """
     Saves as parquet file
     :param scores:
@@ -771,6 +779,7 @@ def save_parquet(args, output_path, scores, labels, targets, observers):
     output = {'scores': scores}
     output.update(labels)
     output.update(targets)
+    output.update(labels_domain)
     output.update(observers)
     ak.to_parquet(ak.Array(output), output_path, compression='LZ4', compression_level=4)
 
@@ -783,31 +792,31 @@ def _main(args):
         _logger.warning('Use of `file-fraction` is not recommended in general -- prefer using `data-fraction` instead.')
 
     # classification/regression mode
-    if args.regression_mode:
-        _logger.info('Running in regression mode')
-        from utils.nn.tools import train_regression as train
-        from utils.nn.tools import evaluate_regression as evaluate
-        from utils.nn.tools import evaluate_onnx_regression as evaluate_onnx
-    elif args.classreg_mode:
-        _logger.info('Running in combined regression + classification mode')
-        from utils.nn.tools import train_classreg as train
-        from utils.nn.tools import evaluate_classreg as evaluate
-        from utils.nn.tools import evaluate_onnx_classreg as evaluate_onnx
-    elif args.classreg_domain_mode:
-        _logger.info('Running in combined regression + classification + domain mode')
-        from utils.nn.tools import train_classreg_domain as train
-        from utils.nn.tools import evaluate_classreg_domain as evaluate
-        from utils.nn.tools import evaluate_onnx_classreg_domain as evaluate_onnx
-    elif args.domain_mode:
-        _logger.info('Running in combined classification + domain')
-        from utils.nn.tools import train_domain as train
-        from utils.nn.tools import evaluate_domain as evaluate
-        from utils.nn.tools import evaluate_onnx_domain as evaluate_onnx
-    else:
+    if args.weaver_mode == "class":
         _logger.info('Running in classification mode')
         from utils.nn.tools import train_classification as train
         from utils.nn.tools import evaluate_classification as evaluate
         from utils.nn.tools import evaluate_onnx_classification as evaluate_onnx
+    elif args.weaver_mode == "reg":
+        _logger.info('Running in regression mode')
+        from utils.nn.tools import train_regression as train
+        from utils.nn.tools import evaluate_regression as evaluate
+        from utils.nn.tools import evaluate_onnx_regression as evaluate_onnx
+    elif args.weaver_mode == "classreg":
+        _logger.info('Running in combined regression + classification mode')
+        from utils.nn.tools import train_classreg as train
+        from utils.nn.tools import evaluate_classreg as evaluate
+        from utils.nn.tools import evaluate_onnx_classreg as evaluate_onnx
+    elif args.weaver_mode == "classdomain":
+        _logger.info('Running in classification mode with domain adaptation')
+        from utils.nn.tools_domain import train_classification as train
+        from utils.nn.tools_domain import evaluate_classification as evaluate
+        from utils.nn.tools_domain import evaluate_onnx_classification as evaluate_onnx
+    elif args.classreg_domain_mode:
+        _logger.info('Running in combined regression + classification mode with domain adaptation')
+        from utils.nn.tools_domain import train_classreg as train
+        from utils.nn.tools_domain import evaluate_classreg as evaluate
+        from utils.nn.tools_domain import evaluate_onnx_classreg as evaluate_onnx
 
     # training/testing mode
     training_mode = not args.predict
@@ -831,7 +840,7 @@ def _main(args):
         dev = torch.device('cpu')
 
     # load data
-    if args.preprocess_mode:
+    if args.weaver_mode == "preprocess":
         preprocess_loader = preprocess_load(args);
         sys.exit(0);
     else:
@@ -904,7 +913,7 @@ def _main(args):
 
         # training loop
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
-        best_val_metric = np.inf if args.regression_mode or args.classreg_mode or args.classreg_domain_mode else 0
+        best_val_metric = np.inf if "reg" in args.weaver_mode else 0
 
         for epoch in range(args.num_epochs):
             
@@ -931,9 +940,9 @@ def _main(args):
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
                 
-            _logger.info('Epoch #%d validating' % epoch)
+                _logger.info('Epoch #%d validating' % epoch)
             val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb)            
-            is_best_epoch = (val_metric < best_val_metric) if args.regression_mode or args.classreg_mode else(val_metric > best_val_metric)
+            is_best_epoch = (val_metric < best_val_metric) if "reg" in args.weaver_mode else(val_metric > best_val_metric)
 
             if is_best_epoch:
                 best_val_metric = val_metric
@@ -979,9 +988,10 @@ def _main(args):
             # run prediction
             if args.model_prefix.endswith('.onnx'):
                 _logger.info('Loading model %s for eval' % args.model_prefix)
-                test_metric, scores, labels, targets, observers = evaluate_onnx(args.model_prefix, test_loader)
+                test_metric, scores, labels, targets, label_domain, observers = evaluate_onnx(
+                    args.model_prefix, test_loader)
             else:
-                test_metric, scores, labels, targets, observers = evaluate(
+                test_metric, scores, labels, targets, label_domain, observers = evaluate(
                     model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)            
             _logger.info('Test metric %.5f' % test_metric, color='bold')
 
@@ -997,9 +1007,9 @@ def _main(args):
                     base, ext = os.path.splitext(args.predict_output)
                     output_path = base + '_' + name + ext
                 if output_path.endswith('.root'):
-                    save_root(args, output_path, data_config, scores, labels, targets, observers)
+                    save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers)
                 else:
-                    save_parquet(args, output_path, scores, labels, targets, observers)
+                    save_parquet(args, output_path, scores, labels, targets, domains, labels_domain, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
 
 def main():
