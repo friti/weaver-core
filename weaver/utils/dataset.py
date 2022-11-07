@@ -71,6 +71,16 @@ def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale
 
 
 def _check_labels(table):
+    if table.get_node('_labelcheck_'):
+        if np.all(table['_labelcheck_'] == 1):
+            return
+        else:
+            if np.any(table['_labelcheck_'] == 0):
+                raise RuntimeError('Inconsistent label definition: some of the entries are not assigned to any classes!')
+            if np.any(table['_labelcheck_'] > 1):
+                raise RuntimeError('Inconsistent label definition: some of the entries are assigned to multiple classes!')
+
+def _check_labels_domain(table):
     if table.get_node('_labelcheck_domain_'):
         if np.all(table['_labelcheck_']+table['_labelcheck_domain_'] == 1):
             return
@@ -78,14 +88,6 @@ def _check_labels(table):
             if np.any(table['_labelcheck_']+table['_labelcheck_domain_'] == 0):
                 raise RuntimeError('Inconsistent label definition: some of the entries are not assigned to any classes!')
             if np.any(table['_labelcheck_']+table['_labelcheck_domain_']  > 1):
-                raise RuntimeError('Inconsistent label definition: some of the entries are assigned to multiple classes!')
-    else:
-        if np.all(table['_labelcheck_'] == 1):
-            return
-        else:
-            if np.any(table['_labelcheck_'] == 0):
-                raise RuntimeError('Inconsistent label definition: some of the entries are not assigned to any classes!')
-            if np.any(table['_labelcheck_'] > 1):
                 raise RuntimeError('Inconsistent label definition: some of the entries are assigned to multiple classes!')
 
 def _preprocess(table, data_config, options):
@@ -98,6 +100,9 @@ def _preprocess(table, data_config, options):
     # check labels
     if data_config.label_type is not None and data_config.label_type == 'simple' and options['training']:
         _check_labels(table)
+    # check labels
+    if data_config.label_domain_type is not None and data_config.label_domain_type == 'simple' and options['training']:
+        _check_labels_domain(table)
     # compute reweight indices
     if options['reweight'] and data_config.weight_name is not None:
         wgts = _build_weights(table, data_config, warn=warn_once)
@@ -106,9 +111,7 @@ def _preprocess(table, data_config, options):
     else:
         if len(data_config.label_names) > 0:
             indices = np.arange(len(table[data_config.label_names[0]]))
-        if len(data_config.label_names) > 0:
-            indices = np.arange(len(table[data_config.label_names[0]]))
-        if len(data_config.label_domain_names)> 0:
+        elif len(data_config.label_domain_names)> 0:
             indices = np.arange(len(table[data_config.label_domain_names[0]]))
     # shuffle
     if options['shuffle']:
@@ -279,7 +282,7 @@ class _SimpleIter(object):
         y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
-        return X, y_cat, y_reg, Z, y_domain
+        return X, y_cat, y_reg, y_domain, Z
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):
     r"""Base IterableDataset.

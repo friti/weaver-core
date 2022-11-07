@@ -281,18 +281,15 @@ class DataConfig(object):
         ## class+reg
         elif self.target_names and self.label_names and not self.label_domain:
             j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
-        ## pure class
+        ## class
         elif not self.target_names and not self.label_domain and self.label_names:
             j = {'output_names':self.label_value, 'input_names':self.input_names}
-        ## pure regression
+        ## regression
         elif self.target_names and not self.label_names and not self.label_domain:
             j = {'output_names':list(self.target_value.keys()), 'input_names':self.input_names}
-        ## class + domain
+        ## class+domain
         elif self.label_names and self.label_domain and not self.target_names:
             j = {'output_names':self.label_value+self.label_domain_value, 'input_names':self.input_names}
-        ## reg + domain
-        elif self.target_names and self.label_domain:
-            j = {'output_names':list(self.target_value.keys())+self.label_domain_value, 'input_names':self.input_names}
 
         for k, v in self.input_dicts.items():
             j[k] = {'var_names': v, 'var_infos': {}}

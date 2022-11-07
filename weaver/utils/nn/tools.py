@@ -46,7 +46,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, y_cat, _, _ in tq:
+        for X, y_cat, _, _, _ in tq:
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             label  = y_cat[data_config.label_names[0]].long()
             try:
@@ -153,7 +153,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y_cat, _, Z in tq:
+            for X, y_cat, _, _, Z in tq:
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 label  = y_cat[data_config.label_names[0]].long()
                 entry_count += label.shape[0]
@@ -263,7 +263,7 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
     start_time = time.time();
 
     with tqdm.tqdm(test_loader) as tq:
-        for X, y_cat, _, Z in tq:
+        for X, y_cat, _, _, Z in tq:
             inputs = {k: v.cpu().numpy() for k, v in X.items()}
             label = y_cat[data_config.label_names[0]].long()
             num_examples = label.shape[0]
@@ -319,7 +319,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, _, y_reg, _ in tq:
+        for X, _, y_reg, _, _ in tq:
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
@@ -421,7 +421,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, _, y_reg, Z in tq:
+            for X, _, y_reg, _, Z in tq:
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
@@ -525,7 +525,7 @@ def evaluate_onnx_regression(model_path, test_loader,
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
-        for X, _, y_reg, Z in tq:
+        for X, _, y_reg, _, Z in tq:
             inputs = {k: v.numpy() for k, v in X.items()}
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
@@ -601,7 +601,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, y_cat, y_reg, _ in tq:
+        for X, y_cat, y_reg, _, _ in tq:
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
@@ -755,7 +755,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y_cat, y_reg, Z in tq:
+            for X, y_cat, y_reg, _, Z in tq:
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
@@ -932,7 +932,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
-        for X, y_cat, y_reg, Z in tq:
+        for X, y_cat, y_reg, _, Z in tq:
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
             label = y_cat[data_config.label_names[0]].long();

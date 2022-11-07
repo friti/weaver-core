@@ -50,8 +50,11 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, _, y_domain, _ in tq:
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-            label_cat = y_cat[data_config.label_names[0]].long()
+
+            label_cat    = y_cat[data_config.label_names[0]].long()
             label_domain = y_domain[data_config.label_domain_names[0]].long()
+            label_cat    = _flatten_label(label_cat, None)            
+            label_domain = _flatten_label(label_domain, None)
 
             ## erase rows with all zeros to disentangle labels 
             index_cat = label_cat.any(1).nonzero()[:,0]
@@ -63,14 +66,13 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                  _logger.warning('Wrong decomposition in cat and domain for batch number '%(num_batches))
                  continue;
 
-            label_cat    = _flatten_label(label_cat, None)            
-            label_domain = _flatten_label(label_domain, None)
             num_examples_cat = label_cat.shape[0]
             num_examples_domain = label_domain.shape[0]
 
             label_cat_counter.update(label_cat.cpu().numpy())
             label_domain_counter.update(label_domain.cpu().numpy())
-            label_cat = label_cat.to(dev,non_blocking=True)
+
+            label_cat    = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
 
             model.zero_grad(set_to_none=True)
@@ -79,10 +81,10 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 model_output = model(*inputs)
                 model_output_cat = model_output[:,:len(data_config.label_value)];
                 model_output_domain = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.label_domain_value)];
-                model_output_cat = model_output_cat[index_cat];
-                model_output_domain = model_output_domain[index_domain];
-                logits_cat = _flatten_preds(model_output_cat,None); 
+                logits_cat    = _flatten_preds(model_output_cat,None); 
                 logits_domain = _flatten_preds(model_output_domain,None); 
+                logits_cat    = logits_cat[index_cat];
+                logits_domain = logits_domain[index_domain];
                 loss, loss_cat, loss_domain = loss_func(logits_cat, label_cat, logits_domain, label_domain)
 
             if grad_scaler is None:
@@ -142,7 +144,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 break
 
     time_diff = time.time() - start_time
-    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
+    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
     _logger.info('Train AvgLoss: %.5f'% (total_loss / num_batches))
     _logger.info('Train AvgLossCat: %.5f'% (total_loss_cat / num_batches))
     _logger.info('Train AvgLossDomain: %.5f'% (total_loss_domain / num_batches))
@@ -191,6 +193,8 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     logits_cat, logits_domain, preds_cat, preds_domain, loss, loss_cat, loss_domain, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None
     scores_cat = []
     scores_domain = []
+    indexes_cat = [];
+    indexes_domain = [];
     labels = defaultdict(list)
     labels_domain = defaultdict(list)
     targets = defaultdict(list)
@@ -205,19 +209,21 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 label_cat = y_cat[data_config.label_names[0]].long()
                 label_domain = y_domain[data_config.label_domain_names[0]].long()                
+                label_cat    = _flatten_label(label_cat,None)
+                label_domain = _flatten_label(label_domain,None)
 
                 ## erase rows with all zeros to disentangle labels 
-                index_cat = label_cat.any(1).nonzero()[:,0]
+                index_cat    = label_cat.any(1).nonzero()[:,0]
                 index_domain = label_domain.any(1).nonzero()[:,0]
-                label_cat = label_cat[index_cat];
+                indexes_cat.append(index_cat.detach().cpu().numpy());
+                indexes_domain.append(index_domain.detach().cpu().numpy());
+                label_cat    = label_cat[index_cat];
                 label_domain = label_domain[index_domain];
 
                 if label_cat.shape[0]+label_domain.shape[0] != inputs.shape[0]:
                     _logger.warning('Wrong decomposition in cat and domain for batch number '%(num_batches))
                     continue;
 
-                label_cat    = _flatten_label(label_cat,None)
-                label_domain = _flatten_label(label_domain,None)
                 label_cat_counter.update(label_cat.cpu().numpy())
                 label_domain_counter.update(label_domain.cpu().numpy())
 
@@ -232,15 +238,15 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 model_output = model(*inputs)
                 model_output_cat = model_output[:,:len(data_config.label_value)];
                 model_output_domain = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.label_domain_value)];
-                model_output_cat = model_output_cat[index_cat];
-                model_output_domain = model_output_domain[index_domain];
-
-                logits_cat = _flatten_preds(model_output_cat,None).float()
+                logits_cat    = _flatten_preds(model_output_cat,None).float()
                 logits_domain = _flatten_preds(model_output_domain,None).float()
-                logits = flatten_preds(model_output,None).float()
-                scores_cat.append(torch.softmax(logits,dim=1).detach().cpu().numpy())
-                scores_domain.append(torch.softmax(logits,dim=1).detach().cpu().numpy())
-
+                ## build the scores before trimming the positions
+                scores_cat.append(torch.softmax(logits_cat,dim=1).detach().cpu().numpy())
+                scores_domain.append(torch.softmax(logits_domain,dim=1).detach().cpu().numpy())
+                ## trim by the index
+                logits_cat    = model_output_cat[index_cat];
+                logits_domain = model_output_domain[index_domain];
+                ## build labels
                 for k, v in y_cat.items():
                     labels_cat[k].append(_flatten_label(v,None).cpu().numpy())
                 for k, v in y_domain.items():
@@ -287,7 +293,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                     break
 
     time_diff = time.time() - start_time
-    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
+    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
     _logger.info('Evaluation class  distribution: \n    %s', str(sorted(label_cat_counter.items())))
     _logger.info('Evaluation domain distribution: \n    %s', str(sorted(label_domain_counter.items())))
 
@@ -302,19 +308,22 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
             with torch.no_grad():
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode=tb_mode)
 
-    scores_cat = np.concatenate(scores_cat)
+    scores_cat    = np.concatenate(scores_cat)
     scores_domain = np.concatenate(scores_domain)
-    labels_cat = {k: _concat(v) for k, v in labels_cat.items()}
+    indexes_cat     = np.concatenate(indexes_cat);
+    indexes_domain  = np.concatenate(indexes_domain);
+    labels_cat    = {k: _concat(v) for k, v in labels_cat.items()}
     labels_domain = {k: _concat(v) for k, v in labels_domain.items()}
-    observers = {k: _concat(v) for k, v in observers.items()}
-
-    metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]], scores_cat, eval_metrics=eval_metrics)
+    observers     = {k: _concat(v) for k, v in observers.items()}
+    
+    metric_cat_results = evaluate_metrics(labels_cat[indexes_cat,data_config.label_names[0]], scores_cat[indexes_cat], eval_metrics=eval_metrics)
     _logger.info('Evaluation Cat metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
-    metric_domain_results = evaluate_metrics(labels_domain[data_config.label_domain_names[0]], scores_domain, eval_metrics=eval_metrics)
+    metric_domain_results = evaluate_metrics(labels_domain[indexes_domain,data_config.label_domain_names[0]], scores_domain[indexes_domain], eval_metrics=eval_metrics)
     _logger.info('Evaluation Domain metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
 
+    scores = np.concatenate((scores_cat,scores_domain),axis=1) 
     torch.cuda.empty_cache()
 
     ## best epoch is the one providing the best categorization accuracy i.e. neglecting the adversarial
@@ -323,7 +332,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
         return total_correct_cat / count
     else:
         gc.collect();
-        return total_loss / num_batches, scores_cat, labels_cat, targets, scores_domain, labels_domain, observers
+        return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy --> use ONNX instead of pytorch
@@ -340,6 +349,8 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
     total_correct_cat, total_correct_domain, count_cat, count_domain = 0, 0, 0, 0
     scores_cat = []
     scores_domain = []
+    indexes_cat = []
+    indexes_domain = []
     labels_cat = defaultdict(list)
     labels_domain = defaultdict(list)
     targets = defaultdict(list)
@@ -351,13 +362,13 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
         for X, y_cat, _, y_domain, Z in tq:
 
             inputs = {k: v.cpu().numpy() for k, v in X.items()}
-            label_cat = y_cat[data_config.label_names[0]].long()
+            label_cat    = y_cat[data_config.label_names[0]].long()
             label_domain = y_domain[data_config.label_domain_names[0]].long()
-
-            index_cat = label_cat.any(1).nonzero()[:,0]
+            index_cat    = label_cat.any(1).nonzero()[:,0]
             index_domain = label_domain.any(1).nonzero()[:,0]
-
-            label_cat = label_cat[index_cat];
+            indexes_cat.append(index_cat.detach().cpu().numpy());
+            indexes_domain.append(index_domain.detach().cpu().numpy());            
+            label_cat    = label_cat[index_cat];
             label_domain = label_domain[index_domain];
 
             if label_cat.shape[0]+label_domain.shape[0] != inputs.shape[0]:
@@ -370,14 +381,15 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
             label_domain_counter.update(label_domain.cpu.numpy())
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score)).squeeze();
+
+            scores_cat.append(score[:,:len(data_config.label_value)])
+            scores_domain.append(score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.label_domain_value)])
+
             preds_cat = score[:,:len(data_config.label_value)].argmax(1)
             preds_cat = preds_cat[index_cat];
             preds_domain = score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.label_domain_value)].argmax(1)
             preds_domain = preds_domain[index_domain];
             
-            scores_cat.append(score[:,:len(data_config.label_value)])
-            scores_domain.append(score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.label_domain_value)])
-
             for k, v in y_cat.items():
                 labels_cat[k].append(v.cpu().numpy())
             for k, v in y_domain.items():
@@ -399,27 +411,29 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
                 'AvgAccDomain': '%.5f' % (total_correct_domain / count_domain)})
 
     time_diff = time.time() - start_time
-    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
+    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
     _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_cat_counter.items())))
     _logger.info('Evaluation domain distribution: \n    %s', str(sorted(label_domain_counter.items())))
 
-    scores_cat = np.concatenate(scores_cat)
-    labels_cat = {k: _concat(v) for k, v in labels_cat.items()}
-    scores_domain = np.concatenate(scores_domain)
-    labels_domain = {k: _concat(v) for k, v in labels_domain.items()}
-    observers = {k: _concat(v) for k, v in observers.items()}
+    scores_cat     = np.concatenate(scores_cat)
+    scores_domain  = np.concatenate(scores_domain)
+    indexes_cat    = np.concatenate(indexes_cat)
+    indexes_domain = np.concatenate(indexes_domain)
+    labels_cat     = {k: _concat(v) for k, v in labels_cat.items()}
+    labels_domain  = {k: _concat(v) for k, v in labels_domain.items()}
+    observers      = {k: _concat(v) for k, v in observers.items()}
 
-    metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]], scores_cat, eval_metrics=eval_metrics)
+    metric_cat_results = evaluate_metrics(labels_cat[indexes_cat,data_config.label_names[0]], scores_cat[indexes_cat], eval_metrics=eval_metrics)
     _logger.info('Evaluation Cat metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
-    metric_domain_results = evaluate_metrics(labels_domain[data_config.label_domain_names[0]], scores_domain, eval_metrics=eval_metrics)
+    metric_domain_results = evaluate_metrics(labels_domain[indexes_domain,data_config.label_domain_names[0]], scores_domain[indexes_domain], eval_metrics=eval_metrics)
     _logger.info('Evaluation Domain metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
 
     gc.collect();
-    return total_correct / count, scores_cat, labels_cat, targets, scores_domain, labels_domain, observers
-
+    scores = np.concatenate((scores_cat,scores_domain),axis=1) 
+    return total_correct / count, scores, labels_cat, targets, labels_domain, observers
 
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
@@ -434,7 +448,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     data_config = train_loader.dataset.config
 
-    num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count = 0, 0, 0, 0, 0,0
+    num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     label_cat_counter = Counter()
     label_domain_counter = Counter()
     total_cat_correct, total_domain_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0, 0, 0
@@ -448,16 +462,17 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
-            label_cat = y_cat[data_config.label_names[0]].long()
+            label_cat    = y_cat[data_config.label_names[0]].long()
             label_domain = y_domain_cat[data_config.label_domain_names[0]].long()
-
-            index_cat = label_cat.any(1).nonzero()[:,0]
+            index_cat    = label_cat.any(1).nonzero()[:,0]
             index_domain = label_domain.any(1).nonzero()[:,0]
-            label_cat = label_cat[index_cat];
+            label_cat    = label_cat[index_cat];
             label_domain = label_domain[index_cat];
+            if label_cat.shape[0]+label_domain.shape[0] != inputs.shape[0]:
+                _logger.warning('Wrong decomposition in cat and domain for batch number '%(num_batches))
+                continue;
             label_cat_counter.update(label_cat.cpu().numpy())
             label_domain_counter.update(label_domain.cpu().numpy())
-
             label_cat = label_cat.to(dev,non_blocking=True)
             label_dev = label_dev.to(dev,non_blocking=True)
 
@@ -467,30 +482,40 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     target = y_reg[names].float();
                 else:
                     target = torch.column_stack((target,y_reg[names].float()))
+
             target = target[index_cat];
             target = target.to(dev,non_blocking=True)            
+
             ### Number of samples in the batch
             num_examples_cat = max(label_cat.shape[0],target.shape[0]);
             num_examples_domain = label_domain.shape[0];
+
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 ### evaluate the model
                 model_output  = model(*inputs)         
-                model_output_cat = model_output[:,len(
+                model_output_cat = model_output[:,:len(data_config.label_value)];
+                model_output_reg = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)];
+                model_output_domain = model_output[:,len(data_config.label_value)+len(data_config.target_value):len(data_config.label_value)+len(data_config.target_value)+len(data_config.label_domain_value)];
+                model_output_cat    = _flatten_preds(model_output_cat,None);
+                model_output_domain = _flatten_preds(model_output_domain,None);
+                model_output_cat = model_output_cat[index_cat];
+                model_output_reg = model_output_reg[index_cat];
+                model_output_domain = model_output_domain[index_domain];
                 ### check dimension of labels and target. If dimension is 1 extend them
                 if label_cat.dim() == 1:
                     label_cat = label_cat[:,None]
-                if label_domain.dim() == 1:
-                    label_domain = label_domain[:,None]
                 if target.dim() == 1:
                     target = target[:,None]
+                if label_domain.dim() == 1:
+                    label_domain = label_domain[:,None]
                 ### erase uselss dimensions
-                label_cat  = label_cat.squeeze();
-                label_domain  = label_domain.squeeze();
-                target = target.squeeze();
+                label_cat    = label_cat.squeeze();
+                label_domain = label_domain.squeeze();
+                target       = target.squeeze();
                 ### evaluate loss function
-                loss, loss_cat, loss_reg, loss_domain = loss_func(model_output,label_cat,target,label_domain);
+                loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain);
 
             ### back propagation
             if grad_scaler is None:
@@ -514,22 +539,23 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             total_reg_loss += loss_reg;
             total_domain_loss += loss_domain;
             num_batches += 1
-            count += num_examples;
+            count_cat += num_examples_cat;
+            count_domain += num_examples_domain;
             
             ## take the classification prediction and compare with the true labels            
             label_cat = label_cat.detach()
             label_domain = label_domain.detach()
             target = target.detach()
             if(model_output.dim() == 1) : continue;
-            _, pred_cat = model_output[:,:len(data_config.label_value)].squeeze().max(1);
-            _, pred_domain = model_output[:,len(data_config.label_value)+len(data_config.target_value:len(data_config.label_value)+len(data_config.target_value+len(data_config.label_domain_value)].squeeze().max(1);
+            _, pred_cat = model_output_cat.max(1);
+            _, pred_domain = model_output_domain.max(1);
             correct_cat = (pred_cat.detach() == label_cat.detach()).sum().item()
             correct_domain = (pred_domain.detach() == label_domain.detach()).sum().item()
             total_cat_correct += correct_cat
             total_domain_correct += correct_domain
 
             ## take the regression prediction and compare with true targets
-            pred_reg = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
+            pred_reg = model_output_reg.float();
             residual_reg = pred_reg.detach() - target.detach();            
             abs_err = residual_reg.abs().sum().item();
             sum_abs_err += abs_err;
@@ -541,24 +567,24 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
                 'Loss': '%.5f' % loss,
                 'AvgLoss': '%.5f' % (total_loss / num_batches),
-                'AccCat': '%.5f' % (correct_cat / num_examples),
-                'AvgAccCat': '%.5f' % (total_correct_cat / count),
-                'AccDomain': '%.5f' % (correct_domain / num_examples),
-                'AvgAccDomain': '%.5f' % (total_correct_domain / count),
-                'MSE': '%.5f' % (sqr_err / num_examples),
-                'AvgMSE': '%.5f' % (sum_sqr_err / count),
-                'MAE': '%.5f' % (abs_err / num_examples),
-                'AvgMAE': '%.5f' % (sum_abs_err / count),
+                'AccCat': '%.5f' % (correct_cat / num_examples_cat),
+                'AvgAccCat': '%.5f' % (total_correct_cat / count_cat),
+                'AccDomain': '%.5f' % (correct_domain / num_examples_domain),
+                'AvgAccDomain': '%.5f' % (total_correct_domain / count_domain),
+                'MSE': '%.5f' % (sqr_err / num_examples_cat),
+                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat),
+                'MAE': '%.5f' % (abs_err / num_examples_cat),
+                'AvgMAE': '%.5f' % (sum_abs_err / count_cat),
                 
             })
 
             if tb_helper:
                 tb_helper.write_scalars([
                     ("Loss/train", loss, tb_helper.batch_train_count + num_batches),
-                    ("AccCat/train", correct_cat / num_examples, tb_helper.batch_train_count + num_batches),
-                    ("AccDomain/train", correct_domain / num_examples, tb_helper.batch_train_count + num_batches),
-                    ("MSE/train", sqr_err / num_examples, tb_helper.batch_train_count + num_batches),
-                    ("MAE/train", abs_err / num_examples, tb_helper.batch_train_count + num_batches),
+                    ("AccCat/train", correct_cat / num_examples_cat, tb_helper.batch_train_count + num_batches),
+                    ("AccDomain/train", correct_domain / num_examples_domain, tb_helper.batch_train_count + num_batches),
+                    ("MSE/train", sqr_err / num_examples_cat, tb_helper.batch_train_count + num_batches),
+                    ("MAE/train", abs_err / num_examples_cat, tb_helper.batch_train_count + num_batches),
                     ])
                 if tb_helper.custom_fn:
                     with torch.no_grad():
@@ -569,15 +595,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     ### training summary
     time_diff = time.time() - start_time
-    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
+    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
     _logger.info('Train AvgLoss: %.5f'% (total_loss / num_batches))
     _logger.info('Train AvgLoss Cat: %.5f'% (total_cat_loss / num_batches))
     _logger.info('Train AvgLoss Domain: %.5f'% (total_domain_loss / num_batches))
     _logger.info('Train AvgLoss Reg: %.5f'% (total_reg_loss / num_batches))
-    _logger.info('Train AvgAccCat: %.5f'%(total_correct_cat / count))
-    _logger.info('Train AvgAccDomain: %.5f'%(total_correct_domain / count))
-    _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count))
-    _logger.info('Train AvgMAE: %.5f'%(sum_abs_err / count))
+    _logger.info('Train AvgAccCat: %.5f'%(total_correct_cat / count_cat))
+    _logger.info('Train AvgAccDomain: %.5f'%(total_correct_domain / count_domain))
+    _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat))
+    _logger.info('Train AvgMAE: %.5f'%(sum_abs_err / count_cat))
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', str(sorted(label_domain_counter.items())))
 
@@ -587,7 +613,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ("Loss Cat/train (epoch)", total_cat_loss / num_batches, epoch),
             ("Loss Domain/train (epoch)", total_domain_loss / num_batches, epoch),
             ("Loss Reg/train (epoch)", total_reg_loss / num_batches, epoch),
-            ("Acc/train (epoch)", total_correct / count, epoch),
+            ("AccCat/train (epoch)", total_correct_cat / count_cat, epoch),
+            ("AccDomain/train (epoch)", total_correct_domain / count_domain, epoch),
             ("MSE/train (epoch)", sum_sqr_err / count, epoch),
             ("MAE/train (epoch)", sum_abs_err / count, epoch),
             ])
@@ -620,10 +647,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     label_cat_counter = Counter()
     label_domain_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
-    sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0;
-    inputs, label_cat, label_domain target,  model_output, pred_cat_output, pred_domain_output, pred_reg = None, None, None, None, None , None, None;
-    loss, loss_cat, loss_domain loss_reg = None, None, None, None;
+    sum_sqr_err, sum_abs_err, entry_count_cat, entry_count_domain, count_cat, count_domain = 0, 0, 0, 0, 0;
+    inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None;
+    pred_cat_output, pred_domain_output, pred_reg = None, None, None;
+    loss, loss_cat, loss_domain, loss_reg = None, None, None, None;
     scores_cat, scores_domain, scores_reg = [], [], [];
+    indexes_cat = [];
+    indexes_domain = []; 
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
     start_time = time.time()
 
@@ -633,14 +663,27 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
-                label_cat  = y_cat[data_config.label_names[0]].long()
-                label_domain  = y_cat[data_config.label_domain_names[0]].long()
-                label_cat  = _flatten_label(label_cat,None)
-                label_domain  = _flatten_label(label_domain,None)
+                label_cat    = y_cat[data_config.label_names[0]].long()
+                label_domain = y_cat[data_config.label_domain_names[0]].long()
+                label_cat    = _flatten_label(label_cat,None)
+                label_domain = _flatten_label(label_domain,None)
+                indexes_cat.append(index_cat.detach().cpu().numpy());
+                indexes_domain.append(index_domain.detach().cpu().numpy());
+                index_cat    = label_cat.any(1).nonzero()[:,0]
+                index_domain = label_domain.any(1).nonzero()[:,0]
+                indexes_cat.append(index_cat.detach().cpu().numpy());
+                indexes_domain.append(index_domain.detach().cpu().numpy());  
+                label_cat    = label_cat[index_cat];
+                label_domain = label_domain[index_domain];
+
+                if label_cat.shape[0]+label_domain.shape[0] != inputs.shape[0]:
+                    _logger.warning('Wrong decomposition in cat and domain for batch number '%(num_batches))
+                    continue;
                 label_cat_counter.update(label_cat.cpu().numpy())
                 label_domain_counter.update(label_domain.cpu().numpy())
-                label_cat  = label_cat.to(dev,non_blocking=True)
-                label_domain  = label_domain.to(dev,non_blocking=True)
+                label_cat    = label_cat.to(dev,non_blocking=True)
+                label_domain = label_domain.to(dev,non_blocking=True)
+
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
@@ -648,11 +691,21 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     else:
                         target = torch.column_stack((target,y_reg[names].float()))
                 target = target.to(dev,non_blocking=True)            
+
                 ### update counters
-                num_examples = max(label_cat.shape[0],target.shape[0]);
-                entry_count += num_examples
+                entry_count_cat += label_cat.shape[0]
+                entry_count_domain += label_domain.shape[0]
+                num_examples_cat = label_cat.shape[0]
+                num_examples_domain = label_domain.shape[0]
                 ### evaluate model
                 model_output = model(*inputs)
+                model_output_cat = model_output[:,:len(data_config.label_value)];
+                model_output_reg = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)];
+                model_output_domain = model_output[:,len(data_config.label_value)+len(data_config.target_value):len(data_config.label_value)+len(data_config.target_value)+len(data_config.label_domain_value)];
+                model_output_cat    = _flatten_preds(model_output_cat,None).squeeze().float()
+                model_output_reg    = _flatten_preds(model_output_reg,None).squeeze().float()
+                model_output_domain = model_output_domain.squeeze().float()
+
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
                     labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
@@ -660,30 +713,30 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     labels_domain[name].append(_flatten_label(y_domain[name],None).cpu().numpy())
                 for k, name in enumerate(data_config.target_names):
                     targets[name].append(y_reg[name].cpu().numpy())                
-                ### observers
                 if not for_training:
-                    for k, v in Z.items():
+                    for k, v in Z.items():                
                         observers[k].append(v.cpu().numpy())
-                ### build classification and regression outputs
-                pred_cat_output = model_output[:,:len(data_config.label_value)].squeeze().float()
-                pred_domain_output = model_output[:,len(data_config.label_value)+len(data_config.target_value):len(data_config.label_value)+len(data_config.target_value)+len(data_config.label_domain_value)].squeeze().float()
-                pred_reg = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();                
-                if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
-                    _, pred_cat = pred_cat_output.max(1);
-                    _, pred_domain = pred_domain_output.max(1);
-                    scores_cat.append(torch.softmax(pred_cat_output,dim=1).detach().cpu().numpy());
-                    scores_domain.append(torch.softmax(pred_domain_output,dim=1).detach().cpu().numpy());
-                    scores_reg.append(pred_reg.detach().cpu().numpy())
+
+                if model_output_cat.shape[0] == pred_reg.shape[0] and model_output_cat.shape[0] == model_output_domain.shape[0] and model_output_cat.shape[0] == num_examples_cat+num_examples_domain:
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).detach().cpu().numpy());
+                    scores_domain.append(torch.softmax(model_output_domain,dim=1).detach().cpu().numpy());
+                    scores_reg.append(model_output_reg.detach().cpu().numpy())                        
+                    _, pred_cat    = model_output_cat.max(1);
+                    _, pred_domain = model_output_domain.max(1);
                 else:
-                    pred_cat = torch.zeros(num_examples).cpu().numpy();
-                    pred_domain = torch.zeros(num_examples).cpu().numpy();
-                    scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).detach().cpu().numpy());
-                    scores_domain.append(torch.zeros(num_examples,len(data_config.label_domain_value)).detach().cpu().numpy());
+                    pred_cat = torch.zeros(num_examples_cat).cpu().numpy();
+                    pred_domain = torch.zeros(num_examples_domain).cpu().numpy();
+                    scores_cat.append(torch.zeros(num_examples_cat+num_examples_domain,len(data_config.label_value)).detach().cpu().numpy());
+                    scores_domain.append(torch.zeros(num_examples_cat+num_examples_domain,len(data_config.label_domain_value)).detach().cpu().numpy());
                     if len(data_config.target_value) > 1:
-                        scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).detach().cpu().numpy());
+                        scores_reg.append(torch.zeros(num_examples_cat+num_examples_domain,len(data_config.target_value)).detach().cpu().numpy());
                     else:
-                        scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
-                    
+                        scores_reg.append(torch.zeros(num_examples_cat+num_examples_domain).detach().cpu().numpy());
+                
+                pred_cat = pred_cat[index_cat];
+                pred_reg = model_output_reg[index_cat];
+                pred_domain = pred_domain[index_domain];
+
                 ### evaluate loss function
                 if loss_func != None:
                     ### check dimension of labels and target. If dimension is 1 extend them
@@ -694,31 +747,37 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     if target.dim() == 1:
                         target = target[:,None]
                     ### true labels and true target 
-                    loss, loss_cat, loss_reg = loss_func(model_output,label_cat,target,)
+                    loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain)
                     loss = loss.detach().item()
                     loss_cat = loss_cat.detach().item()
                     loss_reg = loss_reg.detach().item()
+                    loss_domain = loss_domain.detach().item()
                     ### erase useless dimensions
-                    label  = label.squeeze();
+                    label_cat  = label_cat.squeeze();
                     target = target.squeeze();                                         
+                    label_domin = label_domain.squeeze();
                     total_loss += loss
                     total_cat_loss += loss_cat
                     total_reg_loss += loss_reg
+                    total_domain_loss += loss_domain
                 else:
-                    loss,loss_cat,loss_reg = 0,0,0;
+                    loss,loss_cat,loss_reg, loss_domain = 0,0,0;
                     total_loss += loss
                     total_cat_loss += loss_cat
                     total_reg_loss += loss_reg
+                    total_domain_loss += loss_domain
 
                 num_batches += 1
-                count += num_examples
+                count_cat += num_examples_cat
+                count_domain += num_examples_domain
 
                 ### classification accuracy
-                if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
+                if pred_cat.shape[0] == num_examples_cat and pred_reg.shape[0] == num_examples_cat and pred_domain.shape[0] == num_examples_domain:
 
-                    correct = (pred_cat == label).sum().item()
-                    total_correct += correct
-                    ### regression spread
+                    correct_cat = (pred_cat == label_cat).sum().item()
+                    total_correct_cat += correct_cat
+                    correct_domain = (pred_domain == label_domain).sum().item()
+                    total_correct_domain += correct_domain
                     residual_reg = pred_reg - target;
                     abs_err = residual_reg.abs().sum().item();
                     sum_abs_err += abs_err;
@@ -729,12 +788,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     tq.set_postfix({
                         'Loss': '%.5f' % loss,
                         'AvgLoss': '%.5f' % (total_loss / num_batches),
-                        'Acc': '%.5f' % (correct / num_examples),
-                        'AvgAcc': '%.5f' % (total_correct / count),
-                        'MSE': '%.5f' % (sqr_err / num_examples),
-                        'AvgMSE': '%.5f' % (sum_sqr_err / count),
-                        'MAE': '%.5f' % (abs_err / num_examples),
-                        'AvgMAE': '%.5f' % (sum_abs_err / count),                        
+                        'AccCat': '%.5f' % (correct_cat / num_examples_cat),
+                        'AvgAccCat': '%.5f' % (total_correct_cat / count_cat),
+                        'AccDomain': '%.5f' % (correct_domain / num_examples_domain),
+                        'AvgAccDomain': '%.5f' % (total_correct_domain / count_domain),
+                        'MSE': '%.5f' % (sqr_err / num_examples_cat),
+                        'AvgMSE': '%.5f' % (sum_sqr_err / count_cat),
                     })
 
                 if tb_helper:
@@ -747,8 +806,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     break
 
     time_diff = time.time() - start_time
-    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
-    _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_counter.items())))
+    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
+    _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_cat_counter.items())))
+    _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_domain_counter.items())))
 
     if tb_helper:
         tb_mode = 'eval' if for_training else 'test'
@@ -756,7 +816,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ("Loss/%s (epoch)"%(tb_mode), total_loss / num_batches, epoch),
             ("Loss Cat/%s (epoch)"%(tb_mode), total_cat_loss / num_batches, epoch),
             ("Loss Reg/%s (epoch)"%(tb_mode), total_reg_loss / num_batches, epoch),
-            ("Acc/%s (epoch)"%(tb_mode), total_correct / count, epoch),
+            ("Loss Domain/%s (epoch)"%(tb_mode), total_domain_loss / num_batches, epoch),
+            ("AccCat/%s (epoch)"%(tb_mode), total_correct_cat / count_cat, epoch),
+            ("AccDomain/%s (epoch)"%(tb_mode), total_correct_domain / count_domain, epoch),
             ("MSE/%s (epoch)"%(tb_mode), sum_sqr_err / count, epoch),
             ("MAE/%s (epoch)"%(tb_mode), sum_abs_err / count, epoch),
             ])
@@ -766,22 +828,31 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     scores_cat = np.concatenate(scores_cat).squeeze()
     scores_reg = np.concatenate(scores_reg).squeeze()
-    labels  = {k: _concat(v) for k, v in labels.items()}
-    targets = {k: _concat(v) for k, v in targets.items()}
-    observers = {k: _concat(v) for k, v in observers.items()}
+    indexes_cat = np.concatenate(indexes_cat).squeeze()
+    indexes_domain = np.concatenate(indexes_domain).squeeze()
+    scores_domain = np.concatenate(scores_domain).squeeze()
+    labels_cat = {k: _concat(v) for k, v in labels_cat.items()}
+    labels_domain = {k: _concat(v) for k, v in labels_domain.items()}
+    targets    = {k: _concat(v) for k, v in targets.items()}
+    observers  = {k: _concat(v) for k, v in observers.items()}
 
     _logger.info('Evaluation of metrics\n')
-    metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
+
+    metric_cat_results = evaluate_metrics(labels_cat[indexes_cat,data_config.label_names[0]],scores_cat[indexes_cat], eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
+    metric_domain_results = evaluate_metrics(labels_domain[indexes_domain,data_config.label_domain_names[0]],scores_domain[indexes_domain], eval_metrics=eval_cat_metrics)    
+    _logger.info('Evaluation Domain metrics: \n%s', '\n'.join(
+        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
+
     _logger.info('Evaluation of regression metrics\n')
+
     for idx, (name,element) in enumerate(targets.items()):
         if len(data_config.target_names) == 1:
-            metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
+            metric_reg_results = evaluate_metrics(element, scores_reg[indexes_cat], eval_metrics=eval_reg_metrics)
         else:
-            metric_reg_results = evaluate_metrics(element, scores_reg[:,idx], eval_metrics=eval_reg_metrics)
-
+            metric_reg_results = evaluate_metrics(element, scores_reg[indexes_cat,idx], eval_metrics=eval_reg_metrics)
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
@@ -790,14 +861,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         gc.collect();
         return total_loss / num_batches;
     else:
-        if scores_reg.ndim and scores_cat.ndim: 
-            scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
-            scores = np.concatenate((scores_cat,scores_reg),axis=1)
-            gc.collect();
-            return total_loss / num_batches, scores, labels, targets, observers
-        else:
-            gc.collect();
-            return total_loss / num_batches, scores_reg, labels, targets, observers;
+        scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
+        scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)
+        gc.collect();
+        return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
 
 def evaluate_onnx_classreg(model_path, test_loader,
