@@ -659,7 +659,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y_cat, y_reg, Z, y_domain in tq:
+            for X, y_cat, y_reg, y_domain, Z in tq:
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
@@ -690,6 +690,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         target = y_reg[names].float();
                     else:
                         target = torch.column_stack((target,y_reg[names].float()))
+                target = target[index_cat];
                 target = target.to(dev,non_blocking=True)            
 
                 ### update counters
@@ -708,7 +709,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
-                    labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
+                    labels_cat[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
                 for k, name in enumerate(data_config.label_domain_names):                    
                     labels_domain[name].append(_flatten_label(y_domain[name],None).cpu().numpy())
                 for k, name in enumerate(data_config.target_names):
@@ -808,7 +809,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     time_diff = time.time() - start_time
     _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
     _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_cat_counter.items())))
-    _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_domain_counter.items())))
+    _logger.info('Evaluation domain distribution: \n    %s', str(sorted(label_domain_counter.items())))
 
     if tb_helper:
         tb_mode = 'eval' if for_training else 'test'
@@ -877,101 +878,144 @@ def evaluate_onnx_classreg(model_path, test_loader,
     gc.enable();
 
     data_config = test_loader.dataset.config
-    label_counter = Counter()
-    num_batches, total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0, 0
-    scores_cat, scores_reg = [], []
-    labels, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list)
-    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None;
-    
+    label_cat_counter = Counter()
+    label_domain_counter = Counter()
+    num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, total_cat_correct, total_domain_correct, sum_sqr_err, sum_abs_err, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+    scores_cat, scores_reg, scores_domain = [], [], []
+    labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
+    inputs, label_cat, pred_cat, label_domain, pred_domain, pred_reg, loss, loss_cat, loss_reg, loss_domain = None, None, None, None, None, None, None, None, None, None;
+    indexes_cat = [];
+    indexes_domain = [];
+ 
     start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
-        for X, y_cat, y_reg, Z in tq:
+        for X, y_cat, y_reg, y_domain, Z in tq:
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
-            label = y_cat[data_config.label_names[0]].long();
+            label_cat = y_cat[data_config.label_names[0]].long();
+            label_domain = y_domain[data_config.label_domain_names[0]].long();
+            label_cat    = _flatten_label(label_cat,None)
+            label_domain = _flatten_label(label_domain,None)
+            indexes_cat.append(index_cat.detach().cpu().numpy());
+            indexes_domain.append(index_domain.detach().cpu().numpy());
+            index_cat    = label_cat.any(1).nonzero()[:,0]
+            index_domain = label_domain.any(1).nonzero()[:,0]
+            indexes_cat.append(index_cat.detach().cpu().numpy());
+            indexes_domain.append(index_domain.detach().cpu().numpy());
+            label_cat    = label_cat[index_cat];
+            label_domain = label_domain[index_domain];
+
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y_reg[names].float();
                 else:
                     target = torch.column_stack((target,y_reg[names].float()))
-            num_examples = max(label.shape[0],target.shape[0]);
-            label_counter.update(label.cpu().numpy())
+            target = target[index_cat];
+            
+            num_examples_cat = label_cat.shape[0]
+            num_examples_domain = label_domain.shape[0]
+            label_cat_counter.update(label_cat.cpu().numpy())
+            label_domain_counter.update(label_domain.cpu().numpy())
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score)).squeeze();
+
             scores_cat.append(score[:,:len(data_config.label_value)]);
             scores_reg.append(score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)]);            
+            scores_domain.append(score[:,len(data_config.label_value)+len(data_config.target_value):len(data_config.label_value)+len(data_config.target_value)+len(data_config.label_domain_value)]);
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
-                labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
+                labels_cat[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
+            for k, name in enumerate(data_config.label_domain_names):                    
+                labels_domain[name].append(_flatten_label(y_domain[name],None).cpu().numpy())
             for k, name in enumerate(data_config.target_names):
                 targets[name].append(y_reg[name].cpu().numpy())                
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
-
+                                 
             pred_cat = score[:,:len(data_config.label_value)].argmax(1).squeeze();
+            pred_cat = pred_cat[index_cat];
             pred_reg = score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
-            count += num_examples
+            pred_reg = pred_cat[index_cat];
+            pred_domain = score[:,len(data_config.label_value)+len(data_config.target_value):len(data_config.label_value)+len(data_config.target_value)+len(data_config.label_domain_value)].argmax(1).squeeze();
+            pred_domain = pred_domain[index_domain];
+
+            count_cat += num_examples_cat
+            count_domain += num_examples_domain
+
             num_batches += 1;
             
-            if label.dim() == 1:
-                label = label[:,None]
+            if label_cat.dim() == 1:
+                label_cat = label_cat[:,None]
+            if label_domain.dim() == 1:
+                label_domain = label_domain[:,None]
             if target.dim() == 1:
                 target = target[:,None]
 
             ### erase uselss dimensions                                                                                                                                                            
-            label  = label.squeeze();
+            label_cat  = label_cat.squeeze();
+            label_doamin  = label_domain.squeeze();
         
-            if pred_cat.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
-                correct = (pred_cat == label).sum().item()
-                total_correct += correct
+            if pred_cat.shape[0] == num_examples_cat and pred_reg.shape[0] == num_examples_cat:
+                correct_cat = (pred_cat == label_cat).sum().item()
+                total_cat_correct += correct_cat
                 residual_reg = pred_reg - target;
                 abs_err = residual_reg.abs().sum().item();
                 sum_abs_err += abs_err;
                 sqr_err = residual_reg.square().sum().item()
                 sum_sqr_err += sqr_err
-
+            if pred_domain.shape[0] == num_examples_domain:                
+                correct_domain = (pred_domain == label_domain).sum().item()
+                total_domain_correct += correct_domain
+                
             ### monitor results
             tq.set_postfix({
-                'Acc': '%.5f' % (correct / num_examples),
-                'AvgAcc': '%.5f' % (total_correct / count),
-                'MSE': '%.5f' % (sqr_err / num_examples),
-                'AvgMSE': '%.5f' % (sum_sqr_err / count),
-                'MAE': '%.5f' % (abs_err / num_examples),
-                'AvgMAE': '%.5f' % (sum_abs_err / count),                        
+                'AccCat': '%.5f' % (correct_cat / num_examples_cat),
+                'AvgAccCat': '%.5f' % (total_cat_correct / count_cat),
+                'AccDomain': '%.5f' % (correct_domain / num_examples_domain),
+                'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain),
+                'MSE': '%.5f' % (sqr_err / num_examples_cat),
+                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat),
+                'MAE': '%.5f' % (abs_err / num_examples_cat),
+                'AvgMAE': '%.5f' % (sum_abs_err / count_cat),                        
             })
 
     time_diff = time.time() - start_time
-    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
-    _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_counter.items())))
+    _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
+    _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_cat_counter.items())))
+    _logger.info('Evaluation domain distribution: \n    %s', str(sorted(label_domain_counter.items())))
     
     scores_cat = np.concatenate(scores_cat).squeeze()
     scores_reg = np.concatenate(scores_reg).squeeze()
-    labels  = {k: _concat(v) for k, v in labels.items()}
+    scores_domain = np.concatenate(scores_domain).squeeze()
+    indexes_cat = np.concatenate(indexes_cat).squeeze()
+    indexes_domain = np.concatenate(indexes_domain).squeeze()
+    labels_cat  = {k: _concat(v) for k, v in labels_cat.items()}
+    labels_domain  = {k: _concat(v) for k, v in labels_domain.items()}
     targets = {k: _concat(v) for k, v in targets.items()}
     observers = {k: _concat(v) for k, v in observers.items()}
 
-    metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
+    metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]], scores_cat[indexes_cat], eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
+    metric_domain_results = evaluate_metrics(labels_domain[data_config.label_domain_names[0]], scores_domain[indexes_domain], eval_metrics=eval_cat_metrics)    
+    _logger.info('Evaluation Domain metrics: \n%s', '\n'.join(
+        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
+
     for idx, (name,element) in enumerate(targets.items()):
         if len(data_config.target_names) == 1:
-            metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
+            metric_reg_results = evaluate_metrics(element, scores_reg[indexes_cat], eval_metrics=eval_reg_metrics)
         else:
-            metric_reg_results = evaluate_metrics(element, scores_reg[:,idx], eval_metrics=eval_reg_metrics)
+            metric_reg_results = evaluate_metrics(element, scores_reg[indexes_cat,idx], eval_metrics=eval_reg_metrics)
 
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
     
-    if scores_reg.ndim and scores_cat.ndim: 
-        scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
-        scores = np.concatenate((scores_cat,scores_reg),axis=1)        
-        gc.collect();
-        return total_loss / num_batches, scores, labels, targets, observers
-    else:
-        gc.collect();
-        return total_loss / num_batches, scores_reg, labels, targets, observers
+    scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
+    scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)        
+    gc.collect();
+    return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
 class TensorboardHelper(object):
 
