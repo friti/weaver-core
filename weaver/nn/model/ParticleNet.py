@@ -121,7 +121,7 @@ class EdgeConvBlock(nn.Module):
 
 ## function and module to flip gradient
 class RevGrad(torch.autograd.Function):
-   @staticmethod
+    @staticmethod
     def forward(ctx, input_, alpha_):
         ctx.save_for_backward(input_, alpha_)
         output = input_
