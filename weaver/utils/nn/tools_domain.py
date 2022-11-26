@@ -259,7 +259,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 _, preds_domain = logits_domain.max(1)
                 
                 loss, loss_cat, loss_domain = 0, 0, 0
-                if loss_func not None:
+                if loss_func is not None:
                     loss, loss_cat, loss_domain  = loss_func(logits_cat, label_cat, logits_domain, label_domain).detach().item();
 
                 num_batches += 1
@@ -451,7 +451,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     label_cat_counter = Counter()
     label_domain_counter = Counter()
-    total_cat_correct, total_domain_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0, 0, 0
+    total_cat_correct, total_domain_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0, 0
     inputs, target, label_cat, label_domain, model_output, model_output_cat, model_output_reg, model_output_domain = None, None, None, None, None, None, None, None;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_loss = None, None, None, None, None, None, None, None, None, None;
 

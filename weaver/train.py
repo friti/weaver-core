@@ -812,7 +812,7 @@ def _main(args):
         from utils.nn.tools_domain import train_classification as train
         from utils.nn.tools_domain import evaluate_classification as evaluate
         from utils.nn.tools_domain import evaluate_onnx_classification as evaluate_onnx
-    elif args.classreg_domain_mode:
+    elif args.weaver_mode == "classregdomain":
         _logger.info('Running in combined regression + classification mode with domain adaptation')
         from utils.nn.tools_domain import train_classreg as train
         from utils.nn.tools_domain import evaluate_classreg as evaluate

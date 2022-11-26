@@ -61,7 +61,7 @@ def _build_weights(table, data_config, reweight_hists=None, warn=_logger.warning
             wgt[pos] = hist[x_indices, y_indices]
             sum_evts += np.sum(pos)
         ## loop oover the domain label and fix weights to 1 in order to be always sampled
-        for label in self.label_domain_names:
+        for label in data_config.label_domain_names:
             pos = table[label] == 1
             wgt[pos] = 1;
             sum_evts += np.sum(pos)
@@ -74,7 +74,6 @@ def _build_weights(table, data_config, reweight_hists=None, warn=_logger.warning
         if data_config.reweight_basewgt:
             wgt *= ak.to_numpy(table[data_config.basewgt_name])
         return wgt
-
 
 class AutoStandardizer(object):
     r"""AutoStandardizer.

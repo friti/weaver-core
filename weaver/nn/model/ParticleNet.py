@@ -283,7 +283,7 @@ class ParticleNet(nn.Module):
         
         output = self.fc(x)
 
-        if num_domains!=0:
+        if self.num_domains!=0:
             output_domain = self.fc_domain(x)
 
         if self.for_inference:
@@ -293,7 +293,7 @@ class ParticleNet(nn.Module):
                 output_class = torch.softmax(output[:,:self.num_classes],dim=1)
                 output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
                 output = torch.cat((output_class,output_reg),dim=1);
-            if num_domains!=0:
+            if self.num_domains!=0:
                 output_domain = torch.softmax(output_domain,dim=1);
                 output = torch.cat((output,output_domain),dim=1);
 
@@ -363,4 +363,64 @@ class ParticleNetTagger(nn.Module):
         points = torch.cat((pf_points, sv_points), dim=2)
         features = torch.cat((self.pf_conv(pf_features * pf_mask) * pf_mask, self.sv_conv(sv_features * sv_mask) * sv_mask), dim=2)
         mask = torch.cat((pf_mask, sv_mask), dim=2)
+        return self.pn(points, features, mask)
+
+
+class ParticleNetLostTrkTagger(nn.Module):
+
+    def __init__(self,
+                 pf_features_dims,
+                 sv_features_dims,
+                 lt_features_dims,
+                 num_classes,
+                 num_targets,
+                 num_domains=0,
+                 conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
+                 fc_params=[(128, 0.1)],
+                 fc_domain_params=[(128, 0.1)],
+                 input_dims=32,
+                 use_fusion=True,
+                 use_fts_bn=True,
+                 use_counts=True,
+                 pf_input_dropout=None,
+                 sv_input_dropout=None,
+                 lt_input_dropout=None,
+                 for_inference=False,
+                 **kwargs):
+        super(ParticleNetLostTrkTagger, self).__init__(**kwargs)
+        self.pf_input_dropout = nn.Dropout(pf_input_dropout) if pf_input_dropout else None
+        self.sv_input_dropout = nn.Dropout(sv_input_dropout) if sv_input_dropout else None
+        self.lt_input_dropout = nn.Dropout(lt_input_dropout) if lt_input_dropout else None
+        self.pf_conv = FeatureConv(pf_features_dims, input_dims)
+        self.sv_conv = FeatureConv(sv_features_dims, input_dims)
+        self.lt_conv = FeatureConv(lt_features_dims, input_dims)
+        self.pn = ParticleNet(input_dims=input_dims,
+                              num_classes=num_classes,
+                              num_targets=num_targets,
+                              num_domains=num_domains,
+                              conv_params=conv_params,
+                              fc_params=fc_params,
+                              fc_domain_params=fc_domain_params,
+                              use_fusion=use_fusion,
+                              use_fts_bn=use_fts_bn,
+                              use_counts=use_counts,
+                              for_inference=for_inference)
+
+    def forward(self, pf_points, pf_features, pf_mask, sv_points, sv_features, sv_mask, lt_points, lt_features, lt_mask):
+        if self.pf_input_dropout:
+            pf_mask = (self.pf_input_dropout(pf_mask) != 0).float()
+            pf_points *= pf_mask
+            pf_features *= pf_mask
+        if self.sv_input_dropout:
+            sv_mask = (self.sv_input_dropout(sv_mask) != 0).float()
+            sv_points *= sv_mask
+            sv_features *= sv_mask
+        if self.lt_input_dropout:
+            lt_mask = (self.lt_input_dropout(lt_mask) != 0).float()
+            lt_points *= lt_mask
+            lt_features *= lt_mask
+
+        points = torch.cat((pf_points, sv_points, lt_points), dim=2)
+        features = torch.cat((self.pf_conv(pf_features * pf_mask) * pf_mask, self.sv_conv(sv_features * sv_mask) * sv_mask, self.lt_conv(lt_features*lt_mask)*lt_mask), dim=2)
+        mask = torch.cat((pf_mask, sv_mask, lt_mask), dim=2)
         return self.pn(points, features, mask)
