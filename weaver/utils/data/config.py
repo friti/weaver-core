@@ -99,15 +99,18 @@ class DataConfig(object):
             if self.label_type == 'simple':
                 assert(isinstance(self.label_value, list))
                 self.label_names = ('_label_',)
+                self.labelcheck_names = ('_labelcheck_',)
                 self.var_funcs['_label_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
                 self.var_funcs['_labelcheck_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
             else:
                 self.label_names = tuple(self.label_value.keys())
                 self.var_funcs.update(self.label_value)
+                self.labelcheck_names = None;
         else:
             self.label_names = tuple();
             self.label_type  = None;
             self.label_value = None;
+            self.labelcheck_names = None;
 
         ## domain
         if opts['labels_domain']:
@@ -116,16 +119,19 @@ class DataConfig(object):
             if self.label_domain_type == 'simple':
                 assert(isinstance(self.label_domain_value, list))
                 self.label_domain_names = ('_label_domain_',)
+                self.labelcheck_domain_names = ('_labelcheck_domain_',)
                 self.var_funcs['_label_domain_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_domain_value))
                 self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_domain_value))
             else:
                 self.label_domain_names = tuple(self.label_domain_value.keys())
                 self.var_funcs.update(self.label_label_value)
+                self.labelcheck_domain_names = None
         else:
             self.label_domain_names = tuple();
             self.label_domain_type  = None;
             self.label_domain_value = None;
-
+            self.labelcheck_domain_names = None
+                
         # targets
         if opts['targets']:
             self.target_type = opts['targets']['type']

@@ -25,7 +25,10 @@ def _finalize_inputs(table, data_config):
                 a = a.astype('int64')
             output[k] = a
     # copy labels
-    for k in data_config.label_names+data_config.target_names:
+    for k in data_config.label_names+data_config.target_names+data_config.label_domain_names:
+        output[k] = ak.to_numpy(table[k])
+    # copy labelcheck
+    for k in data_config.labelcheck_names+data_config.labelcheck_domain_names:
         output[k] = ak.to_numpy(table[k])
     # transformation
     for k, params in data_config.preprocess_params.items():
@@ -280,7 +283,11 @@ class _SimpleIter(object):
         y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
-        return X, y_cat, y_reg, y_domain, Z
+        # labelcheck for classificaiton
+        y_cat_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_names}
+        # labelcheck for domain
+        y_domain_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_domain_names}
+        return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check 
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):
     r"""Base IterableDataset.

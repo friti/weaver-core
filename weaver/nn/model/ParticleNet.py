@@ -123,28 +123,21 @@ class EdgeConvBlock(nn.Module):
 class RevGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input_, alpha_):
-        ctx.save_for_backward(input_, alpha_)
-        output = input_
-        return output
+        ctx.save_for_backward(input_,alpha_)
+        return input_
 
     @staticmethod
     def backward(ctx, grad_output):  # pragma: no cover
-        grad_input = None
         _, alpha_ = ctx.saved_tensors
-        if ctx.needs_input_grad[0]:
-            grad_input = -grad_output * alpha_
-        return grad_input, None
+        return -grad_output * alpha_, None
 
 class GradientReverse(nn.Module):
     def __init__(self, alpha=1., *args, **kwargs):
         """
-        A gradient reversal layer.
-        This layer has no parameters, and simply reverses the gradient
-        in the backward pass.
+        A gradient reversal layer. This layer has no parameters, and simply reverses the gradient in the backward pass.
         """
         super().__init__(*args, **kwargs)
-
-        self._alpha = tensor(alpha, requires_grad=False)
+        self._alpha = torch.tensor(alpha, requires_grad=False)
 
     def forward(self, input_):
         return RevGrad.apply(input_, self._alpha)
@@ -221,6 +214,7 @@ class ParticleNet(nn.Module):
         ## fully connected domain layers
         fcs_domain = []
         if num_domains!=0:
+            fcs_domain.append(GradientReverse());
             for idx, layer_param in enumerate(fc_domain_params):
                 channels, drop_rate = layer_param
                 if idx == 0:
@@ -229,7 +223,6 @@ class ParticleNet(nn.Module):
                     in_chn = fc_domain_params[idx - 1][0]
                 if self.for_segmentation:
                     fcs_domain.append(nn.Sequential(
-                        GradientReverse(),
                         nn.Conv1d(in_chn, channels, kernel_size=1, bias=False),
                         nn.BatchNorm1d(channels),
                         nn.ReLU(),
@@ -237,15 +230,14 @@ class ParticleNet(nn.Module):
                     
                 else:
                     fcs_domain.append(nn.Sequential(
-                        GradientReverse(),
                         nn.Linear(in_chn, channels), 
                         nn.ReLU(), 
                         nn.Dropout(drop_rate)))
 
             if self.for_segmentation:
-                fcs.append(nn.Conv1d(fc_domain_params[-1][0], num_domains, kernel_size=1))
+                fcs_domain.append(nn.Conv1d(fc_domain_params[-1][0], num_domains, kernel_size=1))
             else:
-                fcs.append(nn.Linear(fc_domain_params[-1][0], num_domains)) 
+                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domains)) 
             self.fc_domain = nn.Sequential(*fcs_domain)
 
         self.for_inference = for_inference
@@ -264,6 +256,7 @@ class ParticleNet(nn.Module):
             fts = self.bn_fts(features) * mask
         else:
             fts = features
+
         outputs = []
         for idx, conv in enumerate(self.edge_convs):
             pts = (points if idx == 0 else fts) + coord_shift
@@ -283,9 +276,6 @@ class ParticleNet(nn.Module):
         
         output = self.fc(x)
 
-        if self.num_domains!=0:
-            output_domain = self.fc_domain(x)
-
         if self.for_inference:
             if self.num_targets == 0 and self.num_classes != 0:
                 output = torch.softmax(output,dim=1);
@@ -293,9 +283,13 @@ class ParticleNet(nn.Module):
                 output_class = torch.softmax(output[:,:self.num_classes],dim=1)
                 output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
                 output = torch.cat((output_class,output_reg),dim=1);
-            if self.num_domains!=0:
+
+
+        if self.num_domains!=0:
+            output_domain = self.fc_domain(x)
+            if self.for_inference:
                 output_domain = torch.softmax(output_domain,dim=1);
-                output = torch.cat((output,output_domain),dim=1);
+            output = torch.cat((output,output_domain),dim=1);
 
         return output
 
