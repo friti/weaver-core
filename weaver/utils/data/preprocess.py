@@ -61,14 +61,14 @@ def _build_weights(table, data_config, reweight_hists=None, warn=_logger.warning
             wgt[pos] = hist[x_indices, y_indices]
             sum_evts += np.sum(pos)
         ## loop oover the domain label and fix weights to 1 in order to be always sampled
-        for label in data_config.label_domain_names:
+        for label in data_config.reweight_exclude_classes:
             pos = table[label] == 1
             wgt[pos] = 1;
             sum_evts += np.sum(pos)
         if sum_evts != len(table):
             warn(
                 'Not all selected events used in the reweighting. '
-                'Check consistency between `selection` and `reweight_classes` definition, or with the `reweight_vars` binnings '
+                'Check consistency between `selection` and `reweight_classes` + `reweight_exclude_classes` definition, or with the `reweight_vars` binnings '
                 '(under- and overflow bins are discarded by default, unless `reweight_discard_under_overflow` is set to `False` in the `weights` section).',
             )
         if data_config.reweight_basewgt:
@@ -164,7 +164,7 @@ class WeightMaker(object):
         self._data_config = data_config.copy()
 
     def read_file(self, filelist):
-        self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes +
+        self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes + self._data_config.reweight_exclude_classes +
                                  (self._data_config.basewgt_name,))
         self.load_branches = set()
         for k in self.keep_branches:
@@ -203,6 +203,7 @@ class WeightMaker(object):
         raw_hists = {}
         class_events = {}
         result = {}
+        ## loop on all reweight classes to define weights
         for label in self._data_config.reweight_classes:
             pos = (table[label] == 1)
             x = ak.to_numpy(table[x_var][pos])
@@ -216,10 +217,14 @@ class WeightMaker(object):
                 _logger.info('%s (weighted):\n %s', label, str(hist.astype('float32')))
             raw_hists[label] = hist.astype('float32')
             result[label] = hist.astype('float32')
+        ## add back the domain adaptation events that must be excluded from re-weight
+        for label in self._data_config.reweight_exclude_classes:
+            pos = table[label] == 1
+            sum_evts += np.sum(pos) 
         if sum_evts != len(table):
             _logger.warning(
                 'Only %d (out of %d) events actually used in the reweighting. '
-                'Check consistency between `selection` and `reweight_classes` definition, or with the `reweight_vars` binnings '
+                'Check consistency between `selection` and `reweight_classes` + `reweight_exclude_classes` definition, or with the `reweight_vars` binnings '
                 '(under- and overflow bins are discarded by default, unless `reweight_discard_under_overflow` is set to `False` in the `weights` section).',
                 sum_evts, len(table))
             time.sleep(10)

@@ -456,7 +456,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_loss = None, None, None, None, None, None, None, None, None, None;
 
     start_time = time.time()
-
+    '''
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _ in tq:
             ### input features for the model
@@ -623,10 +623,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode='train')
         # update the batch state
         tb_helper.batch_train_count += num_batches
-
+    '''
     torch.cuda.empty_cache()
     gc.collect();
-
+    
 ## evaluate classification + regression task
 def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],

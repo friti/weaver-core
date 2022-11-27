@@ -157,6 +157,7 @@ class DataConfig(object):
                 self.reweight_branches = tuple(opts['weights']['reweight_vars'].keys())
                 self.reweight_bins = tuple(opts['weights']['reweight_vars'].values())
                 self.reweight_classes = tuple(opts['weights']['reweight_classes'])
+                self.reweight_exclude_classes = tuple(opts['weights']['reweight_exclude_classes'])
                 self.class_weights = opts['weights'].get('class_weights', None)
                 if self.class_weights is None:
                     self.class_weights = np.ones(len(self.reweight_classes))
@@ -204,7 +205,7 @@ class DataConfig(object):
                     _log('weight: %s' % self.var_funcs[self.weight_name])
                 else:
                     for k in ['reweight_method', 'reweight_basewgt', 'reweight_branches', 'reweight_bins',
-                              'reweight_classes', 'class_weights', 'reweight_threshold',
+                              'reweight_classes', 'reweight_exclude_classes', 'class_weights', 'reweight_threshold',
                               'reweight_discard_under_overflow']:
                         _log('%s: %s' % (k, getattr(self, k)))
 
