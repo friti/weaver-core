@@ -988,10 +988,10 @@ def _main(args):
             # run prediction
             if args.model_prefix.endswith('.onnx'):
                 _logger.info('Loading model %s for eval' % args.model_prefix)
-                test_metric, scores, labels, targets, label_domain, observers = evaluate_onnx(
+                test_metric, scores, labels, targets, labels_domain, observers = evaluate_onnx(
                     args.model_prefix, test_loader)
             else:
-                test_metric, scores, labels, targets, label_domain, observers = evaluate(
+                test_metric, scores, labels, targets, labels_domain, observers = evaluate(
                     model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)            
             _logger.info('Test metric %.5f' % test_metric, color='bold')
 
