@@ -43,7 +43,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     label_cat_counter = Counter()
     label_domain_counter = Counter()
-    total_cat_correct, total_domain_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0, 0;
+    total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     inputs, target, label_cat, label_domain, model_output, model_output_cat, model_output_reg, model_output_domain = None, None, None, None, None, None, None, None;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_loss = None, None, None, None, None, None, None, None, None, None;
 
@@ -159,8 +159,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ## take the regression prediction and compare with true targets
             pred_reg = model_output_reg.squeeze().float();
             residual_reg = pred_reg.detach() - target.detach();            
-            abs_err = residual_reg.abs().sum().item();
-            sum_abs_err += abs_err;
             sqr_err = residual_reg.square().sum().item()
             sum_sqr_err += sqr_err
 
@@ -174,10 +172,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 'AccDomain': '%.5f' % (correct_domain / num_domain_examples),
                 'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain),
                 'MSE': '%.5f' % (sqr_err / num_cat_examples),
-                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat),
-                'MAE': '%.5f' % (abs_err / num_cat_examples),
-                'AvgMAE': '%.5f' % (sum_abs_err / count_cat),
-                
+                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat)
             })
 
             if tb_helper:
@@ -186,7 +181,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     ("AccCat/train", correct_cat / num_cat_examples, tb_helper.batch_train_count + num_batches),
                     ("AccDomain/train", correct_domain / num_domain_examples, tb_helper.batch_train_count + num_batches),
                     ("MSE/train", sqr_err / num_examples_cat, tb_helper.batch_train_count + num_batches),
-                    ("MAE/train", abs_err / num_examples_cat, tb_helper.batch_train_count + num_batches),
                     ])
                 if tb_helper.custom_fn:
                     with torch.no_grad():
@@ -205,7 +199,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / count_domain))
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat))
-    _logger.info('Train AvgMAE: %.5f'%(sum_abs_err / count_cat))
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', str(sorted(label_domain_counter.items())))
 
@@ -218,7 +211,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ("AccCat/train (epoch)", total_cat_correct / count_cat, epoch),
             ("AccDomain/train (epoch)", total_domain_correct / count_domain, epoch),
             ("MSE/train (epoch)", sum_sqr_err / count, epoch),
-            ("MAE/train (epoch)", sum_abs_err / count, epoch),
             ])
         if tb_helper.custom_fn:
             with torch.no_grad():
@@ -249,7 +241,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     label_cat_counter = Counter()
     label_domain_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
-    sum_sqr_err, sum_abs_err, count_cat, count_domain = 0, 0, 0, 0;
+    sum_sqr_err, count_cat, count_domain = 0, 0, 0;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
     pred_cat_output, pred_domain_output, pred_reg = None, None, None;
     loss, loss_cat, loss_domain, loss_reg = None, None, None, None;
@@ -390,8 +382,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     correct_domain = (pred_domain == label_domain).sum().item()
                     total_domain_correct += correct_domain
                     residual_reg = pred_reg - target;
-                    abs_err = residual_reg.abs().sum().item();
-                    sum_abs_err += abs_err;
                     sqr_err = residual_reg.square().sum().item()
                     sum_sqr_err += sqr_err
 
@@ -433,7 +423,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ("AccCat/%s (epoch)"%(tb_mode), total_cat_correct / count_cat if count_cat > 0 else 0, epoch),
             ("AccDomain/%s (epoch)"%(tb_mode), total_domain_correct / count_domain if count_domain > 0 else 0, epoch),
             ("MSE/%s (epoch)"%(tb_mode), sum_sqr_err / count_cat if count_cat > 0 else 0, epoch),
-            ("MAE/%s (epoch)"%(tb_mode), sum_abs_err / count_cat if count_cat > 0 else 0, epoch),
             ])
         if tb_helper.custom_fn:
             with torch.no_grad():
@@ -487,7 +476,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
     data_config = test_loader.dataset.config
     label_cat_counter = Counter()
     label_domain_counter = Counter()
-    total_loss, num_batches, total_cat_correct, total_domain_correct, sum_sqr_err, sum_abs_err, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0, 0;
+    total_loss, num_batches, total_cat_correct, total_domain_correct, sum_sqr_err, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
     scores_cat, scores_reg, scores_domain = [], [], []
     pred_cat_output, pred_domain_output, pred_reg = None, None, None;
@@ -592,8 +581,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 correct_domain = (pred_domain == label_domain).sum().item()
                 total_domain_correct += correct_domain
                 residual_reg = pred_reg - target;
-                abs_err = residual_reg.abs().sum().item();
-                sum_abs_err += abs_err;
                 sqr_err = residual_reg.square().sum().item()
                 sum_sqr_err += sqr_err
             
