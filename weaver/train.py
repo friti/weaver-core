@@ -15,9 +15,8 @@ from utils.dataset import SimpleIterDataset
 from utils.import_tools import import_module
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classdomain', 'classregdomain','preprocess'],  # TODO: add more  
+parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classregdomain','preprocess'],  # TODO: add more  
                     help='class: classification task, reg: regression task, classreg: classification+regression,' 
-                    'classdomain: classification with domain adversarial, '
                     'classregdomain: classification+regression with domain adversarial, preprocess: only run re-weight step and produce the new yaml file'
                 )
 parser.add_argument('-c', '--data-config', type=str, default='data/ak15_points_pf_sv_v0.yaml',
@@ -716,13 +715,6 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
             output['score_' + label_name] = scores[:,idx]
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
-    elif args.weaver_mode == "classdomain":
-        for idx, label_name in enumerate(data_config.label_value):
-            output[label_name] = (labels[data_config.label_names[0]] == idx)
-            output['score_' + label_name] = scores[:,idx]
-        for idx, label_name in enumerate(data_config.label_domain_value):
-            output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
-            output['score_' + label_name] = scores[:,len(data_config.label_value)+idx]
     elif args.weaver_mode == "classregdomain":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
@@ -808,11 +800,6 @@ def _main(args):
         from utils.nn.tools import train_classreg as train
         from utils.nn.tools import evaluate_classreg as evaluate
         from utils.nn.tools import evaluate_onnx_classreg as evaluate_onnx
-    elif args.weaver_mode == "classdomain":
-        _logger.info('Running in classification mode with domain adaptation')
-        from utils.nn.tools_domain import train_classification as train
-        from utils.nn.tools_domain import evaluate_classification as evaluate
-        from utils.nn.tools_domain import evaluate_onnx_classification as evaluate_onnx
     elif args.weaver_mode == "classregdomain":
         _logger.info('Running in combined regression + classification mode with domain adaptation')
         from utils.nn.tools_domain import train_classreg as train
