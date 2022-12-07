@@ -798,14 +798,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).detach().cpu().numpy());
                     else:
                         scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
+
+                ### check dimension of labels and target. If dimension is 1 extend them
+                if label.dim() == 1:
+                    label = label[:,None]
+                if target.dim() == 1:
+                    target = target[:,None]
                     
                 ### evaluate loss function
                 if loss_func != None:
-                    ### check dimension of labels and target. If dimension is 1 extend them
-                    if label.dim() == 1:
-                        label = label[:,None]
-                    if target.dim() == 1:
-                        target = target[:,None]
                     ### true labels and true target 
                     loss, loss_cat, loss_reg = loss_func(model_output,label,target)
                     loss = loss.detach().item()

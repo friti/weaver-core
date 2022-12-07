@@ -115,6 +115,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     target = target[:,None]
                 if label_domain.dim() == 1:
                     label_domain = label_domain[:,None]
+
                 ### erase uselss dimensions
                 label_cat    = label_cat.squeeze();
                 label_domain = label_domain.squeeze();
@@ -284,6 +285,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 label_cat    = label_cat.to(dev,non_blocking=True)
                 label_domain = label_domain.to(dev,non_blocking=True)
 
+
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
@@ -368,15 +370,16 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     pred_reg    = pred_reg[index_cat];
                     pred_domain = pred_domain[index_domain];
 
+                ### check dimension of labels and target. If dimension is 1 extend them
+                if label_cat.dim() == 1:
+                    label_cat = label_cat[:,None]
+                if label_domain.dim() == 1:
+                    label_domain = label_domain[:,None]
+                if target.dim() == 1:
+                    target = target[:,None]
+
                 ### evaluate loss function
                 if loss_func != None:
-                    ### check dimension of labels and target. If dimension is 1 extend them
-                    if label_cat.dim() == 1:
-                        label_cat = label_cat[:,None]
-                    if label_domain.dim() == 1:
-                        label_domain = label_domain[:,None]
-                    if target.dim() == 1:
-                        target = target[:,None]
                     ### true labels and true target 
                     label_cat   = label_cat.squeeze();
                     target      = target.squeeze();                                         
@@ -622,6 +625,14 @@ def evaluate_onnx_classreg(model_path, test_loader,
                     scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,len(data_config.target_value)).detach().cpu().numpy());
                 else:
                     scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).detach().cpu().numpy());
+                    
+            ### check dimension of labels and target. If dimension is 1 extend them
+            if label_cat.dim() == 1:
+                label_cat = label_cat[:,None]
+            if label_domain.dim() == 1:
+                label_domain = label_domain[:,None]
+            if target.dim() == 1:
+                target = target[:,None]
                     
             pred_cat    = pred_cat[index_cat];
             pred_reg    = pred_reg[index_cat];
