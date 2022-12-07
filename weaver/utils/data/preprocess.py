@@ -164,8 +164,13 @@ class WeightMaker(object):
         self._data_config = data_config.copy()
 
     def read_file(self, filelist):
-        self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes + self._data_config.reweight_exclude_classes +
-                                 (self._data_config.basewgt_name,))
+        if self._data_config.reweight_exclude_classes:
+            self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes + self._data_config.reweight_exclude_classes +
+                                     (self._data_config.basewgt_name,))
+        else:
+            self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes +
+                                     (self._data_config.basewgt_name,))
+
         self.load_branches = set()
         for k in self.keep_branches:
             if k in self._data_config.var_funcs:

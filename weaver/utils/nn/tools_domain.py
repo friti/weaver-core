@@ -51,6 +51,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
+            if num_batches >= 1000: break;
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
@@ -243,7 +244,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
     sum_sqr_err, count_cat, count_domain = 0, 0, 0;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
-    pred_cat_output, pred_domain_output, pred_reg = None, None, None;
+    pred_cat, pred_domain, pred_reg = None, None, None;
     loss, loss_cat, loss_domain, loss_reg = None, None, None, None;
     scores_cat, scores_domain, scores_reg = [], [], [];
     indexes_cat = [];
@@ -254,6 +255,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check in tq:
+                if num_batches >= 1000: break;
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
@@ -266,6 +268,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if not for_training:
                     indexes_cat.append(index_cat.detach().cpu().numpy());
                     indexes_domain.append(index_domain.detach().cpu().numpy());  
+                ## filter labels between classification and domain 
                 label_cat    = label_cat[index_cat];
                 label_domain = label_domain[index_domain];
 
@@ -356,10 +359,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_cat = model_output_cat[index_cat];
                     model_output_reg = model_output_reg[index_cat];
                     model_output_domain = model_output_domain[index_domain];                        
-
-                pred_cat    = pred_cat[index_cat];
-                pred_reg    = pred_reg[index_cat];
-                pred_domain = pred_domain[index_domain];
+                    pred_cat    = pred_cat[index_cat];
+                    pred_reg    = pred_reg[index_cat];
+                    pred_domain = pred_domain[index_domain];
 
                 ### evaluate loss function
                 if loss_func != None:
@@ -462,37 +464,44 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     targets    = {k: _concat(v) for k, v in targets.items()}
     observers  = {k: _concat(v) for k, v in observers.items()}
 
-    _logger.info('Evaluation of metrics\n')
     if not for_training:
-        metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat],scores_cat[indexes_cat],eval_metrics=eval_cat_metrics)    
+
+        _logger.info('Evaluation of metrics')
+        metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat],scores_cat[indexes_cat],eval_metrics=eval_cat_metrics)            
         _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+
         metric_domain_results = evaluate_metrics(labels_domain[data_config.label_domain_names[0]][indexes_domain],scores_domain[indexes_domain], eval_metrics=eval_cat_metrics)    
         _logger.info('Evaluation Domain metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
-        _logger.info('Evaluation of regression metrics\n')
+
+        _logger.info('Evaluation of regression metrics')
         for idx, (name,element) in enumerate(targets.items()):
             if len(data_config.target_names) == 1:
                 metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat], eval_metrics=eval_reg_metrics)
             else:
                 metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat,idx], eval_metrics=eval_reg_metrics)
-        _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
+            _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
+                ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
     else:
+
+        _logger.info('Evaluation of metrics')
         metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]],scores_cat,eval_metrics=eval_cat_metrics)    
         _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+
         metric_domain_results = evaluate_metrics(labels_domain[data_config.label_domain_names[0]],scores_domain, eval_metrics=eval_cat_metrics)    
         _logger.info('Evaluation Domain metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
-        _logger.info('Evaluation of regression metrics\n')
+
+        _logger.info('Evaluation of regression metrics')
         for idx, (name,element) in enumerate(targets.items()):
             if len(data_config.target_names) == 1:
                 metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
             else:
-                metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
-        _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
+                metric_reg_results = evaluate_metrics(element, scores_reg[:,idx], eval_metrics=eval_reg_metrics)
+            _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
+                ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
     torch.cuda.empty_cache()
     if for_training:
@@ -518,7 +527,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
     total_loss, num_batches, total_cat_correct, total_domain_correct, sum_sqr_err, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
     scores_cat, scores_reg, scores_domain = [], [], []
-    pred_cat_output, pred_domain_output, pred_reg = None, None, None;
+    pred_cat, pred_domain, pred_reg = None, None, None;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
     indexes_cat = [];
     indexes_domain = [];
