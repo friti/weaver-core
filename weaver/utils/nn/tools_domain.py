@@ -35,7 +35,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-
     gc.enable();
 
     data_config = train_loader.dataset.config
@@ -51,7 +50,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
-            if num_batches >= 1000: break;
+            if num_batches >= 2: break;
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
@@ -108,18 +107,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 model_output_reg    = model_output_reg[index_cat];
                 model_output_domain = model_output_domain[index_domain];
 
-                ### check dimension of labels and target. If dimension is 1 extend them
-                if label_cat.dim() == 1:
-                    label_cat = label_cat[:,None]
-                if target.dim() == 1:
-                    target = target[:,None]
-                if label_domain.dim() == 1:
-                    label_domain = label_domain[:,None]
-
-                ### erase uselss dimensions
-                label_cat    = label_cat.squeeze();
-                label_domain = label_domain.squeeze();
-                target       = target.squeeze();
                 ### evaluate loss function            
                 loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain);
 
@@ -169,20 +156,20 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
                 'Loss': '%.5f' % loss,
                 'AvgLoss': '%.5f' % (total_loss / num_batches),
-                'AccCat': '%.5f' % (correct_cat / num_cat_examples),
-                'AvgAccCat': '%.5f' % (total_cat_correct / count_cat),
-                'AccDomain': '%.5f' % (correct_domain / num_domain_examples),
-                'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain),
-                'MSE': '%.5f' % (sqr_err / num_cat_examples),
-                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat)
+                'AccCat': '%.5f' % (correct_cat / num_cat_examples if num_cat_examples else 0),
+                'AvgAccCat': '%.5f' % (total_cat_correct / count_cat if count_cat else 0),
+                'AccDomain': '%.5f' % (correct_domain / num_domain_examples if num_domain_examples else 0),
+                'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain else 0),
+                'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
+                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0)
             })
 
             if tb_helper:
                 tb_helper.write_scalars([
                     ("Loss/train", loss, tb_helper.batch_train_count + num_batches),
-                    ("AccCat/train", correct_cat / num_cat_examples, tb_helper.batch_train_count + num_batches),
-                    ("AccDomain/train", correct_domain / num_domain_examples, tb_helper.batch_train_count + num_batches),
-                    ("MSE/train", sqr_err / num_examples_cat, tb_helper.batch_train_count + num_batches),
+                    ("AccCat/train", correct_cat / num_cat_examples if num_cat_examples else 0, tb_helper.batch_train_count + num_batches),
+                    ("AccDomain/train", correct_domain / num_domain_examples if num_domain_examples else 0, tb_helper.batch_train_count + num_batches),
+                    ("MSE/train", sqr_err / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches),
                     ])
                 if tb_helper.custom_fn:
                     with torch.no_grad():
@@ -198,9 +185,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     _logger.info('Train AvgLoss Cat: %.5f'% (total_cat_loss / num_batches))
     _logger.info('Train AvgLoss Domain: %.5f'% (total_domain_loss / num_batches))
     _logger.info('Train AvgLoss Reg: %.5f'% (total_reg_loss / num_batches))
-    _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat))
-    _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / count_domain))
-    _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat))
+    _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
+    _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / count_domain if count_domain else 0))
+    _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', str(sorted(label_domain_counter.items())))
 
@@ -256,7 +243,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check in tq:
-                if num_batches >= 1000: break;
+                if num_batches >= 2: break;
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
@@ -284,7 +271,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 label_domain_counter.update(label_domain.cpu().numpy())
                 label_cat    = label_cat.to(dev,non_blocking=True)
                 label_domain = label_domain.to(dev,non_blocking=True)
-
 
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
@@ -370,20 +356,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     pred_reg    = pred_reg[index_cat];
                     pred_domain = pred_domain[index_domain];
 
-                ### check dimension of labels and target. If dimension is 1 extend them
-                if label_cat.dim() == 1:
-                    label_cat = label_cat[:,None]
-                if label_domain.dim() == 1:
-                    label_domain = label_domain[:,None]
-                if target.dim() == 1:
-                    target = target[:,None]
-
                 ### evaluate loss function
                 if loss_func != None:
-                    ### true labels and true target 
-                    label_cat   = label_cat.squeeze();
-                    target      = target.squeeze();                                         
-                    label_domain = label_domain.squeeze();
                     loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain)
                     loss = loss.detach().item()
                     loss_cat = loss_cat.detach().item()
@@ -422,12 +396,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     tq.set_postfix({
                         'Loss': '%.5f' % loss,
                         'AvgLoss': '%.5f' % (total_loss / num_batches),
-                        'AccCat': '%.5f' % (correct_cat / num_cat_examples if num_cat_examples > 0 else 0),
-                        'AvgAccCat': '%.5f' % (total_cat_correct / count_cat if count_cat > 0 else 0),
-                        'AccDomain': '%.5f' % (correct_domain / num_domain_examples if num_domain_examples > 0 else 0),
-                        'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain > 0 else 0),
-                        'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples > 0 else 0),
-                        'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat > 0 else 0),
+                        'AccCat': '%.5f' % (correct_cat / num_cat_examples if num_cat_examples else 0),
+                        'AvgAccCat': '%.5f' % (total_cat_correct / count_cat if count_cat else 0),
+                        'AccDomain': '%.5f' % (correct_domain / num_domain_examples if num_domain_examples else 0),
+                        'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain else 0),
+                        'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
+                        'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0),
                     })
                 else:
                     _logger.warning('Wrong dimension of pred_cat or pred_reg or pred_domain for batch %d'%(num_batches))
@@ -453,9 +427,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ("Loss Cat/%s (epoch)"%(tb_mode), total_cat_loss / num_batches, epoch),
             ("Loss Reg/%s (epoch)"%(tb_mode), total_reg_loss / num_batches, epoch),
             ("Loss Domain/%s (epoch)"%(tb_mode), total_domain_loss / num_batches, epoch),
-            ("AccCat/%s (epoch)"%(tb_mode), total_cat_correct / count_cat if count_cat > 0 else 0, epoch),
-            ("AccDomain/%s (epoch)"%(tb_mode), total_domain_correct / count_domain if count_domain > 0 else 0, epoch),
-            ("MSE/%s (epoch)"%(tb_mode), sum_sqr_err / count_cat if count_cat > 0 else 0, epoch),
+            ("AccCat/%s (epoch)"%(tb_mode), total_cat_correct / count_cat if count_cat else 0, epoch),
+            ("AccDomain/%s (epoch)"%(tb_mode), total_domain_correct / count_domain if count_domain else 0, epoch),
+            ("MSE/%s (epoch)"%(tb_mode), sum_sqr_err / count_cat if count_cat else 0, epoch),
             ])
         if tb_helper.custom_fn:
             with torch.no_grad():
@@ -475,6 +449,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if not for_training:
 
         _logger.info('Evaluation of metrics')
+
         metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat],scores_cat[indexes_cat],eval_metrics=eval_cat_metrics)            
         _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
@@ -484,6 +459,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
 
         _logger.info('Evaluation of regression metrics')
+
         for idx, (name,element) in enumerate(targets.items()):
             if len(data_config.target_names) == 1:
                 metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat], eval_metrics=eval_reg_metrics)
@@ -494,6 +470,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     else:
 
         _logger.info('Evaluation of metrics')
+
         metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]],scores_cat,eval_metrics=eval_cat_metrics)    
         _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
@@ -503,6 +480,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
 
         _logger.info('Evaluation of regression metrics')
+
         for idx, (name,element) in enumerate(targets.items()):
             if len(data_config.target_names) == 1:
                 metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
@@ -656,12 +634,12 @@ def evaluate_onnx_classreg(model_path, test_loader,
             
                 ### monitor results
                 tq.set_postfix({
-                    'AccCat': '%.5f' % (correct_cat / num_cat_examples if num_cat_examples > 0 else 0),
-                    'AvgAccCat': '%.5f' % (total_cat_correct / count_cat if count_cat > 0 else 0),
-                    'AccDomain': '%.5f' % (correct_domain / num_domain_examples if num_domain_examples > 0 else 0),
-                    'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain > 0 else 0),
-                    'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples > 0 else 0),
-                    'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat > 0 else 0),
+                    'AccCat': '%.5f' % (correct_cat / num_cat_examples if num_cat_examples else 0),
+                    'AvgAccCat': '%.5f' % (total_cat_correct / count_cat if count_cat else 0),
+                    'AccDomain': '%.5f' % (correct_domain / num_domain_examples if num_domain_examples else 0),
+                    'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain else 0),
+                    'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
+                    'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0),
                 })
             else:
                 _logger.warning('Wrong dimension of pred_cat or pred_reg or pred_domain for batch %d'%(num_batches))

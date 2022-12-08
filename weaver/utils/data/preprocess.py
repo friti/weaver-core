@@ -61,10 +61,11 @@ def _build_weights(table, data_config, reweight_hists=None, warn=_logger.warning
             wgt[pos] = hist[x_indices, y_indices]
             sum_evts += np.sum(pos)
         ## loop oover the domain label and fix weights to 1 in order to be always sampled
-        for label in data_config.reweight_exclude_classes:
-            pos = table[label] == 1
-            wgt[pos] = 1;
-            sum_evts += np.sum(pos)
+        if data_config.reweight_exclude_classes:
+            for label in data_config.reweight_exclude_classes:
+                pos = table[label] == 1
+                wgt[pos] = 1;
+                sum_evts += np.sum(pos)
         if sum_evts != len(table):
             warn(
                 'Not all selected events used in the reweighting. '
@@ -223,17 +224,16 @@ class WeightMaker(object):
             raw_hists[label] = hist.astype('float32')
             result[label] = hist.astype('float32')
         ## add back the domain adaptation events that must be excluded from re-weight
-        for label in self._data_config.reweight_exclude_classes:
-            pos = table[label] == 1
-            sum_evts += np.sum(pos) 
+        if self._data_config.reweight_exclude_classes:
+            for label in self._data_config.reweight_exclude_classes:
+                pos = table[label] == 1
+                sum_evts += np.sum(pos) 
         if sum_evts != len(table):
             _logger.warning(
                 'Only %d (out of %d) events actually used in the reweighting. '
                 'Check consistency between `selection` and `reweight_classes` + `reweight_exclude_classes` definition, or with the `reweight_vars` binnings '
                 '(under- and overflow bins are discarded by default, unless `reweight_discard_under_overflow` is set to `False` in the `weights` section).',
                 sum_evts, len(table))
-            time.sleep(10)
-
         if self._data_config.reweight_method == 'flat':
             for label, classwgt in zip(self._data_config.reweight_classes, self._data_config.class_weights):
                 hist = result[label]

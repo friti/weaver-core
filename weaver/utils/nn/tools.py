@@ -602,6 +602,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, _, _, _, _ in tq:
+            if num_batches > 2: break;
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
@@ -623,14 +624,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 ### evaluate the model
                 model_output  = model(*inputs)                
-                ### check dimension of labels and target. If dimension is 1 extend them
-                if label.dim() == 1:
-                    label = label[:,None]
-                if target.dim() == 1:
-                    target = target[:,None]
-                ### erase uselss dimensions
-                label  = label.squeeze();
-                target = target.squeeze();
                 ### evaluate loss function
                 loss, loss_cat, loss_reg = loss_func(model_output,label,target);
 
@@ -756,6 +749,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, _, Z, _, _ in tq:
+                if num_batches > 2: break;
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
@@ -799,11 +793,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     else:
                         scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
 
-                ### check dimension of labels and target. If dimension is 1 extend them
-                if label.dim() == 1:
-                    label = label[:,None]
-                if target.dim() == 1:
-                    target = target[:,None]
                     
                 ### evaluate loss function
                 if loss_func != None:
@@ -885,6 +874,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     observers = {k: _concat(v) for k, v in observers.items()}
 
     _logger.info('Evaluation of metrics\n')
+
     metric_cat_results = evaluate_metrics(labels[data_config.label_names[0]], scores_cat, eval_metrics=eval_cat_metrics)    
     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
@@ -960,14 +950,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
             pred_reg = score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
             count += num_examples
             num_batches += 1;
-            
-            if label.dim() == 1:
-                label = label[:,None]
-            if target.dim() == 1:
-                target = target[:,None]
-
-            ### erase uselss dimensions                                                                                                                                                            
-            label  = label.squeeze();
         
             if pred_cat.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
                 correct = (pred_cat == label).sum().item()

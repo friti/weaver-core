@@ -28,8 +28,11 @@ def _finalize_inputs(table, data_config):
     for k in data_config.label_names+data_config.target_names+data_config.label_domain_names:
         output[k] = ak.to_numpy(table[k])
     # copy labelcheck
-    for k in data_config.labelcheck_names+data_config.labelcheck_domain_names:
+    for k in data_config.labelcheck_names:
         output[k] = ak.to_numpy(table[k])
+    if data_config.labelcheck_domain_names:
+        for k in data_config.labelcheck_domain_names:
+            output[k] = ak.to_numpy(table[k])
     # transformation
     for k, params in data_config.preprocess_params.items():
         if data_config._auto_standardization and params['center'] == 'auto':
@@ -280,13 +283,19 @@ class _SimpleIter(object):
         # target for regression
         y_reg = {k: self.table[k][i].copy() for k in self._data_config.target_names}        
         # labels for domain
-        y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
+        if self._data_config.label_domain_names:
+            y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
+        else:
+            y_domain = {};
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
         # labelcheck for classificaiton
         y_cat_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_names}
         # labelcheck for domain
-        y_domain_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_domain_names}
+        if self._data_config.labelcheck_domain_names:
+            y_domain_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_domain_names}
+        else:
+            y_domain_check = {};
         return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check 
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):
