@@ -62,8 +62,10 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             model.zero_grad(set_to_none=True)
 
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
-                model_output = model(*inputs)
-                logits = _flatten_preds(model_output, label_mask)
+                model_output = model(*inputs)                
+                model_output = _flatten_preds(model_output, label_mask)
+                model_output = model_output.squeeze().float();
+                label = label.squeeze();
                 loss = loss_func(logits, label)
             if grad_scaler is None:
                 loss.backward()
@@ -78,7 +80,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
             loss  = loss.detach().item()
             label = label.detach();
-            _, preds = logits.detach().max(1)
+            _, preds = model_output.detach().max(1)
             num_batches += 1
             count += num_examples
             correct = (preds == label).sum().item()
@@ -163,25 +165,30 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                     label_mask = None
                 if not for_training and label_mask is not None:
                     labels_counts.append(np.squeeze(label_mask.cpu().numpy().sum(axis=-1)))
+
                 label = _flatten_label(label, label_mask)
                 num_examples = label.shape[0]
                 label_counter.update(label.cpu().numpy())
-                label = label.to(dev,non_blocking=True)
-                model_output = model(*inputs)
-                logits = _flatten_preds(model_output, label_mask).float()
-
-                scores.append(torch.softmax(logits,dim=1).detach().cpu().numpy())
                 for k, v in y_cat.items():
                     labels[k].append(_flatten_label(v,label_mask).cpu().numpy())
                 if not for_training:
                     for k, v in Z.items():
                         observers[k].append(v.cpu().numpy())
 
-                _, preds = logits.max(1)
-                loss = 0 if loss_func is None else loss_func(logits, label).detach().item()
+                label = label.to(dev,non_blocking=True)
 
+                model_output = model(*inputs)
+                model_output = _flatten_preds(model_output, label_mask)
+
+                scores.append(torch.softmax(model_output,dim=1).detach().cpu().numpy())
+                
+                model_output = model_output.squeeze().float();
+                label = label.squeeze();
+                loss = 0 if loss_func is None else loss_func(model_output, label).detach().item()
+                
                 num_batches += 1
                 count += num_examples
+                _, preds = model_output.max(1)
                 correct = (preds == label).sum().item()
                 total_loss += loss * num_examples
                 total_correct += correct
@@ -215,7 +222,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
             with torch.no_grad():
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode=tb_mode)
 
-    scores = np.concatenate(scores)
+    scores = np.concatenate(scores).squeeze()
     labels = {k: _concat(v) for k, v in labels.items()}
     observers = {k: _concat(v) for k, v in observers.items()}
 
@@ -268,16 +275,15 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
             label = y_cat[data_config.label_names[0]].long()
             num_examples = label.shape[0]
             label_counter.update(label.cpu.numpy())
-            score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score)).squeeze();
-            preds = score.argmax(1)
-            scores.append(score)
-
             for k, v in y_cat.items():
                 labels[k].append(v.cpu().numpy())
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
-
+            score = sess.run([], inputs)
+            score = torch.as_tensor(np.array(score));
+            scores.append(score.cpu().numpy())
+            preds = score.squeeze().float().argmax(1)
+            label = label.squeeze();
             correct = (preds == label).sum()
             total_correct += correct
             count += num_examples
@@ -331,8 +337,9 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)
-                preds = model_output.squeeze()
-                loss  = loss_func(preds, target)
+                model_output = model_output.squeeze().float();
+                target = target.squeeze();
+                loss  = loss_func(model_output, target)
             if grad_scaler is None:
                 loss.backward()
                 opt.step()
@@ -348,8 +355,9 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             num_batches += 1
             count += num_examples
             total_loss += loss
-
-            e = preds.detach() - target.detach()
+            preds = model_output.detach().float()
+            target = target.detach();
+            e = preds - target;
             abs_err = e.abs().sum().item()
             sum_abs_err += abs_err
             sqr_err = e.square().sum().item()
@@ -430,21 +438,24 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                         target = torch.column_stack((target,y_reg[names].float()))
                 num_examples = target.shape[0]
                 target = target.to(dev,non_blocking=True)
-                model_output = model(*inputs)
-                preds = model_output.squeeze().float()
-
-                scores.append(preds.detach().cpu().numpy())
                 for k, v in y_reg.items():
                     targets[k].append(v.cpu().numpy())
                 if not for_training:
                     for k, v in Z.items():
                         observers[k].append(v.cpu().numpy())
-                        
-                loss = 0 if loss_func is None else loss_func(preds, target).detach().item()
+
+                model_output = model(*inputs)
+                scores.append(preds.cpu().numpy())      
+                model_output = model_output.squeeze().float();
+                target =  target.squeeze();
+
+                loss = 0 if loss_func is None else loss_func(model_output, target).detach().item()
+
                 num_batches += 1
                 count += num_examples
                 total_loss += loss
                 
+                preds = model_output.float();
                 e = preds - target
                 abs_err = e.abs().sum().item()
                 sum_abs_err += abs_err
@@ -483,7 +494,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
             with torch.no_grad():
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode=tb_mode)
 
-    scores = np.concatenate(scores)
+    scores = np.concatenate(scores).squeeze();
     targets = {k: _concat(v) for k, v in targets.items()}
     observers = {k: _concat(v) for k, v in observers.items()}        
 
@@ -533,15 +544,16 @@ def evaluate_onnx_regression(model_path, test_loader,
                 else:
                     target = torch.column_stack((target,y[names].float()))
             num_examples = target.shape[0]            
-            score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score)).squeeze().float();
-            preds = score
-            scores.append(score)
-
             for k, v in y.items():
                 targets[k].append(v.cpu().numpy())
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
+
+            score = sess.run([], inputs)
+            score = torch.as_tensor(np.array(score))
+            scores.append(score.cpu().numpy())
+            preds = score.squeeze().float();
+            target = target.squeeze();
 
             num_batches += 1;
             count += num_examples
@@ -600,6 +612,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     start_time = time.time()
 
+    num_labels  = len(data_config.label_value);
+    num_targets = len(data_config.target_value);
+
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, _, _, _, _ in tq:
             ### input features for the model
@@ -622,9 +637,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 ### evaluate the model
-                model_output  = model(*inputs)                
+                model_output = model(*inputs)                
+                model_output_cat = model_output[:,:num_labels];
+                model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+                model_output_cat = model_output_cat.squeeze().float();
+                model_output_reg = model_output_reg.squeeze().float();
+                label = label.squeeze();
+                target = target.squeeze();
                 ### evaluate loss function
-                loss, loss_cat, loss_reg = loss_func(model_output,label,target);
+                loss, loss_cat, loss_reg = loss_func(model_output_cat,label,model_output_reg,target);
 
             ### back propagation
             if grad_scaler is None:
@@ -651,14 +672,13 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ## take the classification prediction and compare with the true labels            
             label = label.detach()
             target = target.detach()
-            if(model_output.dim() == 1) : continue;
-            _, pred_cat = model_output[:,:len(data_config.label_value)].squeeze().max(1);
-            correct  = (pred_cat.detach() == label.detach()).sum().item()
+            _, pred_cat = model_output_cat.detach().max(1)
+            correct  = (pred_cat == label).sum().item()
             total_correct += correct
 
             ## take the regression prediction and compare with true targets
-            pred_reg = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
-            residual_reg = pred_reg.detach() - target.detach();            
+            pred_reg = model_output_reg.detach().float();
+            residual_reg = pred_reg - target;            
             abs_err = residual_reg.abs().sum().item();
             sum_abs_err += abs_err;
             sqr_err = residual_reg.square().sum().item()
@@ -745,6 +765,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     labels, targets, labels_domain, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
     start_time = time.time()
 
+    num_labels  = len(data_config.label_value);
+    num_targets = len(data_config.target_value);
+
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, _, Z, _, _ in tq:
@@ -765,8 +788,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### update counters
                 num_examples = max(label.shape[0],target.shape[0]);
                 entry_count += num_examples
-                ### evaluate model
-                model_output = model(*inputs)
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
                     labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
@@ -776,32 +797,35 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if not for_training:
                     for k, v in Z.items():
                         observers[k].append(v.cpu().numpy())
-                ### build classification and regression outputs
-                pred_cat_output = model_output[:,:len(data_config.label_value)].squeeze().float()
-                pred_reg        = model_output[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();                
-                if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
-                    _, pred_cat = pred_cat_output.max(1);
-                    scores_cat.append(torch.softmax(pred_cat_output,dim=1).detach().cpu().numpy());
-                    scores_reg.append(pred_reg.detach().cpu().numpy())
-                else:
-                    pred_cat = torch.zeros(num_examples).cpu().numpy();
-                    scores_cat.append(torch.zeros(num_examples,len(data_config.label_value)).detach().cpu().numpy());
-                    if len(data_config.target_value) > 1:
-                        scores_reg.append(torch.zeros(num_examples,len(data_config.target_value)).detach().cpu().numpy());
-                    else:
-                        scores_reg.append(torch.zeros(num_examples).detach().cpu().numpy());
 
+                ### evaluate model
+                model_output = model(*inputs)
+                ### build classification and regression outputs
+                model_output_cat = model_output[:,:num_labels];
+                model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+                if model_output_cat.shape[0] == num_examples and model_output_reg.shape[0] == num_examples:
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy());
+                    scores_reg.append(model_output_reg.cpu().numpy())
+                else:
+                    scores_cat.append(torch.zeros(num_examples,num_labels).cpu().numpy());
+                    if num_targets > 1:
+                        scores_reg.append(torch.zeros(num_examples,num_targets).cpu().numpy());
+                    else:
+                        scores_reg.append(torch.zeros(num_examples).cpu().numpy());                        
                     
                 ### evaluate loss function
+                model_output_cat = model_output_cat.squeeze().float();
+                model_output_reg = model_output_reg.squeeze().float();
+                label = label.squeeze();
+                target = target.squeeze();
+
                 if loss_func != None:
+                    model_output
                     ### true labels and true target 
-                    loss, loss_cat, loss_reg = loss_func(model_output,label,target)
-                    loss = loss.detach().item()
-                    loss_cat = loss_cat.detach().item()
-                    loss_reg = loss_reg.detach().item()
-                    ### erase useless dimensions
-                    label  = label.squeeze();
-                    target = target.squeeze();                                         
+                    loss, loss_cat, loss_reg = loss_func(model_output_cat,label,model_output_reg,target)
+                    loss = loss.item()
+                    loss_cat = loss_cat.item()
+                    loss_reg = loss_reg.item()
                     total_loss += loss
                     total_cat_loss += loss_cat
                     total_reg_loss += loss_reg
@@ -815,11 +839,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 count += num_examples
 
                 ### classification accuracy
-                if pred_cat_output.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
-
+                if model_output_cat.shape[0] == num_examples and model_output_reg.shape[0] == num_examples:
+                    _,pred_cat = model_output_cat.max(1)
                     correct = (pred_cat == label).sum().item()
                     total_correct += correct
                     ### regression spread
+                    pred_reg = model_output_reg.float()
                     residual_reg = pred_reg - target;
                     abs_err = residual_reg.abs().sum().item();
                     sum_abs_err += abs_err;
@@ -920,6 +945,9 @@ def evaluate_onnx_classreg(model_path, test_loader,
     
     start_time = time.time()
 
+    num_labels  = len(data_config.label_value);
+    num_targets = len(data_config.target_value);
+
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, y_reg, _, Z, _, _ in tq:
             ### input features for the model
@@ -932,10 +960,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
                     target = torch.column_stack((target,y_reg[names].float()))
             num_examples = max(label.shape[0],target.shape[0]);
             label_counter.update(label.cpu().numpy())
-            score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score)).squeeze();
-            scores_cat.append(score[:,:len(data_config.label_value)]);
-            scores_reg.append(score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)]);            
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
                 labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
@@ -943,9 +967,13 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 targets[name].append(y_reg[name].cpu().numpy())                
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
+            score = sess.run([], inputs)
+            score = torch.as_tensor(np.array(score));
+            scores_cat.append(score[:,:num_labels].cpu().numpy());
+            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy());
 
-            pred_cat = score[:,:len(data_config.label_value)].argmax(1).squeeze();
-            pred_reg = score[:,len(data_config.label_value):len(data_config.label_value)+len(data_config.target_value)].squeeze().float();
+            pred_cat = score[:,:num_labels].squeeze().float.argmax(1);
+            pred_reg = score[:,num_labels:num_labels+num_targets].squeeze().float();
             count += num_examples
             num_batches += 1;
         
