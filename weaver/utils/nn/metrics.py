@@ -63,6 +63,8 @@ def evaluate_metrics(y_true, y_score, eval_metrics=[]):
     results = {}
     for metric in eval_metrics:
         func = _get_metric(metric)
+        if metric == "roc_auc_score" and y_score.shape[1] == 2:
+            y_score = y_score.max(1);
         try:
             results[metric] = func(y_true, y_score)
         except Exception as e:

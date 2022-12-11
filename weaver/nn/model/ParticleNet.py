@@ -122,14 +122,17 @@ class EdgeConvBlock(nn.Module):
 ## function and module to flip gradient
 class RevGrad(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input_, alpha_):
-        ctx.save_for_backward(input_,alpha_)
-        return input_
+    def forward(ctx, x, alpha):
+        ctx.save_for_backward(x,alpha)
+        return x
 
     @staticmethod
     def backward(ctx, grad_output):  # pragma: no cover
-        _, alpha_ = ctx.saved_tensors
-        return -grad_output * alpha_, None
+        grad_input = None
+        _, alpha = ctx.saved_tensors
+        if ctx.needs_input_grad[0]:
+             grad_input = - alpha*grad_output
+        return grad_input, None
 
 class GradientReverse(nn.Module):
     def __init__(self, alpha=1., *args, **kwargs):
@@ -137,11 +140,11 @@ class GradientReverse(nn.Module):
         A gradient reversal layer. This layer has no parameters, and simply reverses the gradient in the backward pass.
         """
         super().__init__(*args, **kwargs)
-        self._alpha = torch.tensor(alpha, requires_grad=False)
+        self.alpha = torch.tensor(alpha, requires_grad=False)
 
-    def forward(self, input_):
-        return RevGrad.apply(input_, self._alpha)
-
+    def forward(self, x):
+        return RevGrad.apply(x, self.alpha)
+        
 class ParticleNet(nn.Module):
 
     def __init__(self,

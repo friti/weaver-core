@@ -71,10 +71,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### filter labels and check consistency
             label_cat    = label_cat[index_cat];
             label_domain = label_domain[index_domain];
-            if label_cat.shape[0]+label_domain.shape[0] != cat_check.shape[0]:
-                _logger.warning('Wrong decomposition in cat and domain for batch number %d'%(num_batches))
-                num_batches += 1
-                continue;
             ### edit labels
             label_cat    = _flatten_label(label_cat,None)
             label_domain = _flatten_label(label_domain,None)
@@ -92,9 +88,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### Number of samples in the batch
             num_cat_examples    = max(label_cat.shape[0],target.shape[0]);
             num_domain_examples = label_domain.shape[0];
-            if label_cat.shape[0] != target.shape[0]:
-                _logger.warning('Wrong decomposition in cat and target for batch number %d'%(num_batches))
-                continue;
 
             ### send to GPU
             num_batches += 1
@@ -269,22 +262,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 domain_check = y_domain_check[data_config.labelcheck_domain_names[0]].long()
                 index_cat    = cat_check.nonzero();
                 index_domain = domain_check.nonzero();
-                if not index_cat.nelement():
-                    _logger.warning('Problem because only domain events in this batch %d'%(num_batches))
-                    num_batches += 1
-                    continue;
                 if not for_training:
-                    indexes_cat.append(index_cat.detach().cpu().numpy());
-                    indexes_domain.append(index_domain.detach().cpu().numpy());  
+                    indexes_cat.append(index_cat.cpu().numpy());
+                    indexes_domain.append(index_domain.cpu().numpy());  
                 ## filter labels between classification and domain 
                 label_cat    = label_cat[index_cat];
                 label_domain = label_domain[index_domain];
-
-                if label_cat.shape[0]+label_domain.shape[0] != cat_check.shape[0]:
-                    _logger.warning('Wrong decomposition in cat and domain for batch number %d'%(num_batches))
-                    num_batches += 1
-                    continue;
-                    
                 label_cat    = _flatten_label(label_cat,None)
                 label_domain = _flatten_label(label_domain,None)                    
                 label_cat_counter.update(label_cat.cpu().numpy())
@@ -301,33 +284,22 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### update counters
                 num_cat_examples = max(label_cat.shape[0],target.shape[0]);
                 num_domain_examples = label_domain.shape[0]
-                if label_cat.shape[0] != target.shape[0]:
-                    _logger.warning('Wrong decomposition in cat and target for batch number %d'%(num_batches))
-                    num_batches += 1;
-                    continue;
-
-                ### store truth labels for classification and regression as well as observers
-                if for_training:
-                    for k, v in y_cat.items():
-                        labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy())
-                    for k, v in y_domain.items():
-                        labels_domain[k].append(_flatten_label(v[index_domain],None).cpu().numpy())
-                    for k, v in y_reg.items():
-                        targets[k].append(v[index_cat].cpu().numpy())                
-                else:
-                    for k, v in y_cat.items():
-                        labels_cat[k].append(_flatten_label(v,None).cpu().numpy())
-                    for k, v in y_domain.items():
-                        labels_domain[k].append(_flatten_label(v,None).cpu().numpy())
-                    for k, v in y_reg.items():
-                        targets[k].append(v.cpu().numpy())                
-                    for k, v in Z.items():                
-                        observers[k].append(v.cpu().numpy())
 
                 ### send to gpu
                 label_cat    = label_cat.to(dev,non_blocking=True)
                 label_domain = label_domain.to(dev,non_blocking=True)
                 target       = target.to(dev,non_blocking=True)            
+
+                ### store truth labels for classification and regression as well as observers
+                for k, v in y_cat.items():
+                    labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy())
+                for k, v in y_reg.items():
+                    targets[k].append(v[index_cat].cpu().numpy())                
+                for k, v in y_domain.items():
+                    labels_domain[k].append(_flatten_label(v[index_domain],None).cpu().numpy())
+                if not for_training:
+                    for k, v in Z.items():                
+                        observers[k].append(v.cpu().numpy())
 
                 ### evaluate model
                 model_output = model(*inputs)
@@ -348,11 +320,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         model_output_reg = model_output_reg[index_cat];
                         model_output_domain = model_output_domain[index_domain];                
 
-                    ### save scores as they are
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).detach().cpu().numpy());
-                    scores_domain.append(torch.softmax(model_output_domain,dim=1).detach().cpu().numpy());
-                    scores_reg.append(model_output_reg.detach().cpu().numpy())
-                    
                     ### adjsut outputs
                     model_output_cat = model_output_cat.squeeze().float();
                     model_output_reg = model_output_reg.squeeze().float();
@@ -361,6 +328,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     label_domain = label_domain.squeeze();
                     target       = target.squeeze();
 
+                    ### save scores as they are
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy());
+                    scores_domain.append(torch.softmax(model_output_domain,dim=1).cpu().numpy());
+                    scores_reg.append(model_output_reg.cpu().numpy())
+                    
                     ### in testing filter now the interesting samples
                     if not for_training:
                         model_output_cat = model_output_cat[index_cat];
@@ -392,23 +364,23 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         total_domain_loss += loss_domain
                 else:                    
                     _logger.warning('Wrong dimension of model output (cat vs reg vs domain vs samples in batch) for batch %d'%(num_batches))
-                    pred_cat = torch.zeros(num_cat_examples).cpu().numpy();
+                    pred_cat    = torch.zeros(num_cat_examples).cpu().numpy();
                     pred_domain = torch.zeros(num_domain_examples).cpu().numpy();
-                    pred_reg = torch.zeros(num_cat_examples).cpu().numpy();
+                    pred_reg    = torch.zeros(num_cat_examples).cpu().numpy();
                     if for_training:
-                        scores_cat.append(torch.zeros(num_cat_examples,num_labels).detach().cpu().numpy());
-                        scores_domain.append(torch.zeros(num_domain_examples,num_labels_domain).detach().cpu().numpy());
-                        if len(data_config.target_value) > 1:
-                            scores_reg.append(torch.zeros(num_cat_examples,num_targets).detach().cpu().numpy());
+                        scores_cat.append(torch.zeros(num_cat_examples,num_labels).cpu().numpy());
+                        scores_domain.append(torch.zeros(num_domain_examples,num_labels_domain).cpu().numpy());
+                        if num_targets > 1:
+                            scores_reg.append(torch.zeros(num_cat_examples,num_targets).cpu().numpy());
                         else:
-                            scores_reg.append(torch.zeros(num_cat_examples).detach().cpu().numpy());
+                            scores_reg.append(torch.zeros(num_cat_examples).cpu().numpy());
                     else:
-                        scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).detach().cpu().numpy());
-                        scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).detach().cpu().numpy());
-                        if len(data_config.target_value) > 1:
-                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).detach().cpu().numpy());
+                        scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).cpu().numpy());
+                        scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).cpu().numpy());
+                        if num_targets > 1:
+                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).cpu().numpy());
                         else:
-                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).detach().cpu().numpy());
+                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).cpu().numpy());
 
                 num_batches += 1
                 count_cat += num_cat_examples
@@ -484,7 +456,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if not for_training:
 
         _logger.info('Evaluation of metrics')
-
         metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat],scores_cat[indexes_cat],eval_metrics=eval_cat_metrics)            
         _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
@@ -496,7 +467,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         _logger.info('Evaluation of regression metrics')
 
         for idx, (name,element) in enumerate(targets.items()):
-            if len(data_config.target_names) == 1:
+            if num_targets == 1:
                 metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat], eval_metrics=eval_reg_metrics)
             else:
                 metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat,idx], eval_metrics=eval_reg_metrics)
@@ -505,7 +476,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     else:
 
         _logger.info('Evaluation of metrics')
-
         metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]],scores_cat,eval_metrics=eval_cat_metrics)    
         _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
@@ -517,7 +487,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         _logger.info('Evaluation of regression metrics')
 
         for idx, (name,element) in enumerate(targets.items()):
-            if len(data_config.target_names) == 1:
+            if num_targets == 1:
                 metric_reg_results = evaluate_metrics(element, scores_reg, eval_metrics=eval_reg_metrics)
             else:
                 metric_reg_results = evaluate_metrics(element, scores_reg[:,idx], eval_metrics=eval_reg_metrics)
@@ -570,15 +540,10 @@ def evaluate_onnx_classreg(model_path, test_loader,
             domain_check = y_domain_check[data_config.labelcheck_domain_names[0]].long()
             index_cat    = cat_check.nonzero();
             index_domain = domain_check.nonzero();
-            indexes_cat.append(index_cat.detach().cpu().numpy());
-            indexes_domain.append(index_domain.detach().cpu().numpy());  
+            indexes_cat.append(index_cat.cpu().numpy());
+            indexes_domain.append(index_domain.cpu().numpy());  
             label_cat    = label_cat[index_cat];
             label_domain = label_domain[index_domain];
-            if label_cat.shape[0]+label_domain.shape[0] != cat_check.shape[0]:
-                _logger.warning('Wrong decomposition in cat and domain for batch number %d'%(num_batches))
-                num_batches += 1
-                continue;
-
             label_cat    = _flatten_label(label_cat,None)
             label_domain = _flatten_label(label_domain,None)                    
             label_cat_counter.update(label_cat.cpu().numpy())
@@ -595,10 +560,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
             ### update counters
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
             num_domain_examples = label_domain.shape[0]
-            if label_cat.shape[0] != target.shape[0]:
-                _logger.warning('Wrong decomposition in cat and target for batch number %d'%(num_batches))
-                num_batches += 1;
-                continue;
 
             ### define truth labels for classification and regression
             for k, v in y_cat.items():
@@ -627,12 +588,12 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
                 model_output_cat    = _flatten_preds(model_output_cat,None)
                 model_output_domain = _flatten_preds(model_output_domain,None)
-                scores_cat.append(model_output_cat.cpu().numpy());
-                scores_domain.append(model_output_domain.cpu().numpy());
-                scores_reg.append(model_output_reg.cpu().numpy())                        
                 model_output_cat = model_output_cat.squeeze().float();
                 model_output_domain = model_output_domain.squeeze().float();
                 model_output_reg = model_output_reg.squeeze().float();
+                scores_cat.append(model_output_cat.cpu().numpy());
+                scores_domain.append(model_output_domain.cpu().numpy());
+                scores_reg.append(model_output_reg.cpu().numpy())                        
                 _, pred_cat    = model_output_cat.max(1);
                 _, pred_domain = model_output_domain.max(1);
                 pred_reg       = model_output_reg.float();
@@ -643,7 +604,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 pred_domain = torch.zeros(num_domain_examples).cpu().numpy();
                 scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).cpu().numpy());
                 scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).cpu().numpy());
-                if len(data_config.target_value) > 1:
+                if num_targets > 1:
                     scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).cpu().numpy());
                 else:
                     scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).cpu().numpy());
@@ -707,7 +668,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
     _logger.info('Evaluation of regression metrics\n')
     for idx, (name,element) in enumerate(targets.items()):
-        if len(data_config.target_names) == 1:
+        if num_targets == 1:
             metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat], eval_metrics=eval_reg_metrics)
         else:
             metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat,idx], eval_metrics=eval_reg_metrics)

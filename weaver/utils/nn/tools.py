@@ -179,12 +179,12 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
                 model_output = model(*inputs)
                 model_output = _flatten_preds(model_output, label_mask)
-
-                scores.append(torch.softmax(model_output,dim=1).detach().cpu().numpy())
+                
+                scores.append(torch.softmax(model_output,dim=1).cpu().numpy())
                 
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
-                loss = 0 if loss_func is None else loss_func(model_output, label).detach().item()
+                loss = 0 if loss_func is None else loss_func(model_output, label).item()
                 
                 num_batches += 1
                 count += num_examples
@@ -449,7 +449,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                 model_output = model_output.squeeze().float();
                 target =  target.squeeze();
 
-                loss = 0 if loss_func is None else loss_func(model_output, target).detach().item()
+                loss = 0 if loss_func is None else loss_func(model_output, target).item()
 
                 num_batches += 1
                 count += num_examples
@@ -623,16 +623,17 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             label  = y_cat[data_config.label_names[0]].long()
             label  = _flatten_label(label,None)
             label_counter.update(label.cpu().numpy())
-            label  = label.to(dev,non_blocking=True)
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y_reg[names].float();
                 else:
                     target = torch.column_stack((target,y_reg[names].float()))
-            target = target.to(dev,non_blocking=True)            
             ### Number of samples in the batch
             num_examples = max(label.shape[0],target.shape[0]);
+            ### Send to device
+            label  = label.to(dev,non_blocking=True)
+            target = target.to(dev,non_blocking=True)            
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
@@ -777,17 +778,18 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 label  = y_cat[data_config.label_names[0]].long()
                 label  = _flatten_label(label,None)
                 label_counter.update(label.cpu().numpy())
-                label  = label.to(dev,non_blocking=True)
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
                         target = y_reg[names].float();
                     else:
                         target = torch.column_stack((target,y_reg[names].float()))
-                target = target.to(dev,non_blocking=True)            
                 ### update counters
                 num_examples = max(label.shape[0],target.shape[0]);
                 entry_count += num_examples
+                ### send to device
+                label  = label.to(dev,non_blocking=True)                
+                target = target.to(dev,non_blocking=True)            
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
                     labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
@@ -803,6 +805,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### build classification and regression outputs
                 model_output_cat = model_output[:,:num_labels];
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+                model_output_cat = model_output_cat.squeeze().float();
+                model_output_reg = model_output_reg.squeeze().float();
+                label  = label.squeeze();
+                target = target.squeeze();
+                ### save scores
                 if model_output_cat.shape[0] == num_examples and model_output_reg.shape[0] == num_examples:
                     scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy());
                     scores_reg.append(model_output_reg.cpu().numpy())
@@ -814,11 +821,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         scores_reg.append(torch.zeros(num_examples).cpu().numpy());                        
                     
                 ### evaluate loss function
-                model_output_cat = model_output_cat.squeeze().float();
-                model_output_reg = model_output_reg.squeeze().float();
-                label = label.squeeze();
-                target = target.squeeze();
-
                 if loss_func != None:
                     model_output
                     ### true labels and true target 
@@ -953,13 +955,13 @@ def evaluate_onnx_classreg(model_path, test_loader,
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
             label = y_cat[data_config.label_names[0]].long();
+            label_counter.update(label.cpu().numpy())
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y_reg[names].float();
                 else:
                     target = torch.column_stack((target,y_reg[names].float()))
             num_examples = max(label.shape[0],target.shape[0]);
-            label_counter.update(label.cpu().numpy())
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
                 labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
@@ -967,6 +969,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 targets[name].append(y_reg[name].cpu().numpy())                
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
+            ### evaluate the network
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score));
             scores_cat.append(score[:,:num_labels].cpu().numpy());
