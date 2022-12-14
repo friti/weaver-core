@@ -155,7 +155,6 @@ class ParticleNet(nn.Module):
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
                  fc_domain_params=[],
-                 alpha_gradrev=1.
                  use_fusion=True,
                  use_fts_bn=True,
                  use_counts=True,
@@ -166,7 +165,7 @@ class ParticleNet(nn.Module):
         self.num_classes = num_classes;
         self.num_targets = num_targets;
         self.num_domains = num_domains;
-        self.alpha_gradrev = alpha_gradrev;
+        self.alpha = kwargs.get('alpha',1);
         self.use_fts_bn = use_fts_bn
         if self.use_fts_bn:
             self.bn_fts = nn.BatchNorm1d(input_dims)
@@ -216,7 +215,7 @@ class ParticleNet(nn.Module):
             self.fc = nn.Sequential(*fcs)
             if not for_inference:
                 if use_revgrad:
-                    fcs_domain.append(GradientReverse(alpha_gradrev));
+                    fcs_domain.append(GradientReverse(self.alpha));
                 for idx, layer_param in enumerate(fc_domain_params):
                     channels, drop_rate = layer_param
                     if idx == 0:
