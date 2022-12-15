@@ -141,7 +141,6 @@ class GradientReverse(nn.Module):
         """
         super().__init__(*args, **kwargs)
         self.alpha = torch.tensor(alpha, requires_grad=False)
-
     def forward(self, x):
         return RevGrad.apply(x, self.alpha)
         
@@ -160,12 +159,13 @@ class ParticleNet(nn.Module):
                  use_counts=True,
                  use_revgrad=True,
                  for_inference=False,
+                 alpha_grad=1,
                  **kwargs):
         super(ParticleNet, self).__init__(**kwargs)
         self.num_classes = num_classes;
         self.num_targets = num_targets;
         self.num_domains = num_domains;
-        self.alpha = kwargs.get('alpha',1);
+        self.alpha_grad = alpha_grad;
         self.use_fts_bn = use_fts_bn
         if self.use_fts_bn:
             self.bn_fts = nn.BatchNorm1d(input_dims)
@@ -215,7 +215,7 @@ class ParticleNet(nn.Module):
             self.fc = nn.Sequential(*fcs)
             if not for_inference:
                 if use_revgrad:
-                    fcs_domain.append(GradientReverse(self.alpha));
+                    fcs_domain.append(GradientReverse(self.alpha_grad));
                 for idx, layer_param in enumerate(fc_domain_params):
                     channels, drop_rate = layer_param
                     if idx == 0:
@@ -322,6 +322,7 @@ class ParticleNetTagger(nn.Module):
                  pf_input_dropout=None,
                  sv_input_dropout=None,
                  for_inference=False,
+                 alpha_grad=1,
                  **kwargs):
         super(ParticleNetTagger, self).__init__(**kwargs)
         self.pf_input_dropout = nn.Dropout(pf_input_dropout) if pf_input_dropout else None
@@ -339,7 +340,9 @@ class ParticleNetTagger(nn.Module):
                               use_fusion=use_fusion,
                               use_fts_bn=use_fts_bn,
                               use_counts=use_counts,
-                              for_inference=for_inference)
+                              for_inference=for_inference,
+                              alpha_grad=alpha_grad
+        )
 
     def forward(self, pf_points, pf_features, pf_mask, sv_points, sv_features, sv_mask):
         if self.pf_input_dropout:
@@ -378,6 +381,7 @@ class ParticleNetLostTrkTagger(nn.Module):
                  sv_input_dropout=None,
                  lt_input_dropout=None,
                  for_inference=False,
+                 alpha_grad=1,
                  **kwargs):
         super(ParticleNetLostTrkTagger, self).__init__(**kwargs)
         self.pf_input_dropout = nn.Dropout(pf_input_dropout) if pf_input_dropout else None
@@ -397,7 +401,8 @@ class ParticleNetLostTrkTagger(nn.Module):
                               use_fts_bn=use_fts_bn,
                               use_counts=use_counts,
                               use_revgrad=use_revgrad,
-                              for_inference=for_inference)
+                              for_inference=for_inference,
+                              alpha_grad=alpha_grad)
 
     def forward(self, pf_points, pf_features, pf_mask, sv_points, sv_features, sv_mask, lt_points, lt_features, lt_mask):
         if self.pf_input_dropout:
