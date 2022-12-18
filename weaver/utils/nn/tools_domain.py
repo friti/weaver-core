@@ -292,11 +292,20 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ### store truth labels for classification and regression as well as observers
                 for k, v in y_cat.items():
-                    labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy())
+                    if not for_training:
+                        labels_cat[k].append(_flatten_label(v,None).cpu().numpy())
+                    else:
+                        labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy())
                 for k, v in y_reg.items():
-                    targets[k].append(v[index_cat].cpu().numpy())                
+                    if not for_training:
+                        targets[k].append(v.cpu().numpy())                
+                    else:
+                        targets[k].append(v[index_cat].cpu().numpy())                
                 for k, v in y_domain.items():
-                    labels_domain[k].append(_flatten_label(v[index_domain],None).cpu().numpy())
+                    if not for_training:
+                        labels_domain[k].append(_flatten_label(v,None).cpu().numpy())
+                    else:
+                        labels_domain[k].append(_flatten_label(v[index_domain],None).cpu().numpy())
                 if not for_training:
                     for k, v in Z.items():                
                         observers[k].append(v.cpu().numpy())
@@ -505,7 +514,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     else:
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
         scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)
-        gc.collect();
+        gc.collect();c
         return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
 def evaluate_onnx_classreg(model_path, test_loader,
