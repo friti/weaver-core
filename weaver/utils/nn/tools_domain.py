@@ -314,19 +314,19 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_cat.shape[0] == model_output_domain.shape[0] and 
                     model_output_cat.shape[0] == num_cat_examples+num_domain_examples):
 
+                    label_cat    = label_cat.squeeze();
+                    label_domain = label_domain.squeeze();
+                    target       = target.squeeze();
+
                     ### in validation only filter interesting events
                     if for_training:                        
                         model_output_cat = model_output_cat[index_cat];
                         model_output_reg = model_output_reg[index_cat];
                         model_output_domain = model_output_domain[index_domain];                
-
-                    ### adjsut outputs
-                    model_output_cat = model_output_cat.squeeze().float();
-                    model_output_reg = model_output_reg.squeeze().float();
-                    model_output_domain = model_output_domain.squeeze().float();
-                    label_cat    = label_cat.squeeze();
-                    label_domain = label_domain.squeeze();
-                    target       = target.squeeze();
+                        ### adjsut outputs
+                        model_output_cat = model_output_cat.squeeze().float();
+                        model_output_reg = model_output_reg.squeeze().float();
+                        model_output_domain = model_output_domain.squeeze().float();
 
                     ### save scores as they are
                     scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy());
@@ -338,6 +338,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         model_output_cat = model_output_cat[index_cat];
                         model_output_reg = model_output_reg[index_cat];
                         model_output_domain = model_output_domain[index_domain];                        
+                        ### adjsut outputs
+                        model_output_cat = model_output_cat.squeeze().float();
+                        model_output_reg = model_output_reg.squeeze().float();
+                        model_output_domain = model_output_domain.squeeze().float();
 
                     ### predictions for metrics
                     _, pred_cat    = model_output_cat.max(1);
