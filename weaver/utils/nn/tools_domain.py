@@ -514,7 +514,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     else:
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
         scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)
-        gc.collect();c
+        gc.collect();
         return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
 def evaluate_onnx_classreg(model_path, test_loader,
