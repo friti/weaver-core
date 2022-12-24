@@ -622,7 +622,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### build classification true labels (numpy argmax)
             label  = y_cat[data_config.label_names[0]].long()
             label  = _flatten_label(label,None)
-            label_counter.update(label.cpu().numpy())
+            label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
@@ -777,7 +777,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### build classification true labels
                 label  = y_cat[data_config.label_names[0]].long()
                 label  = _flatten_label(label,None)
-                label_counter.update(label.cpu().numpy())
+                label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
@@ -792,13 +792,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 target = target.to(dev,non_blocking=True)            
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
-                    labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
+                    labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy().astype(dtype=np.int32))
                 for k, name in enumerate(data_config.target_names):
-                    targets[name].append(y_reg[name].cpu().numpy())                
+                    targets[name].append(y_reg[name].cpu().numpy().astype(dtype=np.float32))                
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.cpu().numpy())
+                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 ### evaluate model
                 model_output = model(*inputs)
@@ -811,14 +811,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 target = target.squeeze();
                 ### save scores
                 if model_output_cat.shape[0] == num_examples and model_output_reg.shape[0] == num_examples:
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy());
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
                     scores_reg.append(model_output_reg.cpu().numpy())
                 else:
-                    scores_cat.append(torch.zeros(num_examples,num_labels).cpu().numpy());
+                    scores_cat.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
                     if num_targets > 1:
-                        scores_reg.append(torch.zeros(num_examples,num_targets).cpu().numpy());
+                        scores_reg.append(torch.zeros(num_examples,num_targets).cpu().numpy().astype(dtype=np.float32));
                     else:
-                        scores_reg.append(torch.zeros(num_examples).cpu().numpy());                        
+                        scores_reg.append(torch.zeros(num_examples).cpu().numpy().astype(dtype=np.float32));                        
                     
                 ### evaluate loss function
                 if loss_func != None:
@@ -955,7 +955,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
             label = y_cat[data_config.label_names[0]].long();
-            label_counter.update(label.cpu().numpy())
+            label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y_reg[names].float();
@@ -964,16 +964,16 @@ def evaluate_onnx_classreg(model_path, test_loader,
             num_examples = max(label.shape[0],target.shape[0]);
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
-                labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy())
+                labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy().astype(dtype=np.int32))
             for k, name in enumerate(data_config.target_names):
-                targets[name].append(y_reg[name].cpu().numpy())                
+                targets[name].append(y_reg[name].cpu().numpy().astype(dtype=np.float32))                
             for k, v in Z.items():
                 observers[k].append(v.cpu().numpy())
             ### evaluate the network
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score));
-            scores_cat.append(score[:,:num_labels].cpu().numpy());
-            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy());
+            scores_cat.append(score[:,:num_labels].cpu().numpy().astype(dtype=np.float32));
+            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32));
 
             pred_cat = score[:,:num_labels].squeeze().float.argmax(1);
             pred_reg = score[:,num_labels:num_labels+num_targets].squeeze().float();
