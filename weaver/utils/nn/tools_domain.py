@@ -74,8 +74,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### edit labels
             label_cat    = _flatten_label(label_cat,None)
             label_domain = _flatten_label(label_domain,None)
-            label_cat_counter.update(label_cat.cpu().numpy())
-            label_domain_counter.update(label_domain.cpu().numpy())
+            label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+            label_domain_counter.update(label_domain.cpu().numpy().astype(dtype=np.int32))
 
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
@@ -263,15 +263,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 index_cat    = cat_check.nonzero();
                 index_domain = domain_check.nonzero();
                 if not for_training:
-                    indexes_cat.append(index_cat.cpu().numpy());
-                    indexes_domain.append(index_domain.cpu().numpy());  
+                    indexes_cat.append(index_cat.cpu().numpy().astype(dtype=np.int32));
+                    indexes_domain.append(index_domain.cpu().numpy().astype(dtype=np.int32));  
                 ## filter labels between classification and domain 
                 label_cat    = label_cat[index_cat];
                 label_domain = label_domain[index_domain];
                 label_cat    = _flatten_label(label_cat,None)
                 label_domain = _flatten_label(label_domain,None)                    
-                label_cat_counter.update(label_cat.cpu().numpy())
-                label_domain_counter.update(label_domain.cpu().numpy())
+                label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+                label_domain_counter.update(label_domain.cpu().numpy().astype(dtype=np.int32))
 
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
@@ -293,22 +293,22 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### store truth labels for classification and regression as well as observers
                 for k, v in y_cat.items():
                     if not for_training:
-                        labels_cat[k].append(_flatten_label(v,None).cpu().numpy())
+                        labels_cat[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
                     else:
-                        labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy())
+                        labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy().astype(dtype=np.int32))
                 for k, v in y_reg.items():
                     if not for_training:
-                        targets[k].append(v.cpu().numpy())                
+                        targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
                     else:
-                        targets[k].append(v[index_cat].cpu().numpy())                
+                        targets[k].append(v[index_cat].cpu().numpy().astype(dtype=np.float32))
                 for k, v in y_domain.items():
                     if not for_training:
-                        labels_domain[k].append(_flatten_label(v,None).cpu().numpy())
+                        labels_domain[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
                     else:
-                        labels_domain[k].append(_flatten_label(v[index_domain],None).cpu().numpy())
+                        labels_domain[k].append(_flatten_label(v[index_domain],None).cpu().numpy().astype(dtype=np.int32))
                 if not for_training:
                     for k, v in Z.items():                
-                        observers[k].append(v.cpu().numpy())
+                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 ### evaluate model
                 model_output = model(*inputs)
@@ -338,9 +338,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         model_output_domain = model_output_domain.squeeze().float();
 
                     ### save scores as they are
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy());
-                    scores_domain.append(torch.softmax(model_output_domain,dim=1).cpu().numpy());
-                    scores_reg.append(model_output_reg.cpu().numpy())
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.int32));
+                    scores_domain.append(torch.softmax(model_output_domain,dim=1).cpu().numpy().astype(dtype=np.int32));
+                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.int32));
                     
                     ### in testing filter now the interesting samples
                     if not for_training:
@@ -377,23 +377,23 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         total_domain_loss += loss_domain
                 else:                    
                     _logger.warning('Wrong dimension of model output (cat vs reg vs domain vs samples in batch) for batch %d'%(num_batches))
-                    pred_cat    = torch.zeros(num_cat_examples).cpu().numpy();
-                    pred_domain = torch.zeros(num_domain_examples).cpu().numpy();
-                    pred_reg    = torch.zeros(num_cat_examples).cpu().numpy();
+                    pred_cat    = torch.zeros(num_cat_examples).cpu().numpy().astype(dtype=np.int32);
+                    pred_domain = torch.zeros(num_domain_examples).cpu().numpy().astype(dtype=np.int32);
+                    pred_reg    = torch.zeros(num_cat_examples).cpu().numpy().astype(dtype=np.float32);
                     if for_training:
-                        scores_cat.append(torch.zeros(num_cat_examples,num_labels).cpu().numpy());
-                        scores_domain.append(torch.zeros(num_domain_examples,num_labels_domain).cpu().numpy());
+                        scores_cat.append(torch.zeros(num_cat_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+                        scores_domain.append(torch.zeros(num_domain_examples,num_labels_domain).cpu().numpy().astype(dtype=np.float32));
                         if num_targets > 1:
-                            scores_reg.append(torch.zeros(num_cat_examples,num_targets).cpu().numpy());
+                            scores_reg.append(torch.zeros(num_cat_examples,num_targets).cpu().numpy().astype(dtype=np.float32));
                         else:
-                            scores_reg.append(torch.zeros(num_cat_examples).cpu().numpy());
+                            scores_reg.append(torch.zeros(num_cat_examples).cpu().numpy().astype(dtype=np.float32));
                     else:
-                        scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).cpu().numpy());
-                        scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).cpu().numpy());
+                        scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+                        scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).cpu().numpy().astype(dtype=np.float32));
                         if num_targets > 1:
-                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).cpu().numpy());
+                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).cpu().numpy().astype(dtype=np.float32));
                         else:
-                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).cpu().numpy());
+                            scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).cpu().numpy().astype(dtype=np.float32));
 
                 num_batches += 1
                 count_cat += num_cat_examples
@@ -545,7 +545,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check in tq:
             ### input features for the model
-            inputs = {k: v.numpy() for k, v in X.items()}
+            inputs = {k: v.numpy().astype(dtype=np.float32) for k, v in X.items()}
             ### build classification true labels
             label_cat    = y_cat[data_config.label_names[0]].long()
             label_domain = y_domain[data_config.label_domain_names[0]].long()
@@ -553,14 +553,14 @@ def evaluate_onnx_classreg(model_path, test_loader,
             domain_check = y_domain_check[data_config.labelcheck_domain_names[0]].long()
             index_cat    = cat_check.nonzero();
             index_domain = domain_check.nonzero();
-            indexes_cat.append(index_cat.cpu().numpy());
-            indexes_domain.append(index_domain.cpu().numpy());  
+            indexes_cat.append(index_cat.cpu().numpy().astype(dtype=np.int32));
+            indexes_domain.append(index_domain.cpu().numpy().astype(dtype=np.int32));  
             label_cat    = label_cat[index_cat];
             label_domain = label_domain[index_domain];
             label_cat    = _flatten_label(label_cat,None)
             label_domain = _flatten_label(label_domain,None)                    
-            label_cat_counter.update(label_cat.cpu().numpy())
-            label_domain_counter.update(label_domain.cpu().numpy())
+            label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+            label_domain_counter.update(label_domain.cpu().numpy().astype(dtype=np.int32))
 
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
@@ -576,13 +576,13 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
             ### define truth labels for classification and regression
             for k, v in y_cat.items():
-                labels_cat[k].append(_flatten_label(v,None).cpu().numpy())
+                labels_cat[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
             for k, v in y_domain.items():
-                labels_domain[k].append(_flatten_label(v,None).cpu().numpy())
+                labels_domain[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
             for k, v in y_reg.items():
-                targets[k].append(v.cpu().numpy())                
+                targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
             for k, v in Z.items():                
-                observers[k].append(v.cpu().numpy())
+                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
             ### send to device
             label_cat    = label_cat.to(dev,non_blocking=True)
@@ -604,9 +604,9 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 model_output_cat = model_output_cat.squeeze().float();
                 model_output_domain = model_output_domain.squeeze().float();
                 model_output_reg = model_output_reg.squeeze().float();
-                scores_cat.append(model_output_cat.cpu().numpy());
-                scores_domain.append(model_output_domain.cpu().numpy());
-                scores_reg.append(model_output_reg.cpu().numpy())                        
+                scores_cat.append(model_output_cat.cpu().numpy().astype(dtype=np.float32));
+                scores_domain.append(model_output_domain.cpu().numpy().astype(dtype=np.float32));
+                scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32))                        
                 _, pred_cat    = model_output_cat.max(1);
                 _, pred_domain = model_output_domain.max(1);
                 pred_reg       = model_output_reg.float();
@@ -615,12 +615,12 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 pred_cat = torch.zeros(num_cat_examples).cpu().numpy();
                 pred_reg = torch.zeros(num_cat_examples).cpu().numpy();
                 pred_domain = torch.zeros(num_domain_examples).cpu().numpy();
-                scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).cpu().numpy());
-                scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).cpu().numpy());
+                scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+                scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).cpu().numpy().astype(dtype=np.float32));
                 if num_targets > 1:
-                    scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).cpu().numpy());
+                    scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).cpu().numpy().astype(dtype=np.float32));
                 else:
-                    scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).cpu().numpy());
+                    scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).cpu().numpy().astype(dtype=np.float32));
                     
             pred_cat    = pred_cat[index_cat];
             pred_reg    = pred_reg[index_cat];

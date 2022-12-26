@@ -56,7 +56,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             label = _flatten_label(label, label_mask)
 
             num_examples = label.shape[0]
-            label_counter.update(label.cpu().numpy())
+            label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
             label = label.to(dev,non_blocking=True)
 
             model.zero_grad(set_to_none=True)
@@ -164,23 +164,23 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 except KeyError:
                     label_mask = None
                 if not for_training and label_mask is not None:
-                    labels_counts.append(np.squeeze(label_mask.cpu().numpy().sum(axis=-1)))
+                    labels_counts.append(np.squeeze(label_mask.cpu().numpy().sum(axis=-1).astype(dtype=np.int32)))
 
                 label = _flatten_label(label, label_mask)
                 num_examples = label.shape[0]
-                label_counter.update(label.cpu().numpy())
+                label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
                 for k, v in y_cat.items():
-                    labels[k].append(_flatten_label(v,label_mask).cpu().numpy())
+                    labels[k].append(_flatten_label(v,label_mask).cpu().numpy().astype(dtype=np.int32))
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.cpu().numpy())
+                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 label = label.to(dev,non_blocking=True)
 
                 model_output = model(*inputs)
                 model_output = _flatten_preds(model_output, label_mask)
                 
-                scores.append(torch.softmax(model_output,dim=1).cpu().numpy())
+                scores.append(torch.softmax(model_output,dim=1).cpu().numpy().astype(dtype=np.float32))
                 
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
@@ -271,17 +271,17 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, _, _, Z, _, _ in tq:
-            inputs = {k: v.cpu().numpy() for k, v in X.items()}
+            inputs = {k: v.cpu().numpy().astype(dtype=np.float32) for k, v in X.items()}
             label = y_cat[data_config.label_names[0]].long()
             num_examples = label.shape[0]
-            label_counter.update(label.cpu.numpy())
+            label_counter.update(label.cpu.numpy().astype(dtype=np.int32))
             for k, v in y_cat.items():
-                labels[k].append(v.cpu().numpy())
+                labels[k].append(v.cpu().numpy().astype(dtype=np.int32))
             for k, v in Z.items():
-                observers[k].append(v.cpu().numpy())
+                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score));
-            scores.append(score.cpu().numpy())
+            scores.append(score.cpu().numpy().astype(dtype=np.float32))
             preds = score.squeeze().float().argmax(1)
             label = label.squeeze();
             correct = (preds == label).sum()
@@ -439,13 +439,13 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                 num_examples = target.shape[0]
                 target = target.to(dev,non_blocking=True)
                 for k, v in y_reg.items():
-                    targets[k].append(v.cpu().numpy())
+                    targets[k].append(v.cpu().numpy().astype(dtype=np.float32))
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.cpu().numpy())
+                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 model_output = model(*inputs)
-                scores.append(preds.cpu().numpy())      
+                scores.append(preds.cpu().numpy().astype(dtype=np.float32))      
                 model_output = model_output.squeeze().float();
                 target =  target.squeeze();
 
@@ -537,7 +537,7 @@ def evaluate_onnx_regression(model_path, test_loader,
 
     with tqdm.tqdm(test_loader) as tq:
         for X, _, y_reg, _, Z, _, _ in tq:
-            inputs = {k: v.numpy() for k, v in X.items()}
+            inputs = {k: v.numpy().astype(dtype=np.float32) for k, v in X.items()}
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y[names].float();
@@ -545,13 +545,13 @@ def evaluate_onnx_regression(model_path, test_loader,
                     target = torch.column_stack((target,y[names].float()))
             num_examples = target.shape[0]            
             for k, v in y.items():
-                targets[k].append(v.cpu().numpy())
+                targets[k].append(v.cpu().numpy().astype(dtype=np.float32))
             for k, v in Z.items():
-                observers[k].append(v.cpu().numpy())
+                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score))
-            scores.append(score.cpu().numpy())
+            scores.append(score.cpu().numpy().astype(dtype=np.float32))
             preds = score.squeeze().float();
             target = target.squeeze();
 
