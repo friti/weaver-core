@@ -960,7 +960,6 @@ def _main(args):
             _logger.info('Loading model %s for eval' % model_path)
  
             if isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
-                model.module.load_state_dict(torch.load(model_path, map_location=dev))
                 if args.backend is not None:
                     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
                     if gpus is not None and len(gpus) > 1:
@@ -968,6 +967,7 @@ def _main(args):
                 else:
                     if gpus is not None and len(gpus) > 1:
                         model = torch.nn.DataParallel(model, device_ids=gpus)
+                model.module.load_state_dict(torch.load(model_path, map_location=dev))
             else:
                 model.load_state_dict(torch.load(model_path, map_location=dev))
                     
