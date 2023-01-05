@@ -405,14 +405,9 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                         eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     model.eval()
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
     gc.enable();
-
-    if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
-    else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
 
     data_config = test_loader.dataset.config
 
@@ -744,12 +739,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     model.eval()
 
-    if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
-    else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     gc.enable();
 

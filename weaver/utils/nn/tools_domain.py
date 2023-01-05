@@ -32,7 +32,6 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
 
     model.train()
-
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
     gc.enable();
@@ -221,14 +220,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     model.eval()
-
-    if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
-    else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
-
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
     gc.enable();
 
     data_config = test_loader.dataset.config
