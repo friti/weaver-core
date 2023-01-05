@@ -738,10 +738,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     model.eval()
-
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
-
+    if for_training:
+        torch.backends.cudnn.benchmark = True;
+        torch.backends.cudnn.enabled = True;
+    else:
+        torch.backends.cudnn.benchmark = False;
+        torch.backends.cudnn.enabled = False;
     gc.enable();
 
     data_config = test_loader.dataset.config
