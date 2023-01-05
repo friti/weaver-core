@@ -128,15 +128,10 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
+
     model.eval()
-
-    if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
-    else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
-
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
     gc.enable();
 
     data_config = test_loader.dataset.config
