@@ -958,18 +958,17 @@ def _main(args):
             model_path = args.model_prefix if args.model_prefix.endswith(
                 '.pt') else args.model_prefix + '_best_epoch_state.pt'
             _logger.info('Loading model %s for eval' % model_path)
- 
-            if isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
-                if args.backend is not None:
-                    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-                    if gpus is not None and len(gpus) > 1:
-                        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
-                else:
-                    if gpus is not None and len(gpus) > 1:
-                        model = torch.nn.DataParallel(model, device_ids=gpus)
-                model.module.load_state_dict(torch.load(model_path, map_location=dev))
+             
+            if args.backend is not None:
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+                if gpus is not None and len(gpus) > 1:
+                    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=None, output_device=None, find_unused_parameters=True, gradient_as_bucket_view=True)
             else:
-                model.load_state_dict(torch.load(model_path, map_location=dev))
+                if gpus is not None and len(gpus) > 1:
+                    model = torch.nn.DataParallel(model, device_ids=gpus)
+                    model.module.load_state_dict(torch.load(model_path, map_location=dev))
+                else:
+                    model.load_state_dict(torch.load(model_path, map_location=dev))
                     
         for name, get_test_loader in test_loaders.items():
             test_loader = get_test_loader()
