@@ -21,7 +21,6 @@ def _finalize_inputs(table, data_config):
         if k in data_config.observer_names:
             a = ak.to_numpy(table[k])
             if a.dtype in (np.uint16, np.uint32, np.uint64):
-                # FIXME: hack as torch only supports float64, float32, float16, complex64, complex128, int64, int32, int16, int8, uint8, and bool
                 a = a.astype('int64')
             output[k] = a
     # copy labels

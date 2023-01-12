@@ -808,7 +808,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### save scores
                 if model_output_cat.shape[0] == num_examples and model_output_reg.shape[0] == num_examples:
                     scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
-                    scores_reg.append(model_output_reg.cpu().numpy())
+                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32))
                 else:
                     scores_cat.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
                     if num_targets > 1:
@@ -964,7 +964,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
             for k, name in enumerate(data_config.target_names):
                 targets[name].append(y_reg[name].cpu().numpy().astype(dtype=np.float32))                
             for k, v in Z.items():
-                observers[k].append(v.cpu().numpy())
+                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             ### evaluate the network
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score));

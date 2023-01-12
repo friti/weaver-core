@@ -293,16 +293,19 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         labels_cat[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
                     else:
                         labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy().astype(dtype=np.int32))
-                for k, v in y_reg.items():
-                    if not for_training:
-                        targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
-                    else:
-                        targets[k].append(v[index_cat].cpu().numpy().astype(dtype=np.float32))
+
                 for k, v in y_domain.items():
                     if not for_training:
                         labels_domain[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
                     else:
                         labels_domain[k].append(_flatten_label(v[index_domain],None).cpu().numpy().astype(dtype=np.int32))
+
+                for k, v in y_reg.items():
+                    if not for_training:
+                        targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
+                    else:
+                        targets[k].append(v[index_cat].cpu().numpy().astype(dtype=np.float32))
+
                 if not for_training:
                     for k, v in Z.items():                
                         observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
@@ -335,9 +338,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         model_output_domain = model_output_domain.squeeze().float();
 
                     ### save scores as they are
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.int32));
-                    scores_domain.append(torch.softmax(model_output_domain,dim=1).cpu().numpy().astype(dtype=np.int32));
-                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.int32));
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
+                    scores_domain.append(torch.softmax(model_output_domain,dim=1).cpu().numpy().astype(dtype=np.float32));
+                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
                     
                     ### in testing filter now the interesting samples
                     if not for_training:
