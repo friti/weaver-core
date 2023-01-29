@@ -696,7 +696,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 else:
                     label_domain_check = torch.column_stack((label_domain_check,v.long()))
                     index_domain_all = torch.cat((index_domain_all,v.long().nonzero()),0)
-
+                    
             label_domain = label_domain[index_domain_all];
             label_domain_check = label_domain_check[index_domain_all];
 
@@ -787,7 +787,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 correct_domain = (pred_domain == label_domain).sum().item()
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples                
-            ## multiple domains
+                ## multiple domains
             else:
                 correct_domain = 0;
                 for idx, (k,v) in enumerate(y_domain_check.items()):
@@ -799,18 +799,16 @@ def evaluate_onnx_classreg(model_path, test_loader,
                     correct_domain += (pred_domain == label).sum().item()
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples                
-            
-                ### monitor results
-                tq.set_postfix({
-                    'AccCat': '%.5f' % (correct_cat / num_cat_examples if num_cat_examples else 0),
-                    'AvgAccCat': '%.5f' % (total_cat_correct / count_cat if count_cat else 0),
-                    'AccDomain': '%.5f' % (correct_domain / num_domain_examples if num_domain_examples else 0),
-                    'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain else 0),
-                    'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
-                    'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0),
-                })
-            else:
-                _logger.warning('Wrong dimension of pred_cat or pred_reg or pred_domain for batch %d'%(num_batches))
+                
+            ### monitor results
+            tq.set_postfix({
+                'AccCat': '%.5f' % (correct_cat / num_cat_examples if num_cat_examples else 0),
+                'AvgAccCat': '%.5f' % (total_cat_correct / count_cat if count_cat else 0),
+                'AccDomain': '%.5f' % (correct_domain / num_domain_examples if num_domain_examples else 0),
+                'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain else 0),
+                'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
+                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0),
+            })
                 
     time_diff = time.time() - start_time
     _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
@@ -831,15 +829,15 @@ def evaluate_onnx_classreg(model_path, test_loader,
     observers = {k: _concat(v) for k, v in observers.items()}
 
     metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat].squeeze(),scores_cat[indexes_cat].squeeze(),eval_metrics=eval_cat_metrics)            
-        _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+    _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
+        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
     for idx, (name,element) in enumerate(labels_domain.items()):
         metric_domain_results = evaluate_metrics(element[indexes_domain[name]].squeeze(),scores_domain[name][indexes_domain[name]].squeeze(),eval_metrics=eval_cat_metrics)
         _logger.info('Evaluation Domain metrics for '+name+' : \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
-
-
+        
+        
     for idx, (name,element) in enumerate(targets.items()):
         if num_targets == 1:
             metric_reg_results = evaluate_metrics(element[indexes_cat].squeeze(), scores_reg[indexes_cat].squeeze(), eval_metrics=eval_reg_metrics)
