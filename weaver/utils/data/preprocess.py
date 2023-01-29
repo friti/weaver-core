@@ -64,7 +64,7 @@ def _build_weights(table, data_config, reweight_hists=None, warn=_logger.warning
         if data_config.reweight_exclude_classes:
             for label in data_config.reweight_exclude_classes:
                 pos = table[label] == 1
-                wgt[pos] = 1;
+                wgt[pos] = -1.;
                 sum_evts += np.sum(pos)
         if sum_evts != len(table):
             warn(

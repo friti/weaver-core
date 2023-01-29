@@ -100,8 +100,9 @@ class DataConfig(object):
                 assert(isinstance(self.label_value, list))
                 self.label_names = ('_label_',)
                 self.labelcheck_names = ('_labelcheck_',)
-                self.var_funcs['_label_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
-                self.var_funcs['_labelcheck_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_value))
+                label_exprs = ['ak.to_numpy(%s)' % k for k in self.label_value]
+                self.var_funcs['_label_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
+                self.var_funcs['_labelcheck_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
             else:
                 self.label_names = tuple(self.label_value.keys())
                 self.var_funcs.update(self.label_value)
@@ -116,21 +117,32 @@ class DataConfig(object):
         if opts['labels_domain']:
             self.label_domain_type = opts['labels_domain']['type']
             self.label_domain_value = opts['labels_domain']['value']
+            self.label_domain_loss_weight = None
             if self.label_domain_type == 'simple':
                 assert(isinstance(self.label_domain_value, list))
                 self.label_domain_names = ('_label_domain_',)
                 self.labelcheck_domain_names = ('_labelcheck_domain_',)
-                self.var_funcs['_label_domain_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_domain_value))
-                self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(self.label_domain_value))
+                label_exprs = ['ak.to_numpy(%s)' % k for k in self.label_domain_value]
+                self.var_funcs['_label_domain_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
+                self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
             else:
-                self.label_domain_names = tuple(self.label_domain_value.keys())
-                self.var_funcs.update(self.label_label_value)
-                self.labelcheck_domain_names = None
+                self.label_domain_names = tuple(self.label_domain_value.keys())                
+                self.labelcheck_domain_names = ()
+                self.label_domain_loss_weight = opts['labels_domain']['loss_weight']            
+                label_check_exprs = [];
+                for key, value in self.label_domain_value.items():
+                    label_exprs = ['ak.to_numpy(%s)' % k for k in value]
+                    label_check_exprs.append(label_exprs);                    
+                    self.var_funcs[key] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))            
+                    self.labelcheck_domain_names += (key.replace('label','labelcheck'),);
+                    self.var_funcs[key.replace('label','labelcheck')] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))            
+                self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(','.join(value) for value in label_check_exprs))                
         else:
             self.label_domain_names = tuple();
             self.label_domain_type  = None;
             self.label_domain_value = None;
-            self.labelcheck_domain_names = None
+            self.labelcheck_domain_names = None;
+            self.label_domain_loss_weight = None;
                 
         # targets
         if opts['targets']:
@@ -207,6 +219,8 @@ class DataConfig(object):
                 _log('target_quantile: %s',' '.join([str(elem) for elem in self.target_quantile])) 
             if self.label_domain_names: 
                 _log('label_domain_names: %s', str(self.label_domain_names))
+            if self.label_domain_loss_weight:
+                _log('self.label_domain_loss_weight: %s',' '.join([str(elem) for elem in self.label_domain_loss_weight]))
             _log('observer_names: %s', str(self.observer_names))
             _log('monitor_variables: %s', str(self.monitor_variables))
             if opts['weights'] is not None:

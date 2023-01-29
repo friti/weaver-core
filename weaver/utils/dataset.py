@@ -51,7 +51,7 @@ def _finalize_inputs(table, data_config):
         if len(names) == 1 and data_config.preprocess_params[names[0]]['length'] is None:
             output['_' + k] = ak.to_numpy(ak.values_astype(table[names[0]], 'float32'))
         else:
-            output['_' + k] = ak.to_numpy(np.stack([ak.values_astype(table[n], 'float32') for n in names], axis=1))
+            output['_' + k] = ak.to_numpy(np.stack([ak.to_numpy(ak.values_astype(table[n], 'float32')) for n in names], axis=1))
     # copy monitor variables
     for k in data_config.z_variables:
         if k not in output:
@@ -59,21 +59,39 @@ def _finalize_inputs(table, data_config):
     return output
 
 
-def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale=1):
-    all_indices = np.arange(len(weights))
-    randwgt = np.random.uniform(low=0, high=weight_scale, size=len(weights))
-    keep_flags = randwgt < weights
+def _get_reweight_indices(weights, up_sample=True, max_resample=10, max_resample_dom=2, weight_scale=1):
+    ## separate domain events from normal ones
+    indices_cat = np.argwhere(weights>=0).squeeze();
+    weights_cat = weights[indices_cat].squeeze();
+    randwgt_cat = np.random.uniform(low=0, high=weight_scale, size=len(weights_cat))
+    keep_flags_cat  = randwgt_cat < weights_cat
+
+    indices_dom = np.argwhere(weights<0).squeeze();
+    weights_dom = weights[indices_dom].squeeze();
+    randwgt_dom    = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom))
+    keep_flags_dom = randwgt_dom < np.absolute(weights_dom)
+
     if not up_sample:
-        keep_indices = all_indices[keep_flags]
+        keep_indices_cat = indices_cat[keep_flags_cat]
+        if np.any(indices_dom):
+            keep_indices_dom = indices_dom[keep_flags_dom]
     else:
-        n_repeats = len(weights) // max(1, int(keep_flags.sum()))
+        n_repeats = len(weights_cat) // max(1, int(keep_flags_cat.sum()))
         if n_repeats > max_resample:
             n_repeats = max_resample
-        all_indices = np.repeat(np.arange(len(weights)), n_repeats)
-        randwgt = np.random.uniform(low=0, high=weight_scale, size=len(weights) * n_repeats)
-        keep_indices = all_indices[randwgt < np.repeat(weights, n_repeats)]
-    return keep_indices.copy()
+        indices_cat = np.repeat(indices_cat,n_repeats)
+        randwgt_cat = np.random.uniform(low=0, high=weight_scale, size=len(weights_cat) * n_repeats)
+        keep_indices_cat = indices_cat[randwgt_cat < np.repeat(weights_cat, n_repeats)]
 
+        if np.any(indices_dom):
+            indices_dom = np.repeat(indices_dom,max_resample_dom)
+            randwgt_dom = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom) * max_resample_dom)
+            keep_indices_dom = indices_dom[randwgt_dom < np.repeat(np.absolute(weights_dom),  max_resample_dom)]
+        else:
+            keep_indices_dom = np.empty();
+
+    keep_indices = np.concatenate((keep_indices_cat,keep_indices_dom),axis=0)
+    return keep_indices.copy()
 
 def _check_labels(table):
     if np.all(table['_labelcheck_'] == 1):
@@ -101,16 +119,14 @@ def _preprocess(table, data_config, options):
     # define new variables
     table = _build_new_variables(table, data_config.var_funcs)
     # check labels
-    if( data_config.label_domain_type is not None and data_config.label_domain_type == 'simple' and
-        data_config.label_type is not None and data_config.label_domain_type == 'simple' and
-        options['training']):
+    if(data_config.label_domain_type is not None and data_config.label_type is not None and data_config.label_domain_type == 'simple' and options['training']):
         _check_labels_domain(table)
-    elif data_config.label_type is not None and data_config.label_type == 'simple' and options['training']:
+    elif (data_config.label_domain_type is None and data_config.label_type is not None and data_config.label_type == 'simple' and options['training']):
         _check_labels(table)
     # compute reweight indices
-    if options['reweight'] and data_config.weight_name is not None:
+    if (options['reweight'] and data_config.weight_name is not None):
         wgts = _build_weights(table, data_config, warn=warn_once)
-        indices = _get_reweight_indices(wgts, up_sample=options['up_sample'],weight_scale=options['weight_scale'], max_resample=options['max_resample'])
+        indices = _get_reweight_indices(wgts, up_sample=options['up_sample'],weight_scale=options['weight_scale'], max_resample=options['max_resample'], max_resample_dom=options['max_resample_dom'])
     else:
         if len(data_config.label_names) > 0:
             indices = np.arange(len(table[data_config.label_names[0]]))
@@ -292,7 +308,7 @@ class _SimpleIter(object):
         y_cat_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_names}
         # labelcheck for domain
         if self._data_config.labelcheck_domain_names:
-            y_domain_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_domain_names}
+            y_domain_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_domain_names}            
         else:
             y_domain_check = {};
         return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check 
@@ -323,7 +339,7 @@ class SimpleIterDataset(torch.utils.data.IterableDataset):
 
     def __init__(self, file_dict, data_config_file, for_training=True, load_range_and_fraction=None,
                  fetch_by_files=False, fetch_step=0.01, file_fraction=1, remake_weights=False, up_sample=True,
-                 weight_scale=1, max_resample=10, async_load=True, infinity_mode=False, in_memory=False, name=''):
+                 weight_scale=1, max_resample=10, max_resample_dom=2, async_load=True, infinity_mode=False, in_memory=False, name=''):
         self._iters = {} if infinity_mode or in_memory else None
         _init_args = set(self.__dict__.keys())
         self._init_file_dict = file_dict
@@ -341,6 +357,7 @@ class SimpleIterDataset(torch.utils.data.IterableDataset):
             'up_sample': up_sample,
             'weight_scale': weight_scale,
             'max_resample': max_resample,
+            'max_resample_dom': max_resample_dom,
         }
 
         if for_training:
