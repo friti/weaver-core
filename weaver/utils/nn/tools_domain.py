@@ -438,6 +438,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         scores_domain[name].append(torch.softmax(
                             score_domain[index_domain[list(y_domain_check.keys())[idx]]].squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
                 else:
+
+                    model_output_cat = model_output_cat.float();
+                    model_output_reg = model_output_reg.float();
+                    model_output_domain = model_output_domain.float();
+
                     scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
                     scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
                     for idx, name in enumerate(y_domain.keys()):
@@ -622,40 +627,52 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
     data_config = test_loader.dataset.config
     label_cat_counter = Counter()
-    label_domain_counter = Counter()
     total_loss, num_batches, total_cat_correct, total_domain_correct, sum_sqr_err, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
     scores_cat, scores_reg, scores_domain = [], [], []
+    scores_domain  = defaultdict(list); 
     pred_cat, pred_domain, pred_reg = None, None, None;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
     indexes_cat = [];
-    indexes_domain = [];
- 
-    start_time = time.time()
+    indexes_domain = defaultdict(list); 
+    index_offset = 0;
 
+    ### number of classification labels
     num_labels = len(data_config.label_value);
-    num_labels_domain = len(data_config.label_domain_value);
-    num_targets = len(data_config.target_value);
+    ### number of targets
+    if type(data_config.target_value) == dict:
+        num_targets = sum(len(dct) if type(dct) == list else 1 for dct in data_config.target_value.values())
+    else:
+        num_targets = len(data_config.target_value);
+    ### total number of domain regions
+    num_domains = len(data_config.label_domain_names);
+    ### total number of domain labels
+    if type(data_config.label_domain_value) == dict:
+        num_labels_domain = sum(len(dct) if type(dct) == list else 1 for dct in data_config.label_domain_value.values())
+    else:
+        num_labels_domain = len(data_config.label_domain_value);
+    ### number of labels per region as a list
+    if type(data_config.label_domain_value) == dict:
+        ldomain = [len(dct) if type(dct) == list else 1 for dct in data_config.label_domain_value.values()]
+    else:
+        ldomain = [len(data_config.label_domain_value)];
+    ### label counter
+    label_domain_counter = [];
+    for idx, names in enumerate(data_config.label_domain_names):
+        label_domain_counter.append(Counter())
+
+    start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check in tq:
             ### input features for the model
             inputs = {k: v.numpy().astype(dtype=np.float32) for k, v in X.items()}
+
             ### build classification true labels
-            label_cat    = y_cat[data_config.label_names[0]].long()
-            label_domain = y_domain[data_config.label_domain_names[0]].long()
-            cat_check    = y_cat_check[data_config.labelcheck_names[0]].long()
-            domain_check = y_domain_check[data_config.labelcheck_domain_names[0]].long()
-            index_cat    = cat_check.nonzero();
-            index_domain = domain_check.nonzero();
-            indexes_cat.append(index_cat.cpu().numpy().astype(dtype=np.int32));
-            indexes_domain.append(index_domain.cpu().numpy().astype(dtype=np.int32));  
-            label_cat    = label_cat[index_cat];
-            label_domain = label_domain[index_domain];
-            label_cat    = _flatten_label(label_cat,None)
-            label_domain = _flatten_label(label_domain,None)                    
-            label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
-            label_domain_counter.update(label_domain.cpu().numpy().astype(dtype=np.int32))
+            label_cat = y_cat[data_config.label_names[0]].long()
+            cat_check = y_cat_check[data_config.labelcheck_names[0]].long()
+            index_cat = cat_check.nonzero();
+            label_cat = label_cat[index_cat];
 
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
@@ -665,20 +682,56 @@ def evaluate_onnx_classreg(model_path, test_loader,
                     target = torch.column_stack((target,y_reg[names].float()))
             target = target[index_cat];
 
+            ### build domain true labels (numpy argmax)                                                                                                                                   
+            for idx, (k,v) in enumerate(y_domain.items()):
+                if idx == 0:
+                    label_domain = v.long();
+                else:
+                    label_domain = torch.column_stack((label_domain,v.long()))
+
+            for idx, (k, v) in enumerate(y_domain_check.items()):
+                if idx == 0:
+                    label_domain_check = v.long();
+                    index_domain_all = v.long().nonzero();
+                else:
+                    label_domain_check = torch.column_stack((label_domain_check,v.long()))
+                    index_domain_all = torch.cat((index_domain_all,v.long().nonzero()),0)
+
+            label_domain = label_domain[index_domain_all];
+            label_domain_check = label_domain_check[index_domain_all];
+
+            ### edit labels                                                                                                                                                                      
+            label_cat = _flatten_label(label_cat,None)
+            label_domain = label_domain.squeeze()
+            label_domain_check = label_domain_check.squeeze()
+
+            ### counters
+            label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+            index_domain = defaultdict(list)
+            for idx, (k,v) in enumerate(y_domain_check.items()):
+                if num_domains == 1:
+                    index_domain[k] = label_domain_check.nonzero();
+                    label_domain_counter[idx].update(label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32))
+                else:
+                    index_domain[k] = label_domain_check[:,idx].nonzero();
+                    label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
+
             ### update counters
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
             num_domain_examples = label_domain.shape[0]
 
             ### define truth labels for classification and regression
+            indexes_cat.append((index_offset+index_cat).cpu().numpy().astype(dtype=np.int32));
             for k, v in y_cat.items():
                 labels_cat[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
-            for k, v in y_domain.items():
-                labels_domain[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
             for k, v in y_reg.items():
                 targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
             for k, v in Z.items():                
                 observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
-
+            for idx, (k, v) in enumerate(y_domain.items()):
+                labels_domain[k].append(v.squeeze().cpu().numpy().astype(dtype=np.int32))
+                indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).cpu().numpy().astype(dtype=np.int32));
+  
             ### send to device
             label_cat    = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
@@ -688,54 +741,64 @@ def evaluate_onnx_classreg(model_path, test_loader,
             model_output = sess.run([], inputs)
             model_output = torch.as_tensor(np.array(model_output));
             
-            if (model_output_cat.shape[0] == model_output_reg.shape[0] and 
-                model_output_cat.shape[0] == model_output_domain.shape[0] and 
-                model_output_cat.shape[0] == num_cat_examples+num_domain_examples):
-                model_output_cat = model_output[:,:num_labels]
-                model_output_reg = model_output[:,num_labels:num_labels+num_targets];
-                model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
-                model_output_cat    = _flatten_preds(model_output_cat,None)
-                model_output_domain = _flatten_preds(model_output_domain,None)
-                model_output_cat = model_output_cat.squeeze().float();
-                model_output_domain = model_output_domain.squeeze().float();
-                model_output_reg = model_output_reg.squeeze().float();
-                scores_cat.append(model_output_cat.cpu().numpy().astype(dtype=np.float32));
-                scores_domain.append(model_output_domain.cpu().numpy().astype(dtype=np.float32));
-                scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32))                        
-                _, pred_cat    = model_output_cat.max(1);
-                _, pred_domain = model_output_domain.max(1);
-                pred_reg       = model_output_reg.float();
-            else:
-                _logger.warning('Wrong dimension of model output (cat vs reg vs domain vs samples in batch) for batch %d'%(num_batches))
-                pred_cat = torch.zeros(num_cat_examples).cpu().numpy();
-                pred_reg = torch.zeros(num_cat_examples).cpu().numpy();
-                pred_domain = torch.zeros(num_domain_examples).cpu().numpy();
-                scores_cat.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
-                scores_domain.append(torch.zeros(num_cat_examples+num_domain_examples,num_labels_domain).cpu().numpy().astype(dtype=np.float32));
-                if num_targets > 1:
-                    scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples,num_targets).cpu().numpy().astype(dtype=np.float32));
-                else:
-                    scores_reg.append(torch.zeros(num_cat_examples+num_domain_examples).cpu().numpy().astype(dtype=np.float32));
-                    
-            pred_cat    = pred_cat[index_cat];
-            pred_reg    = pred_reg[index_cat];
-            pred_domain = pred_domain[index_domain];
+            model_output_cat = model_output[:,:num_labels]
+            model_output_reg = model_output[:,num_labels:num_labels+num_targets].float();
+            model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain].float()
+            model_output_cat = _flatten_preds(model_output_cat,None).float()
+            label_cat = label_cat.squeeze();
+            label_domain = label_domain.squeeze();
+            target = target.squeeze();
+
+            scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
+            scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
+            for idx, name in enumerate(y_domain.keys()):
+                id_dom = idx*ldomain[idx];
+                score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
+                scores_domain[name].append(torch.softmax(score_domain.squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
+            
+            model_output_cat = model_output_cat[index_cat];
+            model_output_reg = model_output_reg[index_cat];
+            model_output_domain = model_output_domain[index_domain_all];                        
+
+            ### adjsut outputs
+            model_output_cat = model_output_cat.squeeze().float();
+            model_output_reg = model_output_reg.squeeze().float();
+            model_output_domain = model_output_domain.squeeze().float();
 
             num_batches += 1
-            count_cat += num_cat_examples
-            count_domain += num_domain_examples
-             
-            if (pred_cat.shape[0] == num_cat_examples and 
-                pred_reg.shape[0] == num_cat_examples and 
-                pred_domain.shape[0] == num_domain_examples):
+            index_offset += (num_cat_examples+num_domain_examples)
 
+            ## prediction + metric for classification
+            if label_cat.nelement():
+                _, pred_cat = model_output_cat.max(1);
                 correct_cat = (pred_cat == label_cat).sum().item()
+                count_cat += num_cat_examples
                 total_cat_correct += correct_cat
-                correct_domain = (pred_domain == label_domain).sum().item()
-                total_domain_correct += correct_domain
+                ## prediction + metric for regression
+                pred_reg = model_output_reg.float();
                 residual_reg = pred_reg - target;
                 sqr_err = residual_reg.square().sum().item()
                 sum_sqr_err += sqr_err
+
+            ## single domain region                                                                                                                                                          
+            if num_domains == 1:
+                if not label_domain.nelement(): continue;
+                _, pred_domain = model_output_domain.detach().max(1);
+                correct_domain = (pred_domain == label_domain).sum().item()
+                total_domain_correct += correct_domain
+                count_domain += num_domain_examples                
+            ## multiple domains
+            else:
+                correct_domain = 0;
+                for idx, (k,v) in enumerate(y_domain_check.items()):
+                    if not label_domain[index_domain[k],idx].nelement(): continue;
+                    id_dom = idx*ldomain[idx];
+                    label = label_domain[index_domain[k],idx].squeeze()
+                    pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]]
+                    _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
+                    correct_domain += (pred_domain == label).sum().item()
+                total_domain_correct += correct_domain
+                count_domain += num_domain_examples                
             
                 ### monitor results
                 tq.set_postfix({
@@ -751,40 +814,44 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 
     time_diff = time.time() - start_time
     _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count_cat+count_domain, (count_cat+count_domain) / time_diff))
+    _logger.info('Eval AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
+    _logger.info('Eval AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
+    _logger.info('Eval AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
     _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_cat_counter.items())))
-    _logger.info('Evaluation domain distribution: \n    %s', str(sorted(label_domain_counter.items())))
+    _logger.info('Train domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
     
     scores_cat = np.concatenate(scores_cat).squeeze()
     scores_reg = np.concatenate(scores_reg).squeeze()
-    scores_domain = np.concatenate(scores_domain).squeeze()
-
+    scores_domain = {k: _concat(v) for k, v in scores_domain.items()}
     indexes_cat = np.concatenate(indexes_cat).squeeze()
-    indexes_domain = np.concatenate(indexes_domain).squeeze()
-
+    indexes_domain = {k: _concat(v) for k, v in indexes_domain.items()}
     labels_cat  = {k: _concat(v) for k, v in labels_cat.items()}
     labels_domain  = {k: _concat(v) for k, v in labels_domain.items()}
     targets = {k: _concat(v) for k, v in targets.items()}
     observers = {k: _concat(v) for k, v in observers.items()}
 
-    metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat],scores_cat[indexes_cat],eval_metrics=eval_cat_metrics)        
-    _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
-        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+    metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat].squeeze(),scores_cat[indexes_cat].squeeze(),eval_metrics=eval_cat_metrics)            
+        _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
+            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
-    metric_domain_results = evaluate_metrics(labels_domain[data_config.label_domain_names[0]][indexes_domain],scores_domain[indexes_domain], eval_metrics=eval_cat_metrics)    
-    _logger.info('Evaluation Domain metrics: \n%s', '\n'.join(
-        ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
+    for idx, (name,element) in enumerate(labels_domain.items()):
+        metric_domain_results = evaluate_metrics(element[indexes_domain[name]].squeeze(),scores_domain[name][indexes_domain[name]].squeeze(),eval_metrics=eval_cat_metrics)
+        _logger.info('Evaluation Domain metrics for '+name+' : \n%s', '\n'.join(
+            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
 
-    _logger.info('Evaluation of regression metrics\n')
+
     for idx, (name,element) in enumerate(targets.items()):
         if num_targets == 1:
-            metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat], eval_metrics=eval_reg_metrics)
+            metric_reg_results = evaluate_metrics(element[indexes_cat].squeeze(), scores_reg[indexes_cat].squeeze(), eval_metrics=eval_reg_metrics)
         else:
-            metric_reg_results = evaluate_metrics(element[indexes_cat], scores_reg[indexes_cat,idx], eval_metrics=eval_reg_metrics)
-        _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
-    
-    scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
-    scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)        
+            metric_reg_results = evaluate_metrics(element[indexes_cat].squeeze(), scores_reg[indexes_cat,idx].squeeze(), eval_metrics=eval_reg_metrics)
+            _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
+                ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
+            
+    scores_reg = scores_reg.reshape(len(scores_reg),num_targets);
+    scores_domain = np.concatenate(list(scores_domain.values()),axis=1);
+    scores_domain = scores_domain.reshape(len(scores_domain),num_labels_domain);
+    scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)
     gc.collect();
     return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
