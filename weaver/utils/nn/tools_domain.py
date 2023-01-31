@@ -118,7 +118,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             num_domain_examples = label_domain.shape[0];
 
             label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32)
-            if isinstance(label_cat_np, Iterable):
+            if np.iterable(label_cat_np):
                 label_cat_counter.update(label_cat_np)
             else:
                 _logger.info('label_cat_np not iterable --> shape ',label_cat_np.shape)
@@ -128,14 +128,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if num_domains == 1:
                     index_domain[k] = label_domain_check.nonzero();
                     label_domain_np = label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32)
-                    if isinstance(label_domain_np,Iterable):
+                    if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np)
                     else:
                         _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
                 else:                    
                     index_domain[k] = label_domain_check[:,idx].nonzero();
                     label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
-                    if isinstance(label_domain_np, Iterable):
+                    if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np)
                     else:
                         _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
@@ -385,7 +385,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ### counters
                 label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32)
-                if isinstance(label_cat_np,Iterable):
+                if np.iterable(label_cat_np):
                     label_cat_counter.update(label_cat_np)
                 else:
                     _logger.info('label_cat_np not iterable --> shape ',label_cat_np.shape)
@@ -395,14 +395,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     if num_domains == 1:
                         index_domain[k] = label_domain_check.nonzero();
                         label_domain_np = label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32)
-                        if isinstance(label_domain_np,Iterable):
+                        if np.iterable(label_domain_np):
                             label_domain_counter[idx].update(label_domain_np);
                         else:
                             _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
                     else:
                         index_domain[k] = label_domain_check[:,idx].nonzero();
                         label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
-                        if isinstance(label_domain_np,Iterable):
+                        if np.iterable(label_domain_np):
                             label_domain_counter[idx].update(label_domain_np);
                         else:
                             _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
@@ -741,15 +741,21 @@ def evaluate_onnx_classreg(model_path, test_loader,
             label_domain_check = label_domain_check.squeeze()
 
             ### counters
-            label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+            label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32);
+            if np.iterable(label_cat_np):
+                label_cat_counter.update(label_cat_np)
             index_domain = defaultdict(list)
             for idx, (k,v) in enumerate(y_domain_check.items()):
                 if num_domains == 1:
                     index_domain[k] = label_domain_check.nonzero();
-                    label_domain_counter[idx].update(label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32))
+                    label_domain_np = label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32);
+                    if np.iterable(label_domain_np):
+                        label_domain_counter[idx].update(label_domain_np);
                 else:
                     index_domain[k] = label_domain_check[:,idx].nonzero();
-                    label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
+                    label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
+                    if np.iterable(label_domain_np):
+                        label_domain_counter[idx].update(label_domain_np);
 
             ### update counters
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
