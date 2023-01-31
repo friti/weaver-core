@@ -125,10 +125,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     index_domain[k] = label_domain_check.nonzero();
                     if label_domain[index_domain[k]].nelement():
                         label_domain_counter[idx].update(label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32))
-                else:
+                else:                    
                     index_domain[k] = label_domain_check[:,idx].nonzero();
                     if label_domain[index_domain[k],idx].nelement():
-                        label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
+                        a = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
+                        print(type(a)," ",a.shape)
+                        label_domain_counter[idx].update(a)
 
             ### send to GPU
             label_cat = label_cat.to(dev,non_blocking=True)
@@ -170,13 +172,16 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
-            loss_cat = loss_cat.detach().item()
-            loss_reg = loss_reg.detach().item()
-            loss_domain = loss_domain.detach().item()
             total_loss += loss
-            total_cat_loss += loss_cat;
-            total_reg_loss += loss_reg;
-            total_domain_loss += loss_domain;
+            if loss_cat:
+                loss_cat = loss_cat.detach().item()
+                total_cat_loss += loss_cat;
+            if loss_reg:
+                loss_reg = loss_reg.detach().item()
+                total_reg_loss += loss_reg;
+            if loss_domain:
+                loss_domain = loss_domain.detach().item()
+                total_domain_loss += loss_domain;
 
             ## take the classification prediction and compare with the true labels            
             label_cat = label_cat.detach()
@@ -204,7 +209,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ## multiple domain regions
             else:
                 correct_domain = 0;
-                for idx, (k,v) in enumerate(y_domain_check.items()):
+                for idx, (k,v) in enumerate(y_domain_check.items()):                    
                     if not label_domain[index_domain[k],idx].nelement(): continue;
                     id_dom = idx*ldomain[idx];
                     pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
@@ -257,7 +262,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     if tb_helper:
         tb_helper.write_scalars([
             ("Loss/train (epoch)", total_loss / num_batches, epoch),
-            ("Loss Cat/train (epoch)", total_cat_loss / num_batches, epoch),
+            ("Loss Cat/train (epoch)", total_cat_lloss / num_batches, epoch),
             ("Loss Domain/train (epoch)", total_domain_loss / num_batches, epoch),
             ("Loss Reg/train (epoch)", total_reg_loss / num_batches, epoch),
             ("AccCat/train (epoch)", total_cat_correct / count_cat, epoch),
@@ -475,12 +480,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if loss_func != None:
                     loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);                
                     loss = loss.item()
-                    loss_cat = loss_cat.item()
-                    loss_reg = loss_reg.item()
-                    loss_domain = loss_domain.item()
+                    if loss_cat:
+                        loss_cat = loss_cat.item()
+                    if loss_reg:                        
+                        loss_reg = loss_reg.item()
+                    if loss_domain:
+                        loss_domain = loss_domain.item()
                 else:
                     loss,loss_cat,loss_reg,loss_domain = 0,0,0,0;
-                    
+                                    
                 total_loss += loss
                 total_cat_loss += loss_cat
                 total_reg_loss += loss_reg
