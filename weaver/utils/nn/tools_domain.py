@@ -112,19 +112,23 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             label_domain = label_domain.squeeze()
             label_domain_check = label_domain_check.squeeze()            
 
-            label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
-
-            index_domain = defaultdict(list)
-            if num_domains == 1:
-                label_domain_counter[0].update(label_domain.cpu().numpy().astype(dtype=np.int32))
-            else:
-                for idx, (k,v) in enumerate(y_domain_check.items()):
-                    index_domain[k] = label_domain_check[:,idx].nonzero();
-                    label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
-                    
             ### Number of samples in the batch
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
             num_domain_examples = label_domain.shape[0];
+            
+            if label_cat.nelement():
+                label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+
+            index_domain = defaultdict(list)
+            if num_domains == 1:
+                if label_domain.nelement():
+                    label_domain_counter[0].update(label_domain.cpu().numpy().astype(dtype=np.int32))
+            else:
+                for idx, (k,v) in enumerate(y_domain_check.items()):
+                    index_domain[k] = label_domain_check[:,idx].nonzero();                    
+                    if label_domain.nelement():
+                        label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
+                    
             ### send to GPU
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
@@ -365,15 +369,18 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 label_domain_check = label_domain_check.squeeze()
 
                 ### counters
-                label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+                if label_cat.nelement():
+                    label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
                 index_domain = defaultdict(list)
                 for idx, (k,v) in enumerate(y_domain_check.items()):
                     if num_domains == 1:
                         index_domain[k] = label_domain_check.nonzero();
-                        label_domain_counter[idx].update(label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32))
+                        if label_domain.nelement():
+                            label_domain_counter[idx].update(label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32))
                     else:
                         index_domain[k] = label_domain_check[:,idx].nonzero();
-                        label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
+                        if label_domain.nelement():
+                            label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
 
                 ### update counters
                 num_cat_examples = max(label_cat.shape[0],target.shape[0]);
