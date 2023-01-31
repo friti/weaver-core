@@ -127,7 +127,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         label_domain_counter[idx].update(label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32))
                 else:
                     index_domain[k] = label_domain_check[:,idx].nonzero();
-                    if label_domain[index_domain[k]].nelement():
+                    if label_domain[index_domain[k],idx].nelement():
                         label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
 
             ### send to GPU
@@ -182,7 +182,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             label_cat = label_cat.detach()
             label_domain = label_domain.detach()
             target = target.detach()
-            if label_domain.nelement():
+
+            if label_cat.nelement():
                 _, pred_cat = model_output_cat.detach().max(1);
                 correct_cat = (pred_cat == label_cat).sum().item()
                 total_cat_correct += correct_cat
@@ -204,7 +205,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             else:
                 correct_domain = 0;
                 for idx, (k,v) in enumerate(y_domain_check.items()):
-                    if not label_domain.nelement():continue;
+                    if not label_domain[index_domain[k],idx].nelement(): continue;
                     id_dom = idx*ldomain[idx];
                     pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
                     _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
@@ -372,6 +373,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### counters
                 if label_cat.nelement():
                     label_cat_counter.update(label_cat.cpu().numpy().astype(dtype=np.int32))
+
                 index_domain = defaultdict(list)
                 for idx, (k,v) in enumerate(y_domain_check.items()):
                     if num_domains == 1:
@@ -380,7 +382,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                             label_domain_counter[idx].update(label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32))
                     else:
                         index_domain[k] = label_domain_check[:,idx].nonzero();
-                        if label_domain[index_domain[k]].nelement():
+                        if label_domain[index_domain[k],idx].nelement():
                             label_domain_counter[idx].update(label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32))
 
                 ### update counters
