@@ -121,7 +121,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             if np.iterable(label_cat_np):
                 label_cat_counter.update(label_cat_np)
             else:
-                _logger.info('label_cat_np not iterable --> shape ',label_cat_np.shape)
+                _logger.info('label_cat not iterable --> shape %s'%(str(label_cat_np.shape)))
                 
             index_domain = defaultdict(list)
             for idx, (k,v) in enumerate(y_domain_check.items()):
@@ -131,14 +131,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np)
                     else:
-                        _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
+                        _logger.info('label_domain not iterable --> shape %s'%(str(label_domain_np.shape)))
                 else:                    
                     index_domain[k] = label_domain_check[:,idx].nonzero();
                     label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
                     if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np)
                     else:
-                        _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
+                        _logger.info('label_domain %d not iterable --> shape %'%(idx,str(label_domain_np.shape)))
 
             ### send to GPU
             label_cat = label_cat.to(dev,non_blocking=True)
@@ -196,7 +196,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             label_domain = label_domain.detach()
             target = target.detach()
 
-            if label_cat.nelement():
+            if np.iterable(model_output_cat) and np.iterable(label_cat):
                 _, pred_cat = model_output_cat.detach().max(1);
                 correct_cat = (pred_cat == label_cat).sum().item()
                 total_cat_correct += correct_cat
@@ -209,21 +209,21 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ## single domain region
             if num_domains == 1:
-                if not label_domain.nelement(): continue;
-                _, pred_domain = model_output_domain.detach().max(1);
-                correct_domain = (pred_domain == label_domain).sum().item()
-                total_domain_correct += correct_domain
-                count_domain += num_domain_examples;
+                if np.iterable(label_domain) and np.iterable( model_output_domain):
+                    _, pred_domain = model_output_domain.detach().max(1);
+                    correct_domain = (pred_domain == label_domain).sum().item()
+                    total_domain_correct += correct_domain
+                    count_domain += num_domain_examples;
             ## multiple domain regions
             else:
                 correct_domain = 0;
                 for idx, (k,v) in enumerate(y_domain_check.items()):                    
-                    if not label_domain[index_domain[k],idx].nelement(): continue;
                     id_dom = idx*ldomain[idx];
-                    pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                    _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
-                    label = label_domain[index_domain[k],idx].squeeze()
-                    correct_domain += (pred_domain == label).sum().item()
+                    if np.iterable(label_domain[index_domain[k],idx]) and np.iterable(model_output_domain[:,id_dom:id_dom+ldomain[idx]]):
+                        pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
+                        _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
+                        label = label_domain[index_domain[k],idx].squeeze()
+                        correct_domain += (pred_domain == label).sum().item()
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples;
 
@@ -388,7 +388,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if np.iterable(label_cat_np):
                     label_cat_counter.update(label_cat_np)
                 else:
-                    _logger.info('label_cat_np not iterable --> shape ',label_cat_np.shape)
+                    _logger.info('label_cat not iterable --> shape %s'%(str(label_cat_np.shape)))
 
                 index_domain = defaultdict(list)
                 for idx, (k,v) in enumerate(y_domain_check.items()):
@@ -398,14 +398,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         if np.iterable(label_domain_np):
                             label_domain_counter[idx].update(label_domain_np);
                         else:
-                            _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
+                            _logger.info('label_domain not iterable --> shape %s'%(str(label_domain_np.shape)))
                     else:
                         index_domain[k] = label_domain_check[:,idx].nonzero();
                         label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
                         if np.iterable(label_domain_np):
                             label_domain_counter[idx].update(label_domain_np);
                         else:
-                            _logger.info('label_domain_np not iterable --> shape ',label_domain_np.shape)
+                            _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
 
                 ### update counters
                 num_cat_examples = max(label_cat.shape[0],target.shape[0]);
@@ -512,7 +512,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 total_domain_loss += loss_domain
 
                 ## prediction + metric for classification
-                if label_cat.nelement():
+                if np.iterable(label_cat) and np.iterable(model_output_cat):
                     _, pred_cat = model_output_cat.max(1);
                     correct_cat = (pred_cat == label_cat).sum().item()
                     count_cat += num_cat_examples
@@ -525,21 +525,21 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## single domain region                                                                                                                                                          
                 if num_domains == 1:
-                    if not label_domain.nelement(): continue;
-                    _, pred_domain = model_output_domain.detach().max(1);
-                    correct_domain = (pred_domain == label_domain).sum().item()
-                    total_domain_correct += correct_domain
-                    count_domain += num_domain_examples                
+                    if np.iterable(label_domain) and np.iterable(model_output_domain):
+                        _, pred_domain = model_output_domain.detach().max(1);
+                        correct_domain = (pred_domain == label_domain).sum().item()
+                        total_domain_correct += correct_domain
+                        count_domain += num_domain_examples                
                 ## multiple domains
                 else:
                     correct_domain = 0;
                     for idx, (k,v) in enumerate(y_domain_check.items()):
-                        if not label_domain[index_domain[k],idx].nelement(): continue;
                         id_dom = idx*ldomain[idx];
-                        label = label_domain[index_domain[k],idx].squeeze()
-                        pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]]
-                        _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
-                        correct_domain += (pred_domain == label).sum().item()
+                        if np.iterable(label_domain[index_domain[k],idx]) and np.iterable(model_output_domain[:,id_dom:id_dom+ldomain[idx]]):
+                            label = label_domain[index_domain[k],idx].squeeze()
+                            pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]]
+                            _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
+                            correct_domain += (pred_domain == label).sum().item()
                     total_domain_correct += correct_domain
                     count_domain += num_domain_examples                
 
@@ -810,7 +810,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
             index_offset += (num_cat_examples+num_domain_examples)
 
             ## prediction + metric for classification
-            if label_cat.nelement():
+            if np.iterable(label_cat) and np.iterable(model_output_cat):
                 _, pred_cat = model_output_cat.max(1);
                 correct_cat = (pred_cat == label_cat).sum().item()
                 count_cat += num_cat_examples
@@ -823,21 +823,21 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
             ## single domain region                                                                                                                                                          
             if num_domains == 1:
-                if not label_domain.nelement(): continue;
-                _, pred_domain = model_output_domain.detach().max(1);
-                correct_domain = (pred_domain == label_domain).sum().item()
-                total_domain_correct += correct_domain
-                count_domain += num_domain_examples                
+                if np.iterable(label_domain) and np.iterable(model_output_domain):
+                    _, pred_domain = model_output_domain.detach().max(1);
+                    correct_domain = (pred_domain == label_domain).sum().item()
+                    total_domain_correct += correct_domain
+                    count_domain += num_domain_examples                
                 ## multiple domains
             else:
                 correct_domain = 0;
                 for idx, (k,v) in enumerate(y_domain_check.items()):
-                    if not label_domain[index_domain[k],idx].nelement(): continue;
                     id_dom = idx*ldomain[idx];
-                    label = label_domain[index_domain[k],idx].squeeze()
-                    pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]]
-                    _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
-                    correct_domain += (pred_domain == label).sum().item()
+                    if np.iterable(label_domain[index_domain[k],idx]) and np.iterable(model_output_domain[:,id_dom:id_dom+ldomain[idx]]):
+                        label = label_domain[index_domain[k],idx].squeeze()
+                        pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]]
+                        _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
+                        correct_domain += (pred_domain == label).sum().item()
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples                
                 
