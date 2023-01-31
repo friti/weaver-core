@@ -138,7 +138,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np)
                     else:
-                        _logger.info('label_domain %d not iterable --> shape %'%(idx,str(label_domain_np.shape)))
+                        _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
 
             ### send to GPU
             label_cat = label_cat.to(dev,non_blocking=True)
