@@ -129,7 +129,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     index_domain[k] = label_domain_check[:,idx].nonzero();
                     if label_domain[index_domain[k],idx].nelement():
                         a = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
-                        print(type(a)," ",a.shape)
+                         _logger.info(type(a)," ",a.shape)
                         label_domain_counter[idx].update(a)
 
             ### send to GPU
