@@ -154,14 +154,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
-                model_output_cat    = _flatten_preds(model_output_cat,None);
-                model_output_cat    = model_output_cat[index_cat].squeeze().float();
-                model_output_reg    = model_output_reg[index_cat].squeeze().float();
+                model_output_cat = _flatten_preds(model_output_cat,None);
+                model_output_cat = model_output_cat[index_cat].squeeze().float();
+                model_output_reg = model_output_reg[index_cat].squeeze().float();
                 model_output_domain = model_output_domain[index_domain_all].squeeze().float();
-                label_cat    = label_cat.squeeze();
-                label_domain = label_domain.squeeze();
-                label_domain_check = label_domain_check.squeeze();
-                target       = target.squeeze();
                 ### evaluate loss function            
                 loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
 
@@ -192,12 +188,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 total_domain_loss += loss_domain;
 
             ## take the classification prediction and compare with the true labels            
-            label_cat = label_cat.detach()
+            label_cat    = label_cat.detach()
             label_domain = label_domain.detach()
-            target = target.detach()
-
-            if np.iterable(model_output_cat) and np.iterable(label_cat):
-                _, pred_cat = model_output_cat.detach().max(1);
+            target       = target.detach()
+            model_output_cat = model_output_cat.detach()
+            model_output_reg = model_output_reg.detach()
+            model_output_domain = model_output_domain.detach()
+            
+            if torch.is_tensor(label_cat) and torch.is_tensor(model_output_cat) and np.iterable(label_cat) and np.iterable(model_output_cat):
+                _, pred_cat = model_output_cat.max(1);
                 correct_cat = (pred_cat == label_cat).sum().item()
                 total_cat_correct += correct_cat
                 count_cat += num_cat_examples;
@@ -209,8 +208,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ## single domain region
             if num_domains == 1:
-                if np.iterable(label_domain) and np.iterable( model_output_domain):
-                    _, pred_domain = model_output_domain.detach().max(1);
+                if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
+                    _, pred_domain = model_output_domain.max(1);
                     correct_domain = (pred_domain == label_domain).sum().item()
                     total_domain_correct += correct_domain
                     count_domain += num_domain_examples;
@@ -219,11 +218,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 correct_domain = 0;
                 for idx, (k,v) in enumerate(y_domain_check.items()):                    
                     id_dom = idx*ldomain[idx];
-                    if np.iterable(label_domain[index_domain[k],idx]) and np.iterable(model_output_domain[:,id_dom:id_dom+ldomain[idx]]):
-                        pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                        _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
-                        label = label_domain[index_domain[k],idx].squeeze()
-                        correct_domain += (pred_domain == label).sum().item()
+                    label  = label_domain[index_domain[k],idx].squeeze()
+                    pred_domain = model_output_domain[index_domain[k],id_dom:id_dom+ldomain[idx]].squeeze();
+                    if not torch.is_tensor(label) or not np.iterable(label): continue;
+                    if not torch.is_tensor(pred_domain) or not np.iterable(pred_domain): continue;
+                    _, pred_domain = pred_domain.max(1);
+                    correct_domain += (pred_domain == label).sum().item()
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples;
 
@@ -448,9 +448,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
                 model_output_cat = _flatten_preds(model_output_cat,None);
-                label_cat    = label_cat.squeeze();
-                label_domain = label_domain.squeeze();
-                target       = target.squeeze();
 
                 ### in validation only filter interesting events
                 if for_training:                        
@@ -512,7 +509,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 total_domain_loss += loss_domain
 
                 ## prediction + metric for classification
-                if np.iterable(label_cat) and np.iterable(model_output_cat):
+                if np.iterable(label_cat) and torch.is_tensor(label_cat) and np.iterable(model_output_cat) and torch.is_tensor(model_output_cat):
                     _, pred_cat = model_output_cat.max(1);
                     correct_cat = (pred_cat == label_cat).sum().item()
                     count_cat += num_cat_examples
@@ -525,8 +522,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## single domain region                                                                                                                                                          
                 if num_domains == 1:
-                    if np.iterable(label_domain) and np.iterable(model_output_domain):
-                        _, pred_domain = model_output_domain.detach().max(1);
+                    if torch.is_tensor(label_domain) and torch_is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
+                        _, pred_domain = model_output_domain.max(1);
                         correct_domain = (pred_domain == label_domain).sum().item()
                         total_domain_correct += correct_domain
                         count_domain += num_domain_examples                
@@ -535,11 +532,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     correct_domain = 0;
                     for idx, (k,v) in enumerate(y_domain_check.items()):
                         id_dom = idx*ldomain[idx];
-                        if np.iterable(label_domain[index_domain[k],idx]) and np.iterable(model_output_domain[:,id_dom:id_dom+ldomain[idx]]):
-                            label = label_domain[index_domain[k],idx].squeeze()
-                            pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]]
-                            _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
-                            correct_domain += (pred_domain == label).sum().item()
+                        label = label_domain[index_domain[k],idx].squeeze()
+                        pred_domain = model_output_domain[index_domain[k],id_dom:id_dom+ldomain[idx]].squeeze()
+                        if not torch.is_tensor(label_domain[index_domain[k],idx]) or not np.iterable(label_domain[index_domain[k],idx]): continue;
+                        if not torch.is_tensor(model_output_domain[:,id_dom:id_dom+ldomain[idx]]) or not np.iterable(model_output_domain[:,id_dom:id_dom+ldomain[idx]]): continue;
+                        _, pred_domain = pred_domain[index_domain[k]].max(1);
+                        correct_domain += (pred_domain == label).sum().item()
                     total_domain_correct += correct_domain
                     count_domain += num_domain_examples                
 
@@ -810,7 +808,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
             index_offset += (num_cat_examples+num_domain_examples)
 
             ## prediction + metric for classification
-            if np.iterable(label_cat) and np.iterable(model_output_cat):
+            if np.iterable(label_cat) and torch.is_tensor(label_cat) and np.iterable(model_output_cat) and torch.is_tensor(model_output_cat):
                 _, pred_cat = model_output_cat.max(1);
                 correct_cat = (pred_cat == label_cat).sum().item()
                 count_cat += num_cat_examples
@@ -823,7 +821,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
             ## single domain region                                                                                                                                                          
             if num_domains == 1:
-                if np.iterable(label_domain) and np.iterable(model_output_domain):
+                if np.iterable(label_domain) and torch.is_tensor(label_domain) and np.iterable(model_output_domain) and torch.is_tensor(model_output_cat):
                     _, pred_domain = model_output_domain.detach().max(1);
                     correct_domain = (pred_domain == label_domain).sum().item()
                     total_domain_correct += correct_domain
@@ -833,10 +831,10 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 correct_domain = 0;
                 for idx, (k,v) in enumerate(y_domain_check.items()):
                     id_dom = idx*ldomain[idx];
-                    if np.iterable(label_domain[index_domain[k],idx]) and np.iterable(model_output_domain[:,id_dom:id_dom+ldomain[idx]]):
-                        label = label_domain[index_domain[k],idx].squeeze()
-                        pred_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]]
-                        _, pred_domain = pred_domain[index_domain[k]].squeeze().detach().max(1);
+                    label = label_domain[index_domain[k],idx].squeeze()
+                    pred_domain = model_output_domain[index_domain[k],id_dom:id_dom+ldomain[idx]].squeeze()
+                    if np.iterable(label) and torch.is_tensor(label) and np.iterable(pred_domain) and torch.is_tensor(pred_domain):
+                        _, pred_domain = pred_domain.max(1);
                         correct_domain += (pred_domain == label).sum().item()
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples                
