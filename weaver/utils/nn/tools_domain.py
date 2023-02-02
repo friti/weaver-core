@@ -532,7 +532,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## single domain region                                                                                                                                                          
                 if num_domains == 1:
-                    if torch.is_tensor(label_domain) and torch_is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
+                    if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
                         _, pred_domain = model_output_domain.max(1);
                         if pred_domain.shape == label_domain.shape:
                             correct_domain = (pred_domain == label_domain).sum().item()
