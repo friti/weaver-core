@@ -201,12 +201,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             
             if torch.is_tensor(label_cat) and torch.is_tensor(model_output_cat) and np.iterable(label_cat) and np.iterable(model_output_cat):
                 _, pred_cat = model_output_cat.max(1);
+                pred_reg = model_output_reg.float();
                 if pred_cat.shape == label_cat.shape and pred_reg.shape == target.shape:
                     correct_cat = (pred_cat == label_cat).sum().item()
                     total_cat_correct += correct_cat
                     count_cat += num_cat_examples;
-                    ## take the regression prediction and compare with true targets        
-                    pred_reg = model_output_reg.float();
                     residual_reg = pred_reg - target;            
                     sqr_err = residual_reg.square().sum().item()
                     sum_sqr_err += sqr_err
@@ -225,8 +224,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 for idx, (k,v) in enumerate(y_domain_check.items()):                    
                     id_dom = idx*ldomain[idx];
                     label  = label_domain[index_domain[k],idx].squeeze()
-                    pred_domain = model_output_domain[index_domain[k],id_dom:id_dom+ldomain[idx]].squeeze();
                     if not torch.is_tensor(label) or not np.iterable(label): continue;
+                    pred_domain = model_output_domain[index_domain[k],id_dom:id_dom+ldomain[idx]].squeeze();
                     if not torch.is_tensor(pred_domain) or not np.iterable(pred_domain): continue;
                     _, pred_domain = pred_domain.max(1);
                     if pred_domain.shape != label.shape: continue;
@@ -522,12 +521,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ## prediction + metric for classification
                 if np.iterable(label_cat) and torch.is_tensor(label_cat) and np.iterable(model_output_cat) and torch.is_tensor(model_output_cat):
                     _, pred_cat = model_output_cat.max(1);
+                    pred_reg = model_output_reg.float();
                     if pred_cat.shape == label_cat.shape and pred_reg.shape == target.shape:
                         correct_cat = (pred_cat == label_cat).sum().item()
                         count_cat += num_cat_examples
                         total_cat_correct += correct_cat
-                        ## prediction + metric for regression
-                        pred_reg = model_output_reg.float();
                         residual_reg = pred_reg - target;
                         sqr_err = residual_reg.square().sum().item()
                         sum_sqr_err += sqr_err
@@ -546,8 +544,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     for idx, (k,v) in enumerate(y_domain_check.items()):
                         id_dom = idx*ldomain[idx];
                         label = label_domain[index_domain[k],idx].squeeze()
-                        pred_domain = model_output_domain[index_domain[k],id_dom:id_dom+ldomain[idx]].squeeze()
                         if not torch.is_tensor(label) or not np.iterable(label): continue;
+                        pred_domain = model_output_domain[index_domain[k],id_dom:id_dom+ldomain[idx]].squeeze()
                         if not torch.is_tensor(pred_domain) or not np.iterable(pred_domain): continue;
                         _, pred_domain = pred_domain.max(1);
                         if pred_domain.shape != label.shape: continue;
