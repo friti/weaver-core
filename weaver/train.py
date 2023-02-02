@@ -140,6 +140,10 @@ parser.add_argument('--num-workers-val', type=int, default=1,
                     help='number of threads to load the validation dataset (when provided via --data-val otherwise use num-workers-train); memory consumption and disk access load increases (~linearly) with this numbers')
 parser.add_argument('--num-workers-test', type=int, default=1,
                     help='number of threads to load the testing dataset; memory consumption and disk access load increases (~linearly) with this numbers')
+parser.add_argument('--max-resample', type=int, default=10,
+                    help='re-sampling factor for classification/regression events')
+parser.add_argument('--max-resample-dom', type=int, default=3,
+                    help='re-sampling factor for domain adaptation events')
 parser.add_argument('--predict', action='store_true', default=False,
                     help='run prediction instead of training')
 parser.add_argument('--predict-output', type=str,
@@ -263,6 +267,8 @@ def train_load(args):
                                    fetch_step=args.fetch_step_train,
                                    infinity_mode=args.steps_per_epoch is not None,
                                    in_memory=args.in_memory,
+                                   max_resample=args.max_resample,
+                                   max_resample_dom=args.max_resample_dom,
                                    name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
@@ -279,6 +285,8 @@ def train_load(args):
                                      fetch_step=args.fetch_step_val,
                                      infinity_mode=args.steps_per_epoch_val is not None,
                                      in_memory=args.in_memory,
+                                     max_resample=args.max_resample,
+                                     max_resample_dom=args.max_resample_dom,
                                      name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
         val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
@@ -295,6 +303,8 @@ def train_load(args):
                                      fetch_step=args.fetch_step_train,
                                      infinity_mode=args.steps_per_epoch_val is not None,
                                      in_memory=args.in_memory,
+                                     max_resample=args.max_resample,
+                                     max_resample_dom=args.max_resample_dom,
                                      name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
         val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
