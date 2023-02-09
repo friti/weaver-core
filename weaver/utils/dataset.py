@@ -59,7 +59,7 @@ def _finalize_inputs(table, data_config):
     return output
 
 
-def _get_reweight_indices(weights, up_sample=True, max_resample=10, max_resample_dom=2.5, weight_scale=1):
+def _get_reweight_indices(weights, up_sample=True, max_resample=10, max_resample_dom=3, weight_scale=1):
 
     ## separate domain events from normal ones
     indices_cat = np.argwhere(weights>=0).squeeze();

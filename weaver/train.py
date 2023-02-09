@@ -142,7 +142,7 @@ parser.add_argument('--num-workers-test', type=int, default=1,
                     help='number of threads to load the testing dataset; memory consumption and disk access load increases (~linearly) with this numbers')
 parser.add_argument('--max-resample', type=int, default=10,
                     help='re-sampling factor for classification/regression events')
-parser.add_argument('--max-resample-dom', type=int, default=3,
+parser.add_argument('--max-resample-dom', type=int, default=5,
                     help='re-sampling factor for domain adaptation events')
 parser.add_argument('--predict', action='store_true', default=False,
                     help='run prediction instead of training')
