@@ -618,8 +618,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
-            label  = y_cat[data_config.label_names[0]].long()
-            label  = _flatten_label(label,None)
+            label = y_cat[data_config.label_names[0]].long()
+            label = _flatten_label(label,None)
             label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
