@@ -417,7 +417,10 @@ def onnx(args):
     from utils.dataset import DataConfig
     data_config = DataConfig.load(args.data_config, load_observers=False, load_reweight_info=False)
     model, model_info, _ = model_setup(args, data_config)
-    model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    if "domain" in args.weaver_mode:
+        model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
+    else:
+        model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
     model = model.cpu()
     model.eval()
 

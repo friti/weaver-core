@@ -474,7 +474,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     for idx, name in enumerate(y_domain.keys()):
                         id_dom = idx*ldomain[idx];
                         score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                        scores_domain[name].append(score_domain[index_domain[list(y_domain_check.keys())[idx]]].squeeze().cpu().numpy().astype(dtype=np.float32));
+                        scores_domain[name].append(torch.softmax(score_domain[index_domain[list(y_domain_check.keys())[idx]]].squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
                 else:
 
                     model_output_cat = model_output_cat.float();
@@ -486,7 +486,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     for idx, name in enumerate(y_domain.keys()):
                         id_dom = idx*ldomain[idx];
                         score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                        scores_domain[name].append(score_domain.squeeze().cpu().numpy().astype(dtype=np.float32));
+                        scores_domain[name].append(torch.softmax(score_domain.squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
                         
                     model_output_cat = model_output_cat[index_cat];
                     model_output_reg = model_output_reg[index_cat];
@@ -804,7 +804,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
             for idx, name in enumerate(y_domain.keys()):
                 id_dom = idx*ldomain[idx];
                 score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                scores_domain[name].append(score_domain.squeeze().cpu().numpy().astype(dtype=np.float32));
+                scores_domain[name].append(torch.softmax(score_domain.squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
             
             model_output_cat = model_output_cat[index_cat];
             model_output_reg = model_output_reg[index_cat];

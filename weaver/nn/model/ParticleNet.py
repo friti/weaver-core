@@ -267,21 +267,12 @@ class ParticleNet(nn.Module):
         output = self.fc(x)
 
         if self.for_inference:
-            if self.num_classes and not self.num_targets and not self.num_domains:
+            if self.num_classes and not self.num_targets:
                 output = torch.softmax(output,dim=1);
-            elif self.num_classes and self.num_targets and not self.num_domains:
+            elif self.num_classes and self.num_targets:
                 output_class = torch.softmax(output[:,:self.num_classes],dim=1)
                 output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
                 output = torch.cat((output_class,output_reg),dim=1);
-            elif self.num_classes and self.num_targets and self.num_domains and not self.fc_domain:
-                output_class = torch.softmax(output[:,:self.num_classes],dim=1)
-                output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
-                output_domain = torch.softmax(output[:,self.num_classes+self.num_targets:self.num_classes+self.num_target+self.num_domains]);
-                output = torch.cat((output_class,output_reg,output_domain),dim=1);
-            elif self.num_classes and self.num_targets and self.num_domains and self.fc_domain:
-                output_class = torch.softmax(output[:,:self.num_classes],dim=1)
-                output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
-                output = torch.cat((output_class,output_reg),dim=1);        
         elif self.num_domains and self.fc_domain:
             output_domain = self.fc_domain(x)
             output = torch.cat((output,output_domain),dim=1);

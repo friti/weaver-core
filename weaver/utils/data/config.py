@@ -301,19 +301,16 @@ class DataConfig(object):
         import json
         ## class+reg+domain        
         if self.target_names and self.label_names and self.label_domain_names:
-            j = {'output_names':self.label_value+list(self.target_value.keys())+self.label_domain_value, 'input_names':self.input_names}
-            ## class+reg
+            j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
+        ## class+reg
         elif self.target_names and self.label_names and not self.label_domain_names:
             j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
-            ## class
+        ## class
         elif not self.target_names and not self.label_domain_names and self.label_names:
             j = {'output_names':self.label_value, 'input_names':self.input_names}
-            ## regression
+        ## regression
         elif self.target_names and not self.label_names and not self.label_domain_names:
             j = {'output_names':list(self.target_value.keys()), 'input_names':self.input_names}
-            ## class+domain
-        elif self.label_names and self.label_domain_names and not self.target_names:
-            j = {'output_names':self.label_value+self.label_domain_value, 'input_names':self.input_names}
 
         for k, v in self.input_dicts.items():
             j[k] = {'var_names': v, 'var_infos': {}}
