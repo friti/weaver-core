@@ -177,12 +177,12 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 label = label.to(dev,non_blocking=True)
 
                 model_output = model(*inputs)
-                model_output = _flatten_preds(model_output, label_mask)
-                
-                scores.append(torch.softmax(model_output,dim=1).cpu().numpy().astype(dtype=np.float32))
-                
+                model_output = _flatten_preds(model_output, label_mask)                
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
+                
+                scores.append(torch.softmax(model_output,dim=1).cpu().numpy().astype(dtype=np.float32))
+
                 loss = 0 if loss_func is None else loss_func(model_output, label).item()
                 
                 num_batches += 1
@@ -443,18 +443,17 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                         observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 model_output = model(*inputs)
-                scores.append(preds.cpu().numpy().astype(dtype=np.float32))      
                 model_output = model_output.squeeze().float();
-                target =  target.squeeze();
+                scores.append(model_output.cpu().numpy().astype(dtype=np.float32))      
 
+                target =  target.squeeze();
                 loss = 0 if loss_func is None else loss_func(model_output, target).item()
 
                 num_batches += 1
                 count += num_examples
                 total_loss += loss
                 
-                preds = model_output.float();
-                e = preds - target
+                e = model_output - target
                 abs_err = e.abs().sum().item()
                 sum_abs_err += abs_err
                 sqr_err = e.square().sum().item()
@@ -639,6 +638,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 model_output = model(*inputs)                
                 model_output_cat = model_output[:,:num_labels];
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+                model_output_cat = _flatten_preds(model_output_cat,None)
                 model_output_cat = model_output_cat.squeeze().float();
                 model_output_reg = model_output_reg.squeeze().float();
                 label = label.squeeze();
@@ -801,6 +801,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### build classification and regression outputs
                 model_output_cat = model_output[:,:num_labels];
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+                model_output_cat = _flatten_preds(model_output_cat,None)
                 model_output_cat = model_output_cat.squeeze().float();
                 model_output_reg = model_output_reg.squeeze().float();
                 label  = label.squeeze();
@@ -818,7 +819,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     
                 ### evaluate loss function
                 if loss_func != None:
-                    model_output
                     ### true labels and true target 
                     loss, loss_cat, loss_reg = loss_func(model_output_cat,label,model_output_reg,target)
                     loss = loss.item()
@@ -969,9 +969,8 @@ def evaluate_onnx_classreg(model_path, test_loader,
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score));
             scores_cat.append(score[:,:num_labels].cpu().numpy().astype(dtype=np.float32));
-            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32));
-
-            pred_cat = score[:,:num_labels].squeeze().float.argmax(1);
+            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32));            
+            pred_cat = score[:,:num_labels].squeeze().float().argmax(1);
             pred_reg = score[:,num_labels:num_labels+num_targets].squeeze().float();
             count += num_examples
             num_batches += 1;

@@ -789,18 +789,18 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
             ### output of the mode
             model_output = sess.run([], inputs)
-            model_output = torch.as_tensor(np.array(model_output));
-            
+            model_output = torch.as_tensor(np.array(model_output));            
             model_output_cat = model_output[:,:num_labels]
-            model_output_reg = model_output[:,num_labels:num_labels+num_targets].float();
-            model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain].float()
-            model_output_cat = _flatten_preds(model_output_cat,None).float()
+            model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+            model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain];
+            model_output_cat = _flatten_preds(model_output_cat,None)
             label_cat = label_cat.squeeze();
             label_domain = label_domain.squeeze();
             target = target.squeeze();
 
             scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
             scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
+
             for idx, name in enumerate(y_domain.keys()):
                 id_dom = idx*ldomain[idx];
                 score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];

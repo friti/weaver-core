@@ -420,7 +420,7 @@ def onnx(args):
     if "domain" in args.weaver_mode:
         model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
     else:
-        model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
+        model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model = model.cpu()
     model.eval()
 
