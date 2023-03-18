@@ -39,6 +39,9 @@ parser.add_argument('--data-fraction', type=float, default=1,
                     help='fraction of events to load from each file; for training, the events are randomly selected for each epoch')
 parser.add_argument('--file-fraction', type=float, default=1,
                     help='fraction of files to load; for training, the files are randomly selected for each epoch')
+parser.add_argument('--fetch-by-files-preprocess', action='store_true', default=False,
+                    help='When enabled, will load all events from a small number (set by ``--fetch-step-train``) of files for each data fetching. '
+                         'Otherwise (default), load a small fraction of events from all files each time, which helps reduce variations in the sample composition.')
 parser.add_argument('--fetch-by-files-train', action='store_true', default=False,
                     help='When enabled, will load all events from a small number (set by ``--fetch-step-train``) of files for each data fetching. '
                          'Otherwise (default), load a small fraction of events from all files each time, which helps reduce variations in the sample composition.')
@@ -48,6 +51,9 @@ parser.add_argument('--fetch-by-files-val', action='store_true', default=False,
 parser.add_argument('--fetch-by-files-test', action='store_true', default=False,
                     help='When enabled, will load all events from a small number (set by ``--fetch-step-test``) of files for each data fetching. '
                          'Otherwise (default), load a small fraction of events from all files each time, which helps reduce variations in the sample composition.')
+parser.add_argument('--fetch-step-preprocess', type=float, default=0.01,
+                    help='fraction of events to load each time from every file (when ``--fetch-by-files-preprocess`` is disabled); '
+                         'Or: number of files to load each time (when ``--fetch-by-files-preprocess`` is enabled). Shuffling & sampling is done within these events, so set a large enough value.')
 parser.add_argument('--fetch-step-train', type=float, default=0.01,
                     help='fraction of events to load each time from every file (when ``--fetch-by-files-train`` is disabled); '
                          'Or: number of files to load each time (when ``--fetch-by-files-train`` is enabled). Shuffling & sampling is done within these events, so set a large enough value.')
@@ -336,8 +342,8 @@ def preprocess_load(args):
     preprocess_data = SimpleIterDataset(preprocess_file_dict, args.data_config, for_training=True,
                                         load_range_and_fraction=(preprocess_range, args.data_fraction),
                                         file_fraction=args.file_fraction,
-                                        fetch_by_files=args.fetch_by_files_train,
-                                        fetch_step=args.fetch_step_train,
+                                        fetch_by_files=args.fetch_by_files_preprocess,
+                                        fetch_step=args.fetch_step_preprocess,
                                         infinity_mode=args.steps_per_epoch is not None,
                                         in_memory=args.in_memory,
                                         name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
