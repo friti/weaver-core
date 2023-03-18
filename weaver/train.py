@@ -346,14 +346,12 @@ def preprocess_load(args):
                                         fetch_step=args.fetch_step_preprocess,
                                         infinity_mode=args.steps_per_epoch is not None,
                                         in_memory=args.in_memory,
-                                        name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+                                        max_resample=1,
+                                        max_resample_dom=1,
+                                        name='preprocess' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
 
-    preprocess_loader = DataLoader(preprocess_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
-                                   num_workers=min(args.num_workers_train, int(len(preprocess_files) * args.file_fraction)),
-                                   persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers),
-                               )
-    
-    return preprocess_loader;
+
+    return preprocess_data;
 
 
 def test_load(args):
@@ -856,7 +854,7 @@ def _main(args):
 
     # load data
     if args.weaver_mode == "preprocess":
-        preprocess_loader = preprocess_load(args);
+        preprocess_data = preprocess_load(args);
         sys.exit(0);
     else:
         torch.multiprocessing.set_sharing_strategy("file_system");
