@@ -172,7 +172,10 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                     labels[k].append(_flatten_label(v,label_mask).cpu().numpy().astype(dtype=np.int32))
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        else:
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 label = label.to(dev,non_blocking=True)
 
@@ -277,7 +280,10 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
             for k, v in y_cat.items():
                 labels[k].append(v.cpu().numpy().astype(dtype=np.int32))
             for k, v in Z.items():
-                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                else:
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score));
             scores.append(score.cpu().numpy().astype(dtype=np.float32))
@@ -440,7 +446,10 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                     targets[k].append(v.cpu().numpy().astype(dtype=np.float32))
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        else:
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 model_output = model(*inputs)
                 model_output = model_output.squeeze().float();
@@ -544,7 +553,10 @@ def evaluate_onnx_regression(model_path, test_loader,
             for k, v in y.items():
                 targets[k].append(v.cpu().numpy().astype(dtype=np.float32))
             for k, v in Z.items():
-                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                else:
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score))
@@ -794,7 +806,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
-                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        else:
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 ### evaluate model
                 model_output = model(*inputs)
@@ -964,7 +979,10 @@ def evaluate_onnx_classreg(model_path, test_loader,
             for k, name in enumerate(data_config.target_names):
                 targets[name].append(y_reg[name].cpu().numpy().astype(dtype=np.float32))                
             for k, v in Z.items():
-                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                else:
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             ### evaluate the network
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score));

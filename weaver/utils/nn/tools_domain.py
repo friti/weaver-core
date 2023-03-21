@@ -439,7 +439,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if not for_training:
                     indexes_cat.append((index_offset+index_cat).cpu().numpy().astype(dtype=np.int32));
                     for k, v in Z.items():                
-                        observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        else:
+                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 for idx, (k, v) in enumerate(y_domain.items()):
                     if not for_training:
@@ -777,7 +780,10 @@ def evaluate_onnx_classreg(model_path, test_loader,
             for k, v in y_reg.items():
                 targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
             for k, v in Z.items():                
-                observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                else:
+                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))                    
             for idx, (k, v) in enumerate(y_domain.items()):
                 labels_domain[k].append(v.squeeze().cpu().numpy().astype(dtype=np.int32))
                 indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).cpu().numpy().astype(dtype=np.int32));
