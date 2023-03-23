@@ -41,7 +41,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     data_config = train_loader.dataset.config
     label_counter = Counter()
     count, num_batches, total_loss, total_correct = 0, 0, 0, 0
-    loss, inputs, label, label_mask, model_output, logits, preds, correct = None, None, None, None, None, None, None, None
+    loss, inputs, label, label_mask, model_output, preds, correct = None, None, None, None, None, None, None
 
     start_time = time.time()
 
@@ -66,7 +66,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 model_output = _flatten_preds(model_output, label_mask)
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
-                loss = loss_func(logits, label)
+                loss = loss_func(model_output, label)
             if grad_scaler is None:
                 loss.backward()
                 opt.step()
@@ -142,7 +142,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     label_counter = Counter()
     num_batches, count, entry_count, total_correct, total_loss = 0, 0, 0, 0, 0
-    inputs, label, label_mask, model_output, logits, preds, loss, correct = None, None, None, None, None, None, None, None
+    inputs, label, label_mask, model_output,  preds, loss, correct = None, None, None, None, None, None, None
     scores = []
     labels_counts = []
     labels = defaultdict(list)
