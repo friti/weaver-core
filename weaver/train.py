@@ -69,8 +69,6 @@ parser.add_argument('--train-val-split', type=float, default=0.8,
                     help='training/validation split fraction')
 parser.add_argument('--remake-weights', action='store_true', default=False,
                      help='remake weights for sampling (reweighting), use existing ones in the previous auto-generated data config YAML file')
-parser.add_argument('--demo', action='store_true', default=False,
-                    help='quickly test the setup by running over only a small number of events')
 parser.add_argument('--lr-finder', type=str, default=None,
                     help='run learning rate finder instead of the actual training; format: ``start_lr, end_lr, num_iters``')
 parser.add_argument('--tensorboard', type=str, default=None,
@@ -163,14 +161,13 @@ parser.add_argument('--copy-inputs', action='store_true', default=False,
                     help='copy input files to the current dir (can help to speed up dataloading when running over remote files, e.g., from EOS)')
 parser.add_argument('--log', type=str, default='',
                     help='path to the log file; `{auto}` can be used as part of the path to auto-generate a name, based on the timestamp and network configuration')
-parser.add_argument('--print', action='store_true', default=False,
-                    help='do not run training/prediction but only print model information, e.g., FLOPs and number of parameters of a model')
 parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
 parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
                     help='backend for distributed training')
 
 def to_filelist(args, mode='train'):
+
     if mode == 'train':
         flist = args.data_train
     elif mode == 'val':
@@ -249,75 +246,55 @@ def train_load(args):
         val_file_dict, val_files = train_file_dict, train_files
         train_range = (0, args.train_val_split)
         val_range = (args.train_val_split, 1)
+
     _logger.info('Using %d files for training, range: %s' % (len(train_files), str(train_range)))
     _logger.info('Using %d files for validation, range: %s' % (len(val_files), str(val_range)))
-
-    if args.demo:
-        train_files = train_files[:20]
-        val_files = val_files[:20]
-        train_file_dict = {'_': train_files}
-        val_file_dict = {'_': val_files}
-        _logger.info(train_files)
-        _logger.info(val_files)
-        args.data_fraction = 0.1
-        args.fetch_step = 0.002
 
     if args.in_memory and (args.steps_per_epoch is None or args.steps_per_epoch_val is None):
         raise RuntimeError('Must set --steps-per-epoch when using --in-memory!')
 
-    train_data = SimpleIterDataset(train_file_dict, args.data_config, for_training=True,
-                                   load_range_and_fraction=(train_range, args.data_fraction),
-                                   remake_weights = args.remake_weights,
-                                   file_fraction=args.file_fraction,
-                                   fetch_by_files=args.fetch_by_files_train,
-                                   fetch_step=args.fetch_step_train,
-                                   infinity_mode=args.steps_per_epoch is not None,
-                                   in_memory=args.in_memory,
-                                   max_resample=args.max_resample,
-                                   max_resample_dom=args.max_resample_dom,
-                                   name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
-
-    train_loader = DataLoader(train_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
-                              num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
-                              persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers),
-                              worker_init_fn=set_worker_sharing_strategy
+    ## create training dataset
+    train_data = SimpleIterDataset(
+        train_file_dict, args.data_config, for_training=True,
+        load_range_and_fraction=(train_range, args.data_fraction),
+        remake_weights = args.remake_weights,
+        file_fraction=args.file_fraction,
+        fetch_by_files=args.fetch_by_files_train,
+        fetch_step=args.fetch_step_train,
+        infinity_mode=args.steps_per_epoch is not None,
+        in_memory=args.in_memory,
+        max_resample=args.max_resample,
+        max_resample_dom=args.max_resample_dom,
+        name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank)
     )
 
-    if args.data_val:
-        val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
-                                     load_range_and_fraction=(val_range, args.data_fraction),
-                                     file_fraction=args.file_fraction,
-                                     fetch_by_files=args.fetch_by_files_val,
-                                     fetch_step=args.fetch_step_val,
-                                     infinity_mode=args.steps_per_epoch_val is not None,
-                                     in_memory=args.in_memory,
-                                     max_resample=args.max_resample,
-                                     max_resample_dom=args.max_resample_dom,
-                                     name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
+    train_loader = DataLoader(
+        train_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
+        num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
+        persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers),
+        worker_init_fn=set_worker_sharing_strategy
+    )
 
-        val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
-                                num_workers=min(args.num_workers_val, int(len(val_files) * args.file_fraction)),
-                                persistent_workers=args.num_workers_val > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers),
-                                worker_init_fn=set_worker_sharing_strategy
-        )
+    ## create validation dataset
+    val_data = SimpleIterDataset(
+        val_file_dict, args.data_config, for_training=True,
+        load_range_and_fraction=(val_range, args.data_fraction),
+        file_fraction=args.file_fraction,
+        fetch_by_files=args.fetch_by_files_val if args.data_val else args.fetch_by_files_train,
+        fetch_step=args.fetch_step_val if args.data_val else args.fetch_by_files_train,
+        infinity_mode=args.steps_per_epoch_val is not None,
+        in_memory=args.in_memory,
+        max_resample=args.max_resample,
+        max_resample_dom=args.max_resample_dom,
+        name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank)
+    )
 
-    else:
-        val_data = SimpleIterDataset(val_file_dict, args.data_config, for_training=True,
-                                     load_range_and_fraction=(val_range, args.data_fraction),
-                                     file_fraction=args.file_fraction,
-                                     fetch_by_files=args.fetch_by_files_train,
-                                     fetch_step=args.fetch_step_train,
-                                     infinity_mode=args.steps_per_epoch_val is not None,
-                                     in_memory=args.in_memory,
-                                     max_resample=args.max_resample,
-                                     max_resample_dom=args.max_resample_dom,
-                                     name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
-
-        val_loader = DataLoader(val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
-                                num_workers=min(args.num_workers_train, int(len(val_files) * args.file_fraction)),
-                                persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch_val is not None or args.persistent_workers),
-                                worker_init_fn=set_worker_sharing_strategy
-        )
+    val_loader = DataLoader(
+        val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
+        num_workers=min(args.num_workers_val if args.data_val else args.num_workers_train, int(len(val_files) * args.file_fraction)),
+        persistent_workers= (args.num_workers_val > 0 if args.data_val else args.num_workers_train > 0) and (args.steps_per_epoch_val is not None or args.persistent_workers),
+        worker_init_fn=set_worker_sharing_strategy
+    )
 
     data_config = train_data.config
     train_input_names = train_data.config.input_names
@@ -339,22 +316,24 @@ def preprocess_load(args):
     if args.in_memory and (args.steps_per_epoch is Nsone or args.steps_per_epoch_val is None):
         raise RuntimeError('Must set --steps-per-epoch when using --in-memory!')
 
-    preprocess_data = SimpleIterDataset(preprocess_file_dict, args.data_config, for_training=True,
-                                        load_range_and_fraction=(preprocess_range, args.data_fraction),
-                                        file_fraction=args.file_fraction,
-                                        fetch_by_files=args.fetch_by_files_preprocess,
-                                        fetch_step=args.fetch_step_preprocess,
-                                        infinity_mode=args.steps_per_epoch is not None,
-                                        in_memory=args.in_memory,
-                                        max_resample=1,
-                                        max_resample_dom=1,
-                                        name='preprocess' + ('' if args.local_rank is None else '_rank%d' % args.local_rank))
-
+    preprocess_data = SimpleIterDataset(
+        preprocess_file_dict, args.data_config, for_training=True,
+        load_range_and_fraction=(preprocess_range, args.data_fraction),
+        file_fraction=args.file_fraction,
+        fetch_by_files=args.fetch_by_files_preprocess,
+        fetch_step=args.fetch_step_preprocess,
+        infinity_mode=args.steps_per_epoch is not None,
+        in_memory=args.in_memory,
+        max_resample=1,
+        max_resample_dom=1,
+        name='preprocess' + ('' if args.local_rank is None else '_rank%d' % args.local_rank)
+    )
 
     return preprocess_data;
 
 
 def test_load(args):
+
     """
     Loads the test data.
     :param args:
@@ -392,12 +371,16 @@ def test_load(args):
         filelist = file_dict[name]
         _logger.info('Running on test file group %s with %d files:\n...%s', name, len(filelist), '\n...'.join(filelist))
         num_workers = min(args.num_workers_test, len(filelist))
-        test_data = SimpleIterDataset({name: filelist}, args.data_config, for_training=False,
-                                      load_range_and_fraction=((0, 1), args.data_fraction),
-                                      fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
-                                      name='test_' + name)
-        test_loader = DataLoader(test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False, 
-                                 pin_memory=True,worker_init_fn=set_worker_sharing_strategy)
+        test_data = SimpleIterDataset(
+            {name: filelist}, args.data_config, for_training=False,
+            load_range_and_fraction=((0, 1), args.data_fraction),
+            fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
+            name='test_' + name
+        )
+        test_loader = DataLoader(
+            test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False, 
+            pin_memory=True,worker_init_fn=set_worker_sharing_strategy
+        )
         return test_loader
 
     test_loaders = {name: functools.partial(get_test_loader, name) for name in file_dict}
@@ -806,6 +789,11 @@ def _main(args):
 
     _logger.info('args:\n - %s', '\n - '.join(str(it) for it in args.__dict__.items()))
 
+    # export to ONNX 
+    if args.export_onnx:
+        onnx(args);
+        sys.exit(0);
+
     if args.file_fraction < 1:
         _logger.warning('Use of `file-fraction` is not recommended in general -- prefer using `data-fraction` instead.')
 
@@ -834,7 +822,7 @@ def _main(args):
     # training/testing mode
     training_mode = not args.predict
 
-    # device
+    # device detection
     if args.gpus:
         if args.backend is not None:
             local_rank = args.local_rank;
@@ -852,6 +840,13 @@ def _main(args):
         gpus = None
         dev = torch.device('cpu')
 
+    # tensorboard
+    if args.tensorboard:
+        from utils.nn.tools import TensorboardHelper
+        tb = TensorboardHelper(tb_comment=args.tensorboard, tb_custom_fn=args.tensorboard_custom_fn)
+    else:
+        tb = None
+
     # load data
     if args.weaver_mode == "preprocess":
         preprocess_data = preprocess_load(args);
@@ -868,31 +863,13 @@ def _main(args):
         iotest(args, data_loader)
         sys.exit(0);
 
+    ## setup the model
     model, model_info, loss_func = model_setup(args, data_config)
-
-    # TODO: load checkpoint
-    # if args.backend is not None:
-    #     load_checkpoint()
-
-    if args.print:
-        sys.exit(0);
-
+    
     if args.profile:
         profile(args, model, model_info, device=dev)
         sys.exit(0);
         
-
-    # export to ONNX
-    if args.export_onnx:
-        onnx(args);
-        sys.exit(0);
-
-    if args.tensorboard:
-        from utils.nn.tools import TensorboardHelper
-        tb = TensorboardHelper(tb_comment=args.tensorboard, tb_custom_fn=args.tensorboard_custom_fn)
-    else:
-        tb = None
-
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
     orig_model = model
