@@ -171,26 +171,28 @@ class ParticleNet(nn.Module):
         self.use_fts_bn = use_fts_bn
         self.for_inference = for_inference
         self.use_counts = use_counts        
-        if self.use_fts_bn:
-            self.bn_fts = nn.BatchNorm1d(input_dims)
         self.fc_domain = None;
         self.use_domain_on_output = use_domain_on_output;
+        
+        if self.use_fts_bn:
+            self.bn_fts = nn.BatchNorm1d(input_dims)
 
         # Edge Conv blocks
         self.edge_convs = nn.ModuleList()
+
         for idx, layer_param in enumerate(conv_params):
             k, channels = layer_param
             in_feat = input_dims if idx == 0 else conv_params[idx - 1][1][-1]
             self.edge_convs.append(EdgeConvBlock(k=k, in_feat=in_feat, out_feats=channels, cpu_mode=for_inference))
 
+        # Fusion block
         self.use_fusion = use_fusion
-
         if self.use_fusion:
             in_chn = sum(x[-1] for _, x in conv_params)
             out_chn = np.clip((in_chn // 128) * 128, 128, 1024)
             self.fusion_block = nn.Sequential(nn.Conv1d(in_chn, out_chn, kernel_size=1, bias=False), nn.BatchNorm1d(out_chn), nn.ReLU())
 
-        # fully connected layers for classification
+        # Fully connected layers for classification
         fcs = []
         for idx, layer_param in enumerate(fc_params):
             channels, drop_rate = layer_param
@@ -203,16 +205,20 @@ class ParticleNet(nn.Module):
                 nn.Linear(in_chn, channels), 
                 nn.ReLU(), 
                 nn.Dropout(drop_rate)))
+            
             if self.use_domain_on_output:
                 out_chan_fcs = channels
+                
         if self.use_domain_on_output:
             self.fc_minus_one = nn.Sequential(*fcs)
-        fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
-        self.fc = nn.Sequential(*fcs)
+            self.fc = nn.Sequential(nn.Linear(fc_params[-1][0], num_classes+num_targets))
+        else:
+            fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
+            self.fc = nn.Sequential(*fcs)
                 
-        # add or not the domain layers
+        # Add or not the domain layers
         fcs_domain = []
-        if not num_domains:
+        if self.num_domains:
             if not for_inference:
                 if use_revgrad:
                     fcs_domain.append(GradientReverse(self.alpha_grad));
@@ -236,6 +242,7 @@ class ParticleNet(nn.Module):
 
     def forward(self, points, features, mask=None):
 
+        ## prepare input features
         if mask is None:
             mask = (features.abs().sum(dim=1, keepdim=True) != 0)  # (N, 1, P)
 
@@ -252,6 +259,7 @@ class ParticleNet(nn.Module):
         else:
             fts = features
 
+        ## Edge conv blocks
         outputs = []
         for idx, conv in enumerate(self.edge_convs):
             pts = (points if idx == 0 else fts) + coord_shift
@@ -259,6 +267,7 @@ class ParticleNet(nn.Module):
             if self.use_fusion:
                 outputs.append(fts)
 
+        ## Make fusion and pooling
         if self.use_fusion:
             fts = self.fusion_block(torch.cat(outputs, dim=1)) * mask
 
@@ -266,19 +275,26 @@ class ParticleNet(nn.Module):
             x = fts.sum(dim=-1) / counts  # divide by the real counts
         else:
             x = fts.mean(dim=-1)
-        
-        output = self.fc(x)
 
+        ## Evaluate output
+        if not self.use_domain_on_output:
+            output = self.fc(x)
+        else:
+            output_minus_one = self.fc_minus_one(x)
+            output = self.fc(output_minus_one)
+
+        ## Prepare output for inference
         if self.for_inference:
             if self.num_classes and not self.num_targets:
                 output = torch.softmax(output,dim=1);
             elif self.num_classes and self.num_targets:
                 output_class = torch.softmax(output[:,:self.num_classes],dim=1)
-                output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
+                output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
                 output = torch.cat((output_class,output_reg),dim=1);
+                
         elif self.num_domains and self.fc_domain:
             if self.use_domain_on_output:
-                output_domain = self.fc_domain(self.fc_minus_one(x))
+                output_domain = self.fc_domain(output_minus_one)
             else:
                 output_domain = self.fc_domain(x)
             output = torch.cat((output,output_domain),dim=1);
