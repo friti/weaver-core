@@ -158,22 +158,26 @@ class ParticleNet(nn.Module):
                  use_fts_bn=True,
                  use_counts=True,
                  use_revgrad=True,
+                 use_domain_on_output=False,
                  for_inference=False,
                  alpha_grad=1,
                  **kwargs):
         super(ParticleNet, self).__init__(**kwargs)
+
         self.num_classes = num_classes;
         self.num_targets = num_targets;
         self.num_domains = num_domains;
         self.alpha_grad = alpha_grad;
         self.use_fts_bn = use_fts_bn
+        self.for_inference = for_inference
+        self.use_counts = use_counts        
         if self.use_fts_bn:
             self.bn_fts = nn.BatchNorm1d(input_dims)
+        self.fc_domain = None;
+        self.use_domain_on_output = use_domain_on_output;
 
-        self.use_counts = use_counts
-
+        # Edge Conv blocks
         self.edge_convs = nn.ModuleList()
-
         for idx, layer_param in enumerate(conv_params):
             k, channels = layer_param
             in_feat = input_dims if idx == 0 else conv_params[idx - 1][1][-1]
@@ -186,7 +190,7 @@ class ParticleNet(nn.Module):
             out_chn = np.clip((in_chn // 128) * 128, 128, 1024)
             self.fusion_block = nn.Sequential(nn.Conv1d(in_chn, out_chn, kernel_size=1, bias=False), nn.BatchNorm1d(out_chn), nn.ReLU())
 
-        ## fully connected layers for classification
+        # fully connected layers for classification
         fcs = []
         for idx, layer_param in enumerate(fc_params):
             channels, drop_rate = layer_param
@@ -199,37 +203,36 @@ class ParticleNet(nn.Module):
                 nn.Linear(in_chn, channels), 
                 nn.ReLU(), 
                 nn.Dropout(drop_rate)))
+            if self.use_domain_on_output:
+                out_chan_fcs = channels
+        if self.use_domain_on_output:
+            self.fc_minus_one = nn.Sequential(*fcs)
+        fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
+        self.fc = nn.Sequential(*fcs)
                 
-        # add or not the domain
+        # add or not the domain layers
         fcs_domain = []
         if not num_domains:
-            fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
-            self.fc = nn.Sequential(*fcs)
-            self.fc_domain = None;
-        elif num_domains and not fc_domain_params:
-            fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets+num_domains))
-            self.fc = nn.Sequential(*fcs)
-            self.fc_domain = None;
-        elif num_domains and fc_domain_params:
-            fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
-            self.fc = nn.Sequential(*fcs)
             if not for_inference:
                 if use_revgrad:
                     fcs_domain.append(GradientReverse(self.alpha_grad));
                 for idx, layer_param in enumerate(fc_domain_params):
                     channels, drop_rate = layer_param
                     if idx == 0:
-                        in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
+                        if self.use_domain_on_output:
+                            in_chn = out_chan_fcs
+                        else:
+                            in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
                     else:
                         in_chn = fc_domain_params[idx - 1][0]
+
                     fcs_domain.append(nn.Sequential(
                         nn.Linear(in_chn, channels), 
                         nn.ReLU(), 
                         nn.Dropout(drop_rate)))
-                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domains)) 
-                self.fc_domain = nn.Sequential(*fcs_domain)
 
-        self.for_inference = for_inference
+                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domains))             
+                self.fc_domain = nn.Sequential(*fcs_domain)
 
     def forward(self, points, features, mask=None):
 
@@ -274,7 +277,10 @@ class ParticleNet(nn.Module):
                 output_reg   = output[:,self.num_classes:self.num_classes+self.num_targets];
                 output = torch.cat((output_class,output_reg),dim=1);
         elif self.num_domains and self.fc_domain:
-            output_domain = self.fc_domain(x)
+            if self.use_domain_on_output:
+                output_domain = self.fc_domain(self.fc_minus_one(x))
+            else:
+                output_domain = self.fc_domain(x)
             output = torch.cat((output,output_domain),dim=1);
                     
         return output
@@ -310,6 +316,7 @@ class ParticleNetTagger(nn.Module):
                  use_fts_bn=True,
                  use_counts=True,
                  use_revgrad=True,
+                 use_domain_on_output=False,
                  pf_input_dropout=None,
                  sv_input_dropout=None,
                  for_inference=False,
@@ -328,6 +335,7 @@ class ParticleNetTagger(nn.Module):
                               fc_params=fc_params,
                               fc_domain_params=fc_domain_params,
                               use_revgrad=use_revgrad,
+                              use_domain_on_output=use_domain_on_output,
                               use_fusion=use_fusion,
                               use_fts_bn=use_fts_bn,
                               use_counts=use_counts,
@@ -368,6 +376,7 @@ class ParticleNetLostTrkTagger(nn.Module):
                  use_fts_bn=True,
                  use_counts=True,
                  use_revgrad=True,
+                 use_domain_on_output=False,
                  pf_input_dropout=None,
                  sv_input_dropout=None,
                  lt_input_dropout=None,
@@ -392,6 +401,7 @@ class ParticleNetLostTrkTagger(nn.Module):
                               use_fts_bn=use_fts_bn,
                               use_counts=use_counts,
                               use_revgrad=use_revgrad,
+                              use_domain_on_output=use_domain_on_output,
                               for_inference=for_inference,
                               alpha_grad=alpha_grad)
 
