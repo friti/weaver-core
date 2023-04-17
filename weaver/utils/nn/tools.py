@@ -149,9 +149,11 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     targets = defaultdict(list)
     labels_domain = defaultdict(list)
     observers = defaultdict(list)
+    num_labels = len(data_config.label_value);
 
     start_time = time.time()
 
+    
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, _, _, Z, _, _ in tq:
@@ -178,18 +180,21 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                             observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 label = label.to(dev,non_blocking=True)
+                count += num_examples
 
                 model_output = model(*inputs)
                 model_output = _flatten_preds(model_output, label_mask)                
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
-                
-                scores.append(torch.softmax(model_output,dim=1).cpu().numpy().astype(dtype=np.float32))
 
+                if model_output.shape[0] == num_examples:
+                    scores.append(torch.softmax(model_output,dim=1).cpu().numpy().astype(dtype=np.float32))
+                else:
+                    scores.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+      
                 loss = 0 if loss_func is None else loss_func(model_output, label).item()
                 
                 num_batches += 1
-                count += num_examples
                 _, preds = model_output.max(1)
                 correct = (preds == label).sum().item()
                 total_loss += loss * num_examples
