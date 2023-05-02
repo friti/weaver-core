@@ -19,8 +19,12 @@ parser.add_argument('--weaver-mode', type=str, default='class', choices=['class'
                     help='class: classification task, reg: regression task, classreg: classification+regression,' 
                     'classregdomain: classification+regression with domain adversarial, preprocess: only run re-weight step and produce the new yaml file'
                 )
-parser.add_argument('-c', '--data-config', type=str, default='data/ak15_points_pf_sv_v0.yaml',
+parser.add_argument('-c', '--data-config', type=str,
                     help='data config YAML file')
+parser.add_argument('--extra-selection', type=str, default=None,
+                    help='Additional selection requirement, will modify `selection` to `(selection) & (extra)` on-the-fly')
+parser.add_argument('--extra-test-selection', type=str, default=None,
+                    help='Additional test-time selection requirement, will modify `test_time_selection` to `(test_time_selection) & (extra)` on-the-fly')
 parser.add_argument('-i', '--data-train', nargs='*', default=[],
                     help='training files; supported syntax:'
                          ' (a) plain list, `--data-train /path/to/a/* /path/to/b/*`;'
@@ -76,7 +80,7 @@ parser.add_argument('--tensorboard', type=str, default=None,
 parser.add_argument('--tensorboard-custom-fn', type=str, default=None,
                     help='the path of the python script containing a user-specified function `get_tensorboard_custom_fn`, '
                          'to display custom information per mini-batch or per epoch, during the training, validation or test.')
-parser.add_argument('-n', '--network-config', type=str, default='networks/particle_net_pfcand_sv.py',
+parser.add_argument('-n', '--network-config', type=str,
                     help='network architecture configuration file; the path must be relative to the current dir')
 parser.add_argument('-o', '--network-option', nargs=2, action='append', default=[],
                     help='options to pass to the model class constructor, e.g., `--network-option use_counts False`')
@@ -165,6 +169,8 @@ parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
 parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
                     help='backend for distributed training')
+parser.add_argument('--cross-validation', type=str, default=None,
+                    help='enable k-fold cross validation; input format: `variable_name%k`')
 
 def to_filelist(args, mode='train'):
 
@@ -370,6 +376,7 @@ def test_load(args):
     def get_test_loader(name):
         filelist = file_dict[name]
         _logger.info('Running on test file group %s with %d files:\n...%s', name, len(filelist), '\n...'.join(filelist))
+
         num_workers = min(args.num_workers_test, len(filelist))
         test_data = SimpleIterDataset(
             {name: filelist}, args.data_config, for_training=False,
@@ -381,6 +388,7 @@ def test_load(args):
             test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False, 
             pin_memory=True,worker_init_fn=set_worker_sharing_strategy
         )
+
         return test_loader
 
     test_loaders = {name: functools.partial(get_test_loader, name) for name in file_dict}
@@ -392,9 +400,6 @@ def onnx(args):
     """
     Saving model as ONNX.
     :param args:
-    :param model:
-    :param data_config:
-    :param model_info:
     :return:
     """
     assert (args.export_onnx.endswith('.onnx'))
@@ -408,6 +413,7 @@ def onnx(args):
         model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
     else:
         model.load_state_dict(torch.load(model_path, map_location='cpu'))
+
     model = model.cpu()
     model.eval()
 
@@ -840,7 +846,6 @@ def _main(args):
         gpus = None
         dev = torch.device('cpu')
 
-    # tensorboard
     if args.tensorboard:
         from utils.nn.tools import TensorboardHelper
         tb = TensorboardHelper(tb_comment=args.tensorboard, tb_custom_fn=args.tensorboard_custom_fn)
@@ -986,14 +991,16 @@ def _main(args):
 
             if args.predict_output and scores.ndim:
                 if '/' not in args.predict_output:
-                    args.predict_output = os.path.join(
+                    predict_output = os.path.join(
                         os.path.dirname(args.model_prefix),
                         'predict_output', args.predict_output)
-                os.makedirs(os.path.dirname(args.predict_output), exist_ok=True)
-                if name == '':
-                    output_path = args.predict_output
                 else:
-                    base, ext = os.path.splitext(args.predict_output)
+                    predict_output = args.predict_output
+                os.makedirs(os.path.dirname(predict_output), exist_ok=True)
+                if name == '':
+                    output_path = predict_output
+                else:
+                    base, ext = os.path.splitext(predict_output)
                     output_path = base + '_' + name + ext
                 if output_path.endswith('.root'):
                     save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers)
@@ -1046,7 +1053,18 @@ def main():
             stdout = None
     _configLogger('weaver', stdout=stdout, filename=args.log)
 
-    _main(args)
+    if args.cross_validation:
+        model_dir, model_fn = os.path.split(args.model_prefix)
+        var_name, kfold = args.cross_validation.split('%')
+        kfold = int(kfold)
+        for i in range(kfold):
+            _logger.info(f'\n=== Running cross validation, fold {i} of {kfold} ===')
+            args.model_prefix = os.path.join(f'{model_dir}_fold{i}', model_fn)
+            args.extra_selection = f'{var_name}%{kfold}!={i}'
+            args.extra_test_selection = f'{var_name}%{kfold}=={i}'
+            _main(args)
+    else:
+        _main(args)
 
 if __name__ == '__main__':
 

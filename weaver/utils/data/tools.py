@@ -19,7 +19,10 @@ def _stack(arrays, axis=1):
     if isinstance(arrays[0], np.ndarray):
         return np.stack(arrays, axis=axis)
     else:
-        return ak.concatenate(arrays, axis=axis)
+        s = [slice(None)] * (arrays[0].ndim + 1)
+        s[axis] = np.newaxis
+        s = tuple(s)
+        return ak.concatenate([a.__getitem__(s) for a in arrays], axis=axis)
 
 
 def _pad(a, maxlen, value=0, dtype='float32'):
@@ -52,7 +55,7 @@ def _repeat_pad(a, maxlen, shuffle=False, dtype='float32'):
 
 
 def _clip(a, a_min, a_max):
-    if isinstance(a, np.ndarray):
+    if isinstance(a, np.ndarray) or a.ndim == 1:
         return np.clip(a, a_min, a_max)
     else:
         return ak.unflatten(np.clip(ak.to_numpy(ak.flatten(a)), a_min, a_max), ak.num(a))
@@ -101,19 +104,19 @@ def _batch_gather(array, indices):
 def _p4_from_pxpypze(px, py, pz, energy):
     import vector
     vector.register_awkward()
-    return vector.Array({'px': px, 'py': py, 'pz': pz, 'energy': energy})
+    return vector.zip({'px': px, 'py': py, 'pz': pz, 'energy': energy})
 
 
 def _p4_from_ptetaphie(pt, eta, phi, energy):
     import vector
     vector.register_awkward()
-    return vector.Array({'pt': pt, 'eta': eta, 'phi': phi, 'energy': energy})
+    return vector.zip({'pt': pt, 'eta': eta, 'phi': phi, 'energy': energy})
 
 
 def _p4_from_ptetaphim(pt, eta, phi, mass):
     import vector
     vector.register_awkward()
-    return vector.Array({'pt': pt, 'eta': eta, 'phi': phi, 'mass': mass})
+    return vector.zip({'pt': pt, 'eta': eta, 'phi': phi, 'mass': mass})
 
 
 def _get_variable_names(expr, exclude=['awkward', 'ak', 'np', 'numpy', 'math']):
