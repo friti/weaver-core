@@ -162,7 +162,7 @@ class ParticleNet(nn.Module):
                  use_fts_bn=True,
                  use_counts=True,
                  use_revgrad=True,
-                 use_domain_on_output=False,
+                 split_domain_outputs=False,
                  for_inference=False,
                  alpha_grad=1,
                  **kwargs):
@@ -176,7 +176,7 @@ class ParticleNet(nn.Module):
         self.for_inference = for_inference
         self.use_counts = use_counts        
         self.fc_domain = None;
-        self.use_domain_on_output = use_domain_on_output;
+        self.split_domain_outputs = split_domain_outputs;
         
         if self.use_fts_bn:
             self.bn_fts = nn.BatchNorm1d(input_dims)
@@ -210,39 +210,48 @@ class ParticleNet(nn.Module):
                 nn.ReLU(), 
                 nn.Dropout(drop_rate)))
             
-            if self.use_domain_on_output:
-                out_chan_fcs = channels
-                
-        if self.use_domain_on_output:
-            self.fc_minus_one = nn.Sequential(*fcs)
-            self.fc = nn.Sequential(nn.Linear(fc_params[-1][0], num_classes+num_targets))
-        else:
-            fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
-            self.fc = nn.Sequential(*fcs)
+        fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
+        self.fc = nn.Sequential(*fcs)
                 
         # Add or not the domain layers
-        fcs_domain = []
-        if self.num_domains:
-            if not for_inference:
+        if not for_inference and self.num_domains:
+            if not self.split_domain_outputs:
+                fcs_domain = []
                 if use_revgrad:
                     fcs_domain.append(GradientReverse(self.alpha_grad));
                 for idx, layer_param in enumerate(fc_domain_params):
                     channels, drop_rate = layer_param
                     if idx == 0:
-                        if self.use_domain_on_output:
-                            in_chn = out_chan_fcs
-                        else:
-                            in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
+                        in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
                     else:
                         in_chn = fc_domain_params[idx - 1][0]
-
+                        
                     fcs_domain.append(nn.Sequential(
                         nn.Linear(in_chn, channels), 
                         nn.ReLU(), 
                         nn.Dropout(drop_rate)))
 
-                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domains))             
+                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domains))
                 self.fc_domain = nn.Sequential(*fcs_domain)
+            else:
+                for dom in range(0,self.num_domains):
+                    fcs_domain = []
+                    if use_revgrad:
+                        fcs_domain.append(GradientReverse(self.alpha_grad));
+                    for idx, layer_param in enumerate(fc_domain_params):
+                        channels, drop_rate = layer_param
+                        if idx == 0:
+                            in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
+                        else:
+                            in_chn = fc_domain_params[idx - 1][0]
+
+                        fcs_domain.append(nn.Sequential(
+                            nn.Linear(in_chn, channels), 
+                            nn.ReLU(), 
+                            nn.Dropout(drop_rate)))
+
+                    fcs_domain.append(nn.Linear(fc_domain_params[-1][0],2))
+                    self.fc_domain.append(nn.Sequential(*fcs_domain))
 
     def forward(self, points, features, mask=None):
 
@@ -281,11 +290,7 @@ class ParticleNet(nn.Module):
             x = fts.mean(dim=-1)
 
         ## Evaluate output
-        if not self.use_domain_on_output:
-            output = self.fc(x)
-        else:
-            output_minus_one = self.fc_minus_one(x)
-            output = self.fc(output_minus_one)
+        output = self.fc(x)
 
         ## Prepare output for inference
         if self.for_inference:
@@ -297,12 +302,14 @@ class ParticleNet(nn.Module):
                 output = torch.cat((output_class,output_reg),dim=1);
                 
         elif self.num_domains and self.fc_domain:
-            if self.use_domain_on_output:
-                output_domain = self.fc_domain(output_minus_one)
-            else:
+            if not self.split_domain_outputs:
                 output_domain = self.fc_domain(x)
-            output = torch.cat((output,output_domain),dim=1);
-                    
+                output = torch.cat((output,output_domain),dim=1);
+            else:
+                for i,fc in enumerate(self.fc_domain):
+                    output_domain = fc(x)
+                    output = torch.cat((output,output_domain),dim=1);
+                
         return output
 
 class FeatureConv(nn.Module):
@@ -336,7 +343,7 @@ class ParticleNetTagger(nn.Module):
                  use_fts_bn=True,
                  use_counts=True,
                  use_revgrad=True,
-                 use_domain_on_output=False,
+                 split_domain_outputs=False,
                  pf_input_dropout=None,
                  sv_input_dropout=None,
                  for_inference=False,
@@ -355,7 +362,7 @@ class ParticleNetTagger(nn.Module):
                               fc_params=fc_params,
                               fc_domain_params=fc_domain_params,
                               use_revgrad=use_revgrad,
-                              use_domain_on_output=use_domain_on_output,
+                              split_domain_outputs=split_domain_outputs,
                               use_fusion=use_fusion,
                               use_fts_bn=use_fts_bn,
                               use_counts=use_counts,
@@ -396,7 +403,7 @@ class ParticleNetLostTrkTagger(nn.Module):
                  use_fts_bn=True,
                  use_counts=True,
                  use_revgrad=True,
-                 use_domain_on_output=False,
+                 split_domain_outputs=False,
                  pf_input_dropout=None,
                  sv_input_dropout=None,
                  lt_input_dropout=None,
@@ -421,7 +428,7 @@ class ParticleNetLostTrkTagger(nn.Module):
                               use_fts_bn=use_fts_bn,
                               use_counts=use_counts,
                               use_revgrad=use_revgrad,
-                              use_domain_on_output=use_domain_on_output,
+                              split_domain_outputs=split_domain_outputs,
                               for_inference=for_inference,
                               alpha_grad=alpha_grad)
 
