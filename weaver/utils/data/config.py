@@ -295,7 +295,7 @@ class DataConfig(object):
                 raise RuntimeError('`test_time_selection` is not defined in the yaml file!')
             options['test_time_selection'] = '(%s) & (%s)' % (options['test_time_selection'], extra_test_selection)
 
-            return cls(**options)
+        return cls(**options)
 
     def copy(self):
         return self.__class__(print_info=False, **copy.deepcopy(self.options))
