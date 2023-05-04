@@ -249,7 +249,7 @@ class ParticleNet(nn.Module):
                             nn.Linear(in_chn, channels), 
                             nn.ReLU(), 
                             nn.Dropout(drop_rate)))
-
+                    ## two output nodes for domain
                     fcs_domain.append(nn.Linear(fc_domain_params[-1][0],2))
                     self.fc_domain.append(nn.Sequential(*fcs_domain))
 
@@ -308,8 +308,7 @@ class ParticleNet(nn.Module):
             else:
                 for i,fc in enumerate(self.fc_domain):
                     output_domain = fc(x)
-                    output = torch.cat((output,output_domain),dim=1);
-                
+                    output = torch.cat((output,output_domain),dim=1);                    
         return output
 
 class FeatureConv(nn.Module):
