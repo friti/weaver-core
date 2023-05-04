@@ -19,7 +19,7 @@ parser.add_argument('--weaver-mode', type=str, default='class', choices=['class'
                     help='class: classification task, reg: regression task, classreg: classification+regression,' 
                     'classregdomain: classification+regression with domain adversarial, preprocess: only run re-weight step and produce the new yaml file'
                 )
-parser.add_argument('-c', '--data-config', type=str,
+parser.add_argument('-c', '--data-config', type=str, default='',
                     help='data config YAML file')
 parser.add_argument('--extra-selection', type=str, default=None,
                     help='Additional selection requirement, will modify `selection` to `(selection) & (extra)` on-the-fly')
@@ -80,7 +80,7 @@ parser.add_argument('--tensorboard', type=str, default=None,
 parser.add_argument('--tensorboard-custom-fn', type=str, default=None,
                     help='the path of the python script containing a user-specified function `get_tensorboard_custom_fn`, '
                          'to display custom information per mini-batch or per epoch, during the training, validation or test.')
-parser.add_argument('-n', '--network-config', type=str,
+parser.add_argument('-n', '--network-config', type=str, default='',
                     help='network architecture configuration file; the path must be relative to the current dir')
 parser.add_argument('-o', '--network-option', nargs=2, action='append', default=[],
                     help='options to pass to the model class constructor, e.g., `--network-option use_counts False`')
