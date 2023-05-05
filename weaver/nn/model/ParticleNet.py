@@ -234,6 +234,7 @@ class ParticleNet(nn.Module):
                 fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domains))
                 self.fc_domain = nn.Sequential(*fcs_domain)
             else:
+                self.fc_domain = []
                 for dom in range(0,self.num_domains):
                     fcs_domain = []
                     if use_revgrad:
