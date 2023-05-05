@@ -235,10 +235,12 @@ class ParticleNet(nn.Module):
                 self.fc_domain = nn.Sequential(*fcs_domain)
             else:
                 self.fc_domain = []
+                fcs_domain = {}
                 for dom in range(0,self.num_domains):
-                    fcs_domain = []
+                    print("dom ",dom," over ndomains ",self.num_domains);
+                    fcs_domain[dom] = []
                     if use_revgrad:
-                        fcs_domain.append(GradientReverse(self.alpha_grad));
+                        fcs_domain[dom].append(GradientReverse(self.alpha_grad));
                     for idx, layer_param in enumerate(fc_domain_params):
                         channels, drop_rate = layer_param
                         if idx == 0:
@@ -246,14 +248,14 @@ class ParticleNet(nn.Module):
                         else:
                             in_chn = fc_domain_params[idx - 1][0]
 
-                        fcs_domain.append(nn.Sequential(
+                        fcs_domain[dom].append(nn.Sequential(
                             nn.Linear(in_chn, channels), 
                             nn.ReLU(), 
                             nn.Dropout(drop_rate)))
                     ## two output nodes for domain
-                    fcs_domain.append(nn.Linear(fc_domain_params[-1][0],2))
-                    self.fc_domain.append(nn.Sequential(*fcs_domain))
-
+                    fcs_domain[dom].append(nn.Linear(fc_domain_params[-1][0],2))
+                    self.fc_domain.append(nn.Sequential(*fcs_domain[dom]))
+                    
     def forward(self, points, features, mask=None):
 
         ## prepare input features
