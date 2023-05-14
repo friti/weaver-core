@@ -155,6 +155,7 @@ class ParticleNet(nn.Module):
                  num_classes,
                  num_targets,
                  num_domains=0,
+                 num_domain_loss=0,
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
                  fc_domain_params=[],
@@ -171,6 +172,7 @@ class ParticleNet(nn.Module):
         self.num_classes = num_classes;
         self.num_targets = num_targets;
         self.num_domains = num_domains;
+        self.num_domain_loss = num_domain_loss;
         self.alpha_grad = alpha_grad;
         self.use_fts_bn = use_fts_bn
         self.for_inference = for_inference
@@ -214,7 +216,7 @@ class ParticleNet(nn.Module):
         self.fc = nn.Sequential(*fcs)
                 
         # Add or not the domain layers
-        if not for_inference and self.num_domains:
+        if not for_inference and self.num_domain_loss:
             if not self.split_domain_outputs:
                 fcs_domain = []
                 if use_revgrad:
@@ -236,10 +238,11 @@ class ParticleNet(nn.Module):
             else:
                 self.fc_domain = []
                 fcs_domain = {}
-                for dom in range(0,self.num_domains):
-                    print("dom ",dom," over ndomains ",self.num_domains);
+                print("self.num_domain_loss ",self.num_domain_loss);
+                for dom in range(0,self.num_domain_loss):
                     fcs_domain[dom] = []
                     if use_revgrad:
+                        print("fcs_domain in position dom ",dom," add GradientReverse ");
                         fcs_domain[dom].append(GradientReverse(self.alpha_grad));
                     for idx, layer_param in enumerate(fc_domain_params):
                         channels, drop_rate = layer_param
@@ -252,9 +255,12 @@ class ParticleNet(nn.Module):
                             nn.Linear(in_chn, channels), 
                             nn.ReLU(), 
                             nn.Dropout(drop_rate)))
+                        print("fcs_domain in position dom ",dom," add sequence based on in_chn ",in_chn," out_chan ",channels);
                     ## two output nodes for domain
-                    fcs_domain[dom].append(nn.Linear(fc_domain_params[-1][0],2))
+                    print("add final layer to dom ",dom," on in_chan ",fc_domain_params[-1][0]," out_chan ",int(self.num_domains/self.num_domain_loss))
+                    fcs_domain[dom].append(nn.Linear(fc_domain_params[-1][0],int(self.num_domains/self.num_domain_loss)))
                     self.fc_domain.append(nn.Sequential(*fcs_domain[dom]))
+                    print("adding to fc_dmain list with size = ",len(self.fc_domain))
                     
     def forward(self, points, features, mask=None):
 
@@ -304,7 +310,7 @@ class ParticleNet(nn.Module):
                 output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
                 output = torch.cat((output_class,output_reg),dim=1);
                 
-        elif self.num_domains and self.fc_domain:
+        elif self.num_domain_loss and self.fc_domain:
             if not self.split_domain_outputs:
                 output_domain = self.fc_domain(x)
                 output = torch.cat((output,output_domain),dim=1);
@@ -337,6 +343,7 @@ class ParticleNetTagger(nn.Module):
                  num_classes,
                  num_targets,
                  num_domains=0,
+                 num_domain_loss=0,
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
                  fc_domain_params=[],
@@ -360,6 +367,7 @@ class ParticleNetTagger(nn.Module):
                               num_classes=num_classes,
                               num_targets=num_targets,
                               num_domains=num_domains,
+                              num_domain_loss=num_domain_loss,
                               conv_params=conv_params,
                               fc_params=fc_params,
                               fc_domain_params=fc_domain_params,
@@ -397,6 +405,7 @@ class ParticleNetLostTrkTagger(nn.Module):
                  num_classes,
                  num_targets,
                  num_domains=0,
+                 num_domain_loss=0,
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
                  fc_domain_params=[],
@@ -423,6 +432,7 @@ class ParticleNetLostTrkTagger(nn.Module):
                               num_classes=num_classes,
                               num_targets=num_targets,
                               num_domains=num_domains,
+                              num_domain_loss=num_domain_loss,
                               conv_params=conv_params,
                               fc_params=fc_params,
                               fc_domain_params=fc_domain_params,
