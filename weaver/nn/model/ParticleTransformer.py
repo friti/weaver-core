@@ -578,45 +578,56 @@ class ParticleTransformer(nn.Module):
 class ParticleTransformerTagger(nn.Module):
 
     def __init__(self,
+                 # input tensors
                  pf_input_dim,
                  sv_input_dim,
                  lt_input_dim,
+                 # output of network
                  num_classes=None,
                  num_targets=None,
+                 num_domains=[],
                  # network configurations
                  pair_input_dim=4,
                  pair_extra_dim=0,
                  remove_self_pair=False,
                  use_pre_activation_pair=True,
+                 # feature embeddings
                  embed_dims=[128, 512, 128],
+                 # pair embeddings
                  pair_embed_dims=[64, 64, 64],
+                 # layers layout
                  num_heads=8,
                  num_layers=8,
                  num_cls_layers=2,
                  block_params=None,
                  cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
+                 # final fully connected layers
                  fc_params=[],
+                 fc_domain_params=[],
                  activation='gelu',
                  # misc
                  trim=True,
                  for_inference=False,
                  use_amp=False,
+                 split_domain_outputs=False,
+                 alpha_grad=1,
                  **kwargs) -> None:
+
         super().__init__(**kwargs)
 
         self.use_amp = use_amp
 
         self.pf_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.lt_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-
+        self.lt_trimmer = SequenceTrimmer(enabled=trim and not for_inference)        
         self.pf_embed = Embed(pf_input_dim, embed_dims, activation=activation)
         self.sv_embed = Embed(sv_input_dim, embed_dims, activation=activation)
         self.lt_embed = Embed(lt_input_dim, embed_dims, activation=activation)
-
+        
         self.part = ParticleTransformer(input_dim=embed_dims[-1],
                                         num_classes=num_classes,
                                         num_targets=num_targets,
+                                        num_domains=num_domains,
                                         # network configurations
                                         pair_input_dim=pair_input_dim,
                                         pair_extra_dim=pair_extra_dim,
@@ -630,11 +641,15 @@ class ParticleTransformerTagger(nn.Module):
                                         block_params=block_params,
                                         cls_block_params=cls_block_params,
                                         fc_params=fc_params,
+                                        fc_domain_params=fc_domain_params,
                                         activation=activation,
                                         # misc
                                         trim=False,
                                         for_inference=for_inference,
-                                        use_amp=use_amp)
+                                        use_amp=use_amp,
+                                        split_domain_outputs=split_domain_outputs,
+                                        alpha_grad=alpha_grad
+        )
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -669,6 +684,7 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
                  lt_input_dim,
                  num_classes=None,
                  num_targets=None,
+                 num_domains=[],
                  # network configurations
                  pair_input_dim=4,
                  pair_extra_dim=0,
@@ -682,17 +698,21 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
                  block_params=None,
                  cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
                  fc_params=[],
+                 fc_domain_params=[],
                  activation='gelu',
                  # misc
                  trim=True,
                  for_inference=False,
                  use_amp=False,
+                 split_domain_outputs=False,
+                 alpha_grad=1,
                  **kwargs) -> None:
+        
         super().__init__(**kwargs)
 
         self.use_amp = use_amp
         self.for_inference = for_inference
-
+        
         self.pf_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.lt_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
@@ -704,6 +724,7 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
         self.part = ParticleTransformer(input_dim=embed_dims[-1],
                                         num_classes=num_classes,
                                         num_targets=num_targets,
+                                        num_domains=num_domains,                                        
                                         # network configurations
                                         pair_input_dim=pair_input_dim,
                                         pair_extra_dim=pair_extra_dim,
@@ -717,11 +738,16 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
                                         block_params=block_params,
                                         cls_block_params=cls_block_params,
                                         fc_params=fc_params,
+                                        fc_domain_params=fc_domain_params,                                        
                                         activation=activation,
                                         # misc
                                         trim=False,
                                         for_inference=for_inference,
-                                        use_amp=use_amp)
+                                        use_amp=use_amp,
+                                        split_domain_outputs=split_domain_outputs,
+                                        alpha_grad=alpha_grad
+                                        
+        )
 
     @torch.jit.ignore
     def no_weight_decay(self):
