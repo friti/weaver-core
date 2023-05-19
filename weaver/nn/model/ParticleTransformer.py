@@ -1,5 +1,4 @@
 ''' Particle Transformer (ParT)
-
 Paper: "Particle Transformer for Jet Tagging" - https://arxiv.org/abs/2202.03772
 '''
 import math
@@ -455,7 +454,31 @@ class Block(nn.Module):
         x += residual
 
         return x
+    
+## function and module to flip gradient                                                                                                                                                               
+class RevGrad(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.save_for_backward(x,alpha)
+        return x
 
+    @staticmethod
+    def backward(ctx, grad_output):
+          grad_input = None
+        _, alpha = ctx.saved_tensors
+        if ctx.needs_input_grad[0]:
+             grad_input = - alpha*grad_output
+        return grad_input, None
+
+class GradientReverse(nn.Module):
+    def __init__(self, alpha=1., *args, **kwargs):
+        """                                                                                                                                                                                         
+        A gradient reversal layer. This layer has no parameters, and simply reverses the gradient in the backward pass.                                                                             
+        """
+        super().__init__(*args, **kwargs)
+        self.alpha = torch.tensor(alpha, requires_grad=False)
+    def forward(self, x):
+        return RevGrad.apply(x, self.alpha)
 
 class ParticleTransformer(nn.Module):
 
@@ -463,6 +486,7 @@ class ParticleTransformer(nn.Module):
                  input_dim,
                  num_classes=None,
                  num_targets=None,
+                 num_domains=[],
                  # network configurations
                  pair_input_dim=4,
                  pair_extra_dim=0,
@@ -481,12 +505,20 @@ class ParticleTransformer(nn.Module):
                  trim=True,
                  for_inference=False,
                  use_amp=False,
+                 split_domain_outputs=False,
+                 alpha_grad=1,                 
                  **kwargs) -> None:
         super().__init__(**kwargs)
 
         self.trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.for_inference = for_inference
         self.use_amp = use_amp
+        self.num_classes = num_classes;
+        self.num_targets = num_targets;
+        self.num_domains = num_domains;
+        self.alpha_grad = alpha_grad;
+        self.fc_domain = None;
+        self.split_domain_outputs = split_domain_outputs;
 
         embed_dim = embed_dims[-1] if len(embed_dims) > 0 else input_dim
         default_cfg = dict(embed_dim=embed_dim, num_heads=num_heads, ffn_ratio=4,
@@ -505,6 +537,7 @@ class ParticleTransformer(nn.Module):
         _logger.info('cfg_cls_block: %s' % str(cfg_cls_block))
 
         self.pair_extra_dim = pair_extra_dim
+
         self.embed = Embed(input_dim, embed_dims, activation=activation) if len(embed_dims) > 0 else nn.Identity()
         self.pair_embed = PairEmbed(
             pair_input_dim, pair_extra_dim, pair_embed_dims + [cfg_block['num_heads']],
@@ -524,6 +557,46 @@ class ParticleTransformer(nn.Module):
             self.fc = nn.Sequential(*fcs)
         else:
             self.fc = None
+
+        if not for_inference and self.num_domains:
+            if not self.split_domain_outputs:
+                num_dom = sum(element for element in self.num_domains);
+                fcs_domain = []
+                fcs_domain.append(GradientReverse(self.alpha_grad));
+                for idx, layer_param in enumerate(fc_domain_params):
+                    channels, drop_rate = layer_param
+                    if idx == 0:
+                        in_chn = embed_dim
+                    else:
+                        in_chn = fc_domain_params[idx - 1][0]
+
+                    fcs_domain.append(nn.Sequential(
+                        nn.Linear(in_chn, channels),
+                        nn.ReLU(),
+                        nn.Dropout(drop_rate)))
+
+                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_dom))
+                self.fc_domain = nn.Sequential(*fcs_domain)
+            else:
+                fcs_domain = [];
+                fcs_domain.append(GradientReverse(self.alpha_grad));
+                for idx, layer_param in enumerate(fc_domain_params):
+                    channels, drop_rate = layer_param
+                    if idx == 0:
+                        in_chn = embed_dim
+                    else:
+                        in_chn = fc_domain_params[idx - 1][0]
+                        
+                    fcs_domain.append(nn.Sequential(
+                        nn.Linear(in_chn, channels),
+                        nn.ReLU(),
+                        nn.Dropout(drop_rate)))
+
+                    fcs_domain.append(nn.Linear(fc_domain_params[-1][0],dom))
+                    if self.fc_domain is None:
+                        self.fc_domain = nn.ModuleList([nn.Sequential(*fcs_domain)]);
+                    else:
+                        self.fc_domain.append(nn.Sequential(*fcs_domain));
 
         # init
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim), requires_grad=True)
@@ -548,6 +621,7 @@ class ParticleTransformer(nn.Module):
             padding_mask = ~mask.squeeze(1)  # (N, P)
 
         with torch.cuda.amp.autocast(enabled=self.use_amp):
+
             # input embedding
             x = self.embed(x).masked_fill(~mask.permute(2, 0, 1), 0)  # (P, N, C)
             attn_mask = None
@@ -569,9 +643,22 @@ class ParticleTransformer(nn.Module):
             if self.fc is None:
                 return x_cls
             output = self.fc(x_cls)
+            
             if self.for_inference:
-                output = torch.softmax(output, dim=1)
-            # print('output:\n', output)
+                if self.num_classes and not self.num_targets:
+                    output = torch.softmax(output, dim=1)                    
+                elif self.num_classes and self.num_targets:
+                    output_class = torch.softmax(output[:,:self.num_classes],dim=1)
+		    output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
+                    output = torch.cat((output_class,output_reg),dim=1);
+            elif self.num_domains and self.fc_domain:
+                if not self.split_domain_outputs:
+                    output_domain = self.fc_domain(x)
+                    output = torch.cat((output,output_domain),dim=1);
+                else:
+                    for i,fc in enumerate(self.fc_domain):
+                        output_domain = fc(x);
+                        output = torch.cat((output,output_domain),dim=1);
             return output
 
 
