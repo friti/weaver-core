@@ -9,8 +9,6 @@ import torch
 import torch.nn as nn
 from functools import partial
 
-from weaver.utils.logger import _logger
-
 
 @torch.jit.script
 def delta_phi(a, b):
@@ -529,12 +527,10 @@ class ParticleTransformer(nn.Module):
         cfg_block = copy.deepcopy(default_cfg)
         if block_params is not None:
             cfg_block.update(block_params)
-        _logger.info('cfg_block: %s' % str(cfg_block))
 
         cfg_cls_block = copy.deepcopy(default_cfg)
         if cls_block_params is not None:
             cfg_cls_block.update(cls_block_params)
-        _logger.info('cfg_cls_block: %s' % str(cfg_cls_block))
 
         self.pair_extra_dim = pair_extra_dim
 
@@ -642,14 +638,15 @@ class ParticleTransformer(nn.Module):
             # fc
             if self.fc is None:
                 return x_cls
+            
             output = self.fc(x_cls)
             
             if self.for_inference:
                 if self.num_classes and not self.num_targets:
                     output = torch.softmax(output, dim=1)                    
                 elif self.num_classes and self.num_targets:
-                    output_class = torch.softmax(output[:,:self.num_classes],dim=1)
-		    output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
+                    output_class = torch.softmax(output[:,:self.num_classes],dim=1);
+                    output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
                     output = torch.cat((output_class,output_reg),dim=1);
             elif self.num_domains and self.fc_domain:
                 if not self.split_domain_outputs:
