@@ -464,7 +464,7 @@ class RevGrad(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-          grad_input = None
+        grad_input = None
         _, alpha = ctx.saved_tensors
         if ctx.needs_input_grad[0]:
              grad_input = - alpha*grad_output
