@@ -498,8 +498,8 @@ class ParticleTransformer(nn.Module):
                  block_params=None,
                  cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
                  fc_params=[],
+                 fc_domain_params=[],
                  activation='gelu',
-                 # misc
                  trim=True,
                  for_inference=False,
                  use_amp=False,
