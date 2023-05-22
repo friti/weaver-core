@@ -747,14 +747,14 @@ class ParticleTransformerTagger(nn.Module):
         with torch.no_grad():
             pf_x, pf_v, pf_mask, _ = self.pf_trimmer(pf_x, pf_v, pf_mask)
             sv_x, sv_v, sv_mask, _ = self.sv_trimmer(sv_x, sv_v, sv_mask)
-            lt_x, lt_v, lt_mask, _ = self.sv_trimmer(lt_x, lt_v, lt_mask)
+            lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)
             v    = torch.cat([pf_v, sv_v, lt_v], dim=2)
             mask = torch.cat([pf_mask, sv_mask, lt_mask], dim=2)
 
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             pf_x = self.pf_embed(pf_x)  # after embed: (seq_len, batch, embed_dim)
             sv_x = self.sv_embed(sv_x)
-            lt_x = self.sv_embed(lt_x)
+            lt_x = self.lt_embed(lt_x)
             x = torch.cat([pf_x, sv_x, lt_x], dim=0)
 
             return self.part(x, v, mask)
@@ -849,7 +849,7 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
 
             pf_x, pf_v, pf_mask, pf_uu = self.pf_trimmer(pf_x, pf_v, pf_mask, pf_uu)
             sv_x, sv_v, sv_mask, _ = self.sv_trimmer(sv_x, sv_v, sv_mask)
-            lt_x, lt_v, lt_mask, _ = self.sv_trimmer(lt_x, lt_v, lt_mask)
+            lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)
             v = torch.cat([pf_v, sv_v, lt_v], dim=2)
             mask = torch.cat([pf_mask, sv_mask, lt_mask], dim=2)
             uu = torch.zeros(v.size(0), pf_uu.size(1), v.size(2), v.size(2), dtype=v.dtype, device=v.device)
@@ -858,7 +858,7 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             pf_x = self.pf_embed(pf_x)  # after embed: (seq_len, batch, embed_dim)
             sv_x = self.sv_embed(sv_x)
-            lt_x = self.sv_embed(lt_x)
+            lt_x = self.lt_embed(lt_x)
             x = torch.cat([pf_x, sv_x, lt_x], dim=0)
 
             return self.part(x, v, mask, uu)
