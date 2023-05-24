@@ -556,7 +556,7 @@ class ParticleTransformer(nn.Module):
 
         if not for_inference and self.num_domains:
             if not self.split_domain_outputs:
-                num_dom = sum(element for element in self.num_domains);
+                num_domain = sum(element for element in self.num_domains);
                 fcs_domain = []
                 fcs_domain.append(GradientReverse(self.alpha_grad));
                 for idx, layer_param in enumerate(fc_domain_params):
@@ -566,12 +566,14 @@ class ParticleTransformer(nn.Module):
                     else:
                         in_chn = fc_domain_params[idx - 1][0]
 
-                    fcs_domain.append(nn.Sequential(
-                        nn.Linear(in_chn, channels),
-                        nn.ReLU(),
-                        nn.Dropout(drop_rate)))
-
-                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_dom))
+                    fcs_domain.append(
+                        nn.Sequential(
+                            nn.Linear(in_chn, channels),
+                            nn.ReLU(),
+                            nn.Dropout(drop_rate)
+                        )
+                    )
+                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domain))
                 self.fc_domain = nn.Sequential(*fcs_domain)
             else:
                 fcs_domain = [];
@@ -650,11 +652,11 @@ class ParticleTransformer(nn.Module):
                     output = torch.cat((output_class,output_reg),dim=1);
             elif self.num_domains and self.fc_domain:
                 if not self.split_domain_outputs:
-                    output_domain = self.fc_domain(x)
+                    output_domain = self.fc_domain(x_cls)
                     output = torch.cat((output,output_domain),dim=1);
                 else:
                     for i,fc in enumerate(self.fc_domain):
-                        output_domain = fc(x);
+                        output_domain = fc(x_cls);
                         output = torch.cat((output,output_domain),dim=1);
             return output
 
