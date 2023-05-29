@@ -576,19 +576,20 @@ class ParticleTransformer(nn.Module):
                 fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domain))
                 self.fc_domain = nn.Sequential(*fcs_domain)
             else:
-                fcs_domain = [];
-                fcs_domain.append(GradientReverse(self.alpha_grad));
-                for idx, layer_param in enumerate(fc_domain_params):
-                    channels, drop_rate = layer_param
-                    if idx == 0:
-                        in_chn = embed_dim
-                    else:
-                        in_chn = fc_domain_params[idx - 1][0]
+                for idd,dom in enumerate(self.num_domains):
+                    fcs_domain = [];
+                    fcs_domain.append(GradientReverse(self.alpha_grad));
+                    for idx, layer_param in enumerate(fc_domain_params):
+                        channels, drop_rate = layer_param
+                        if idx == 0:
+                            in_chn = embed_dim
+                        else:
+                            in_chn = fc_domain_params[idx - 1][0]
                         
-                    fcs_domain.append(nn.Sequential(
-                        nn.Linear(in_chn, channels),
-                        nn.ReLU(),
-                        nn.Dropout(drop_rate)))
+                        fcs_domain.append(nn.Sequential(
+                            nn.Linear(in_chn, channels),
+                            nn.ReLU(),
+                            nn.Dropout(drop_rate)))
 
                     fcs_domain.append(nn.Linear(fc_domain_params[-1][0],dom))
                     if self.fc_domain is None:
