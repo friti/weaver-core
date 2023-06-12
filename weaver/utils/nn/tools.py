@@ -290,7 +290,7 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
                 else:
                     observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score));
+            score = torch.as_tensor(np.array(score)).squeeze();
             scores.append(score.cpu().numpy().astype(dtype=np.float32))
             preds = score.squeeze().float().argmax(1)
             label = label.squeeze();
@@ -564,7 +564,7 @@ def evaluate_onnx_regression(model_path, test_loader,
                     observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
             score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score))
+            score = torch.as_tensor(np.array(score)).squeeze()
             scores.append(score.cpu().numpy().astype(dtype=np.float32))
             preds = score.squeeze().float();
             target = target.squeeze();
@@ -990,14 +990,14 @@ def evaluate_onnx_classreg(model_path, test_loader,
                     observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             ### evaluate the network
             score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score));
+            score = torch.as_tensor(np.array(score)).squeeze();
             scores_cat.append(score[:,:num_labels].cpu().numpy().astype(dtype=np.float32));
-            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32));            
+            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32));
             pred_cat = score[:,:num_labels].squeeze().float().argmax(1);
             pred_reg = score[:,num_labels:num_labels+num_targets].squeeze().float();
             count += num_examples
             num_batches += 1;
-        
+
             if pred_cat.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
                 correct = (pred_cat == label).sum().item()
                 total_correct += correct
