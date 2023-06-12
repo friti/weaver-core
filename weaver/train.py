@@ -424,7 +424,7 @@ def onnx(args):
                       input_names=model_info['input_names'],
                       output_names=model_info['output_names'],
                       dynamic_axes=model_info.get('dynamic_axes', None),
-                      opset_version=12
+                      opset_version=14
     )
     _logger.info('ONNX model saved to %s', args.export_onnx)
 
