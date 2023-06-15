@@ -152,8 +152,12 @@ parser.add_argument('--max-resample', type=int, default=10,
                     help='re-sampling factor for classification/regression events')
 parser.add_argument('--max-resample-dom', type=int, default=7,
                     help='re-sampling factor for domain adaptation events')
-parser.add_argument('--predict', action='store_true', default=False,
+parser.add_argument('--predict', action='store_true', default=False,                    
                     help='run prediction instead of training')
+parser.add_argument('--eps-fgsm', action=float, default=None,                    
+                    help='value of the epsilon parameter in FGSM')
+parser.add_argument('--frac-fgsm', action=float, default=None,                    
+                    help='fraction of batches for FGSM')
 parser.add_argument('--predict-output', type=str,
                     help='path to save the prediction output, support `.root` and `.parquet` format')
 parser.add_argument('--export-onnx', type=str, default=None,
@@ -924,8 +928,11 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
-            train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
-            
+            if args.eps_fgsm and args.frac_fgsm:
+                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, eps_fgsm=args.eps_fgsm, frac_fgsm=args.frac_fgsm);
+            else:
+                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
+                
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
