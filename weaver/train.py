@@ -157,9 +157,9 @@ parser.add_argument('--max-resample-dom', type=int, default=7,
                     help='re-sampling factor for domain adaptation events')
 parser.add_argument('--predict', action='store_true', default=False,                    
                     help='run prediction instead of training')
-parser.add_argument('--eps-fgsm', action=float, default=None,                    
+parser.add_argument('--eps-fgsm', type=float, default=None,                    
                     help='value of the epsilon parameter in FGSM')
-parser.add_argument('--frac-fgsm', action=float, default=None,                    
+parser.add_argument('--frac-fgsm', type=float, default=None,                    
                     help='fraction of batches for FGSM')
 parser.add_argument('--predict-output', type=str,
                     help='path to save the prediction output, support `.root` and `.parquet` format')
