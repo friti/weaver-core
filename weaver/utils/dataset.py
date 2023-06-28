@@ -133,8 +133,9 @@ def _preprocess(table, data_config, options):
     if options['reweight'] and data_config.weight_name is not None:
         wgts = _build_weights(table, data_config)
         indices = _get_reweight_indices(wgts, up_sample=options['up_sample'],
-                                        weight_scale=options['weight_scale'], max_resample=options['max_resample'],
-                                        max_resample=options['max_resample'], max_resample_dom=options['max_resample_dom']
+                                        weight_scale=options['weight_scale'],
+                                        max_resample=options['max_resample'],
+                                        max_resample_dom=options['max_resample_dom']
         )
     else:
         if len(data_config.label_names) > 0:
