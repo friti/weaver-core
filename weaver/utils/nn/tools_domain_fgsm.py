@@ -29,8 +29,21 @@ def _flatten_preds(preds, mask=None, label_axis=1):
     return preds
 
 
+# FGSM attack code
+def fgsm_attack(data_in,eps_fgsm,data_grad,data_config):
+    # Collect the element-wise sign of the data gradient
+    sign_data_grad = data_grad.sign()
+    # Create the perturbed image by randomly sampling eps between min and max
+    max_in = torch.max(data_in,dim=0);
+    min_in = torch.min(data_in,dim=0);
+    perturbed_image = torch.clip(data_in+np.random.uniform(low=0,high=eps_fgsm,size=data_in.shape)*sign_data_grad,min=min_in,max=max_in)
+    # Clip perturbated images per each column
+    perturbed_image.to(dev,non_blocking=True)
+    # Return the perturbed image
+    return perturbed_image
+
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
-def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, eps_fgsm=None, frac_fgsm=None):
 
     model.train()
     torch.backends.cudnn.benchmark = True;
@@ -39,12 +52,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     data_config = train_loader.dataset.config
 
-    num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     label_cat_counter = Counter()
-    total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     inputs, target, label_cat, label_domain, model_output, model_output_cat, model_output_reg, model_output_domain = None, None, None, None, None, None, None, None;
-    loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
-
+    num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
+    total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
+    loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;    
+    inputs_fgsm, model_output_fgsm = None, None;
+    num_batches_fgsm, total_fgsm_loss, count_cat_fgsm, sum_sqr_err_fgsm = 0, 0, 0, 0;
+    
     ### number of classification labels
     num_labels = len(data_config.label_value);
     ### number of targets
@@ -72,16 +87,24 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
-                
+            
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
+
+            ## decide if this batch goes to FGSM
+            use_fgsm = False;
+            if eps_fgsm and frac_fgsm and np.random.uniform(low=0,high=1) < frac_fgsm :
+                use_fgsm = True;
+                inputs.requires_grad = True;
+                inputs_grad = inputs.grad.data
+                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad,data_config)
                 
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
             cat_check  = y_cat_check[data_config.labelcheck_names[0]].long()
             index_cat  = cat_check.nonzero();
             label_cat  = label_cat[index_cat];
-
+            
             ### build regression targets
             for idx, (k, v) in enumerate(y_reg.items()):
                 if idx == 0:
@@ -116,7 +139,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### Number of samples in the batch
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
             num_domain_examples = label_domain.shape[0];
+            if use_fgsm:
+                num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
 
+            ### validity checks
             label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32)
             if np.iterable(label_cat_np):
                 label_cat_counter.update(label_cat_np)
@@ -150,7 +176,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 ### evaluate the model
-                model_output  = model(*inputs)         
+                model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
@@ -162,9 +188,16 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 label_domain = label_domain.squeeze();
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
-                ### evaluate loss function            
-                loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
-
+                if use_fgsm:
+                    model_output_fgsm = model(*inputs_fgsm)
+                    model_output_fgsm = model_output[:,:num_labels+num_targets];
+                    model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
+                    ### evaluate loss function            
+                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm);
+                else:
+                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                    
+                
             ### back propagation
             if grad_scaler is None:
                 loss.backward()
@@ -198,7 +231,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             model_output_cat = model_output_cat.detach()
             model_output_reg = model_output_reg.detach()
             model_output_domain = model_output_domain.detach()
-            
+                
             if torch.is_tensor(label_cat) and torch.is_tensor(model_output_cat) and np.iterable(label_cat) and np.iterable(model_output_cat):
                 _, pred_cat = model_output_cat.max(1);
                 pred_reg = model_output_reg.float();
@@ -210,6 +243,22 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     sqr_err = residual_reg.square().sum().item()
                     sum_sqr_err += sqr_err
 
+            ## fast gradient attack loss residual w.r.t. nominal
+            if use_fgsm:
+                num_batches_fgsm += 1;                
+                if loss_fgsm:
+                    loss_fgsm = loss_fgsm.detach().item()
+                    total_fgsm_loss += loss_fgsm;
+                model_output_fgsm = model_output_cat.detach();
+                if torch.is_tensor(label_cat) and torch.is_tensor(model_output_fgsm) and np.iterable(label_cat) and np.iterable(model_output_fgsm):
+                    pred_fgsm = model_output_fgsm.float();
+                    pred_nominal = torch.cat((model_output_cat,model_output_reg),dim=1);
+                    if pred_fgsm.shape == pred_nominal.shape:
+                        count_fgsm += num_fgsm_examples;
+                        residual_fgsm = pred_fgsm - pred_nominal;
+                        sqr_err_fgsm = residual_fgsm.square().sum().item()
+                        sum_sqr_err_fgsm += sqr_err
+            
             ## single domain region
             if num_domains == 1:
                 if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
@@ -235,7 +284,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
 
             ### monitor metrics
-            tq.set_postfix({
+            postfix = {
                 'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
                 'Loss': '%.5f' % loss,
                 'AvgLoss': '%.5f' % (total_loss / num_batches),
@@ -244,16 +293,27 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 'AccDomain': '%.5f' % (correct_domain / (num_domain_examples) if num_domain_examples else 0),
                 'AvgAccDomain': '%.5f' % (total_domain_correct / (count_domain) if count_domain else 0),
                 'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
-                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0)
-            })
+                'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0),
+            }
+            if use_fgsm:
+                postfix['MSE-FGSM'] = '%.5f' % (sqr_err_fgsm / num_fgsm_examples if num_fgsm_examples else 0);
+                postfix['AvgMSE-FGSM'] = '%.5f' % (sum_sqr_err_fgsm / count_fgsm if count_fgsm else 0);
+                            
+            tq.set_postfix(postfix);
                 
             if tb_helper:
-                tb_helper.write_scalars([
+                tb_help = [
                     ("Loss/train", loss, tb_helper.batch_train_count + num_batches),
                     ("AccCat/train", correct_cat / num_cat_examples if num_cat_examples else 0, tb_helper.batch_train_count + num_batches),
                     ("AccDomain/train", correct_domain / (num_domain_examples) if num_domain_examples else 0, tb_helper.batch_train_count + num_batches),
                     ("MSE/train", sqr_err / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches)
-                ])
+                    ("MSE-FGSM/train", sqr_err_fgsm / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches)
+                ]
+                if use_fgsm:
+                    tb_help.append(("MSE/train", sqr_err / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches));
+                    tb_help.append(("MSE-FGSM/train", sqr_err_fgsm / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches));
+                    
+                tb_helper.write_scalars(tb_help);
                     
                 if tb_helper.custom_fn:
                     with torch.no_grad():
@@ -272,6 +332,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
+    _logger.info('Train AvgLoss FGSM: %.5f'% (total_loss_fgsm / num_batches_fgsm))
+    _logger.info('Train AvgMSE FGSM: %.5f'%(sum_sqr_err_fgsm / count_cat_fgsm if count_cat_fgsm else 0))    
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
                 
@@ -281,9 +343,13 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ("Loss Cat/train (epoch)", total_cat_lloss / num_batches, epoch),
             ("Loss Domain/train (epoch)", total_domain_loss / num_batches, epoch),
             ("Loss Reg/train (epoch)", total_reg_loss / num_batches, epoch),
+            ("Loss/train FGSM (epoch)", total_loss_fgsm / num_batches_fgsm, epoch),
+            ("Loss Cat/train FGSM (epoch)", total_cat_loss_fgsm / num_batches_fgsm, epoch),
+            ("Loss Reg/train FGSM (epoch)", total_reg_loss_fgsm / num_batches_fgsm, epoch),
             ("AccCat/train (epoch)", total_cat_correct / count_cat, epoch),
             ("AccDomain/train (epoch)", total_domain_correct / (count_domain), epoch),
             ("MSE/train (epoch)", sum_sqr_err / count, epoch),            
+            ("MSE/train FGSM (epoch)", sum_sqr_err_fgsm / count_fgsm, epoch),            
         ])
         
         if tb_helper.custom_fn:

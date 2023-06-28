@@ -7,7 +7,7 @@ import torch.utils.data
 
 from functools import partial
 from concurrent.futures.thread import ThreadPoolExecutor
-from .logger import _logger, warn_once
+from .logger import _logger
 from .data.tools import _pad, _repeat_pad, _clip
 from .data.fileio import _read_files
 from .data.config import DataConfig, _md5
@@ -117,7 +117,9 @@ def _check_labels_domain(table):
 
 def _preprocess(table, data_config, options):
     # apply selection
-    table = _apply_selection(table, data_config.selection if options['training'] else data_config.test_time_selection)
+    table = _apply_selection(
+        table, data_config.selection if options['training'] else data_config.test_time_selection,
+        funcs=data_config.var_funcs)
     if len(table) == 0:
         return []
     # define new variables
@@ -128,9 +130,12 @@ def _preprocess(table, data_config, options):
     elif (data_config.label_domain_type is None and data_config.label_type is not None and data_config.label_type == 'simple' and options['training']):
         _check_labels(table)
     # compute reweight indices
-    if (options['reweight'] and data_config.weight_name is not None):
-        wgts = _build_weights(table, data_config, warn=warn_once)
-        indices = _get_reweight_indices(wgts, up_sample=options['up_sample'],weight_scale=options['weight_scale'], max_resample=options['max_resample'], max_resample_dom=options['max_resample_dom'])
+    if options['reweight'] and data_config.weight_name is not None:
+        wgts = _build_weights(table, data_config)
+        indices = _get_reweight_indices(wgts, up_sample=options['up_sample'],
+                                        weight_scale=options['weight_scale'], max_resample=options['max_resample'],
+                                        max_resample=options['max_resample'], max_resample_dom=options['max_resample_dom']
+        )
     else:
         if len(data_config.label_names) > 0:
             indices = np.arange(len(table[data_config.label_names[0]]))
@@ -145,7 +150,8 @@ def _preprocess(table, data_config, options):
 
 
 def _load_next(data_config, filelist, load_range, options):
-    table = _read_files(filelist, data_config.load_branches, load_range, treename=data_config.treename)
+    table = _read_files(filelist, data_config.load_branches, load_range, treename=data_config.treename,
+                        branch_magic=data_config.branch_magic, file_magic=data_config.file_magic)
     table, indices = _preprocess(table, data_config, options)
     return table, indices
 
@@ -181,7 +187,7 @@ class _SimpleIter(object):
             new_file_dict = {}
             for name, files in file_dict.items():
                 new_files = files[worker_info.id::worker_info.num_workers]
-                assert(len(new_files) > 0)
+                assert (len(new_files) > 0)
                 new_file_dict[name] = new_files
             file_dict = new_file_dict
         self.worker_file_dict = file_dict

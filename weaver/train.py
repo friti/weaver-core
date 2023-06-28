@@ -15,9 +15,10 @@ from utils.dataset import SimpleIterDataset
 from utils.import_tools import import_module
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classregdomain','preprocess'],  # TODO: add more  
+parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classregdomain','preprocess','classregdomainfgsm'],  # TODO: add more  
                     help='class: classification task, reg: regression task, classreg: classification+regression,' 
-                    'classregdomain: classification+regression with domain adversarial, preprocess: only run re-weight step and produce the new yaml file'
+                    'classregdomain: classification+regression with domain adversarial, classregdomainfgsm: class+reg+domain+fgsm adversarial,'
+                    'preprocess: only run re-weight step and produce the new yaml file'
                 )
 parser.add_argument('-c', '--data-config', type=str, default='',
                     help='data config YAML file')
@@ -93,6 +94,8 @@ parser.add_argument('-m', '--model-prefix', type=str, default='models/{auto}/net
                          'based on the timestamp and network configuration')
 parser.add_argument('--load-model-weights', type=str, default=None,
                     help='initialize model with pre-trained weights')
+parser.add_argument('--exclude-model-weights', type=str, default=None,
+                    help='comma-separated regex to exclude matched weights from being loaded, e.g., `a.fc..+,b.fc..+`')
 parser.add_argument('--num-epochs', type=int, default=20,
                     help='number of epochs')
 parser.add_argument('--steps-per-epoch', type=int, default=None,
@@ -163,6 +166,8 @@ parser.add_argument('--predict-output', type=str,
 parser.add_argument('--export-onnx', type=str, default=None,
                     help='export the PyTorch model to ONNX model and save it at the given path (path must ends w/ .onnx); '
                          'needs to set `--data-config`, `--network-config`, and `--model-prefix` (requires the full model path)')
+parser.add_argument('--onnx-opset', type=int, default=15,
+                    help='ONNX opset version.')
 parser.add_argument('--io-test', action='store_true', default=False,
                     help='test throughput of the dataloader')
 parser.add_argument('--copy-inputs', action='store_true', default=False,
@@ -428,8 +433,7 @@ def onnx(args):
                       input_names=model_info['input_names'],
                       output_names=model_info['output_names'],
                       dynamic_axes=model_info.get('dynamic_axes', None),
-                      opset_version=14
-    )
+                      opset_version=args.onnx_opset)
     _logger.info('ONNX model saved to %s', args.export_onnx)
 
     preprocessing_json = os.path.join(os.path.dirname(args.export_onnx), 'preprocess.json')
@@ -659,6 +663,18 @@ def model_setup(args, data_config):
     model, model_info = network_module.get_model(data_config, **network_options)
     if args.load_model_weights:
         model_state = torch.load(args.load_model_weights, map_location='cpu')
+        if args.exclude_model_weights:
+            import re
+            exclude_patterns = args.exclude_model_weights.split(',')
+            _logger.info('The following weights will not be loaded: %s' % str(exclude_patterns))
+            key_state = {}
+            for k in model_state.keys():
+                key_state[k] = True
+                for pattern in exclude_patterns:
+                    if re.match(pattern, k):
+                        key_state[k] = False
+                        break
+            model_state = {k: v for k, v in model_state.items() if key_state[k]}
         missing_keys, unexpected_keys = model.load_state_dict(model_state, strict=False)
         _logger.info('Model initialized with weights from %s\n ... Missing: %s\n ... Unexpected: %s' %
                      (args.load_model_weights, missing_keys, unexpected_keys))
@@ -725,7 +741,7 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
             output['score_' + label_name] = scores[:,idx]
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
-    elif args.weaver_mode == "classregdomain":
+    elif args.weaver_mode == "classregdomain" or args.weaver_mode == "classregdomainfgsm":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
             output['score_' + label_name] = scores[:,idx]
@@ -828,6 +844,11 @@ def _main(args):
         from utils.nn.tools_domain import train_classreg as train
         from utils.nn.tools_domain import evaluate_classreg as evaluate
         from utils.nn.tools_domain import evaluate_onnx_classreg as evaluate_onnx
+    elif args.weaver_mode == "classregdomainfgsm":
+        _logger.info('Running in combined regression + classification mode with domain adaptation and FGSM')
+        from utils.nn.tools_domain_fgsm import train_classreg as train
+        from utils.nn.tools_domain_fgsm import evaluate_classreg as evaluate
+        from utils.nn.tools_domain_fgsm import evaluate_onnx_classreg as evaluate_onnx
 
     # training/testing mode
     training_mode = not args.predict
@@ -849,6 +870,11 @@ def _main(args):
     else:
         gpus = None
         dev = torch.device('cpu')
+        try:
+            if torch.backends.mps.is_available():
+                dev = torch.device('mps')
+        except AttributeError:
+            pass
 
     if args.tensorboard:
         from utils.nn.tools import TensorboardHelper
@@ -928,7 +954,7 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
-            if args.eps_fgsm and args.frac_fgsm:
+            if "fgsm" in args.weaver_mode:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, eps_fgsm=args.eps_fgsm, frac_fgsm=args.frac_fgsm);
             else:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
@@ -1062,13 +1088,19 @@ def main():
 
     if args.cross_validation:
         model_dir, model_fn = os.path.split(args.model_prefix)
+        predict_output_base, predict_output_ext = os.path.splitext(args.predict_output)
+        load_model = args.load_model_weights or None
         var_name, kfold = args.cross_validation.split('%')
         kfold = int(kfold)
         for i in range(kfold):
             _logger.info(f'\n=== Running cross validation, fold {i} of {kfold} ===')
             args.model_prefix = os.path.join(f'{model_dir}_fold{i}', model_fn)
+            args.predict_output = f'{predict_output_base}_fold{i}' + predict_output_ext
             args.extra_selection = f'{var_name}%{kfold}!={i}'
             args.extra_test_selection = f'{var_name}%{kfold}=={i}'
+            if load_model and '{fold}' in load_model:
+                args.load_model_weights = load_model.replace('{fold}', f'fold{i}')
+
             _main(args)
     else:
         _main(args)
