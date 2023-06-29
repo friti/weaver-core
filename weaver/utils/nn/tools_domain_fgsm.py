@@ -92,7 +92,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             for element in inputs:
                 element.requires_grad = True;
-
+                element.retain_grad = True;
+                
             ## decide if this batch goes to FGSM
             use_fgsm = False;
             rand_val = np.random.uniform(low=0,high=1);
