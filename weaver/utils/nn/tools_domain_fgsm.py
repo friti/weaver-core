@@ -90,13 +90,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
+            for element in inputs:
+                element.requires_grad = True;
 
             ## decide if this batch goes to FGSM
             use_fgsm = False;
-            if eps_fgsm and frac_fgsm and np.random.uniform(low=0,high=1) < frac_fgsm :
+            rand_val = np.random.uniform(low=0,high=1);
+            if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
-                inputs.requires_grad = True;
-                inputs_grad = inputs.grad.data
+                inputs_grad = [element.grad.data for element in inputs];
                 inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad,data_config)
                 
             ### build classification true labels (numpy argmax)
@@ -195,7 +197,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     ### evaluate loss function            
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm);
                 else:
-                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor());
                     
                 
             ### back propagation
