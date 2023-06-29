@@ -202,11 +202,13 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 
             ### back propagation
             if grad_scaler is None:
-                loss.backward()
-                inputs_grad = [element.grad. for element in inputs];
+                loss.backward();
+                print(element.grad);
+                inputs_grad = [element.grad.data for element in inputs];
                 opt.step()
             else:
                 grad_scaler.scale(loss).backward()
+                print(element.grad);
                 inputs_grad = [element.grad.data for element in inputs];
                 grad_scaler.step(opt)
                 grad_scaler.update()
