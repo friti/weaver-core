@@ -212,10 +212,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### save the gradient (only for some inputs is present otherwise zero out)
             inputs_grad_sign = inputs;
             for idx,element in enumerate(inputs):
-                if element.grad:
-                    inputs_grad_sign[idx] = element.grad.data.sign()
-                else:
+                if element.grad is None:
                     inputs_grad_sign[idx] = torch.zeros(inputs_grad[idx].shape);
+                else:
+                    inputs_grad_sign[idx] = element.grad.data.sign()
 
             ### evaluate loss function and counters
             num_batches += 1
