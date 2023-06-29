@@ -98,7 +98,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
-                inputs_grad = [element.grad.data for element in inputs];
                 inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad,data_config)
                 
             ### build classification true labels (numpy argmax)
@@ -203,9 +202,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### back propagation
             if grad_scaler is None:
                 loss.backward()
+                inputs_grad = [element.grad. for element in inputs];
                 opt.step()
             else:
                 grad_scaler.scale(loss).backward()
+                inputs_grad = [element.grad.data for element in inputs];
                 grad_scaler.step(opt)
                 grad_scaler.update()
 
