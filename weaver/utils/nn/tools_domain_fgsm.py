@@ -30,13 +30,11 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 
 
 # FGSM attack code
-def fgsm_attack(data_in,eps_fgsm,data_grad,data_config):
-    # Collect the element-wise sign of the data gradient
-    sign_data_grad = data_grad.sign()
+def fgsm_attack(data_in,eps_fgsm,data_grad_sign,data_config):
     # Create the perturbed image by randomly sampling eps between min and max
     max_in = torch.max(data_in,dim=0);
     min_in = torch.min(data_in,dim=0);
-    perturbed_image = torch.clip(data_in+np.random.uniform(low=0,high=eps_fgsm,size=data_in.shape)*sign_data_grad,min=min_in,max=max_in)
+    perturbed_image = torch.clip(data_in+np.random.uniform(low=0,high=eps_fgsm,size=data_in.shape)*data_grad_sign,min=min_in,max=max_in)
     # Clip perturbated images per each column
     perturbed_image.to(dev,non_blocking=True)
     # Return the perturbed image
@@ -57,7 +55,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;    
-    inputs_fgsm, model_output_fgsm = None, None;
+    inputs_grad_sign, inputs_fgsm, model_output_fgsm = None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_cat_fgsm, sum_sqr_err_fgsm = 0, 0, 0, 0;
     
     ### number of classification labels
@@ -99,7 +97,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
-                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad,data_config)
+                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign,data_config)
                 
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
@@ -198,23 +196,26 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm);
                 else:
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor());
-                    
-                
+
             ### back propagation
             if grad_scaler is None:
                 loss.backward();
-                print(element.grad);
-                inputs_grad = [element.grad.data for element in inputs];
                 opt.step()
             else:
                 grad_scaler.scale(loss).backward()
-                print(element.grad);
-                inputs_grad = [element.grad.data for element in inputs];
                 grad_scaler.step(opt)
                 grad_scaler.update()
 
             if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
+
+            ### save the gradient (only for some inputs is present otherwise zero out)
+            inputs_grad_sign = inputs;
+            for idx,element in enumerate(inputs):
+                if element.grad:
+                    inputs_grad_sign[idx] = element.grad.data.sign()
+                else:
+                    inputs_grad_sign[idx] = torch.zeros(inputs_grad[idx].shape);
 
             ### evaluate loss function and counters
             num_batches += 1
@@ -312,7 +313,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     ("Loss/train", loss, tb_helper.batch_train_count + num_batches),
                     ("AccCat/train", correct_cat / num_cat_examples if num_cat_examples else 0, tb_helper.batch_train_count + num_batches),
                     ("AccDomain/train", correct_domain / (num_domain_examples) if num_domain_examples else 0, tb_helper.batch_train_count + num_batches),
-                    ("MSE/train", sqr_err / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches)
+                    ("MSE/train", sqr_err / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches),
                     ("MSE-FGSM/train", sqr_err_fgsm / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches)
                 ]
                 if use_fgsm:
