@@ -30,15 +30,21 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 
 
 # FGSM attack code
-def fgsm_attack(data_in,eps_fgsm,data_grad_sign,data_config):
+def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
+
     # Create the perturbed image by randomly sampling eps between min and max
-    max_in = torch.max(data_in,dim=0);
-    min_in = torch.min(data_in,dim=0);
-    perturbed_image = torch.clip(data_in+np.random.uniform(low=0,high=eps_fgsm,size=data_in.shape)*data_grad_sign,min=min_in,max=max_in)
-    # Clip perturbated images per each column
-    perturbed_image.to(dev,non_blocking=True)
+    data_out = [];
+    for idx,element in enumerate(data_in):
+        if data_grad_sign[idx] is None:
+            data_out.append(data_in[idx])
+        else:
+            max_in, _ = torch.max(data_in[idx],dim=0);
+            min_in, _ = torch.min(data_in[idx],dim=0);
+            rand_vec = torch.from_numpy(np.random.uniform(low=0,high=eps_fgsm,size=data_in[idx].shape)).float();
+            data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx],min=min_in,max=max_in).float())
+            data_out[idx].to(dev,non_blocking=True);
     # Return the perturbed image
-    return perturbed_image
+    return data_out
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
 def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, eps_fgsm=None, frac_fgsm=None):
@@ -97,8 +103,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
-                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign,data_config)
-                
+                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign,dev)
+            
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
             cat_check  = y_cat_check[data_config.labelcheck_names[0]].long()
@@ -211,12 +217,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ### save the gradient (only for some inputs is present otherwise zero out)
             inputs_grad_sign = inputs;
-            for idx,element in enumerate(inputs):
-                if element.grad is None:
-                    inputs_grad_sign[idx] = torch.zeros(inputs_grad[idx].shape);
+            for idx,element in enumerate(inputs):                
+                #print(idx," ",data_config.input_names[idx]," ",element[0].shape," ",element[0])
+                if element.grad is None or not torch.count_nonzero(element):
+                    inputs_grad_sign[idx] = None;
                 else:
                     inputs_grad_sign[idx] = element.grad.data.sign()
-
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
@@ -230,7 +236,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             if loss_domain:
                 loss_domain = loss_domain.detach().item()
                 total_domain_loss += loss_domain;
-
             ## take the classification prediction and compare with the true labels            
             label_cat = label_cat.detach()
             label_domain = label_domain.detach()
@@ -339,7 +344,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
-    _logger.info('Train AvgLoss FGSM: %.5f'% (total_loss_fgsm / num_batches_fgsm))
+    _logger.info('Train AvgLoss FGSM: %.5f'% (total_fgsm_loss / num_batches_fgsm))
     _logger.info('Train AvgMSE FGSM: %.5f'%(sum_sqr_err_fgsm / count_cat_fgsm if count_cat_fgsm else 0))    
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
@@ -350,7 +355,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ("Loss Cat/train (epoch)", total_cat_lloss / num_batches, epoch),
             ("Loss Domain/train (epoch)", total_domain_loss / num_batches, epoch),
             ("Loss Reg/train (epoch)", total_reg_loss / num_batches, epoch),
-            ("Loss/train FGSM (epoch)", total_loss_fgsm / num_batches_fgsm, epoch),
+            ("Loss/train FGSM (epoch)", total_fgsm_loss / num_batches_fgsm, epoch),
             ("Loss Cat/train FGSM (epoch)", total_cat_loss_fgsm / num_batches_fgsm, epoch),
             ("Loss Reg/train FGSM (epoch)", total_reg_loss_fgsm / num_batches_fgsm, epoch),
             ("AccCat/train (epoch)", total_cat_correct / count_cat, epoch),

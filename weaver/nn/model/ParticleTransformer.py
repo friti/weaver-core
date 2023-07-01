@@ -328,7 +328,7 @@ class PairEmbed(nn.Module):
                 if x is not None:
                     x = x.unsqueeze(-1).repeat(1, 1, 1, seq_len)
                     xi = x[:, :, i, j]  # (batch, dim, seq_len*(seq_len+1)/2)
-                    xj = x[:, :, j, i]
+                    xj = x[:, :, j, i]                    
                     x = self.pairwise_lv_fts(xi, xj)
                 if uu is not None:
                     # (batch, dim, seq_len*(seq_len+1)/2)
