@@ -33,12 +33,12 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
     # Create the perturbed image by randomly sampling eps between min and max
     data_out = [];
-    for idx,element in enumerate(data_in):
+    for idx,element in enumerate(data_in):        
         if data_grad_sign[idx] is None:
             data_out.append(data_in[idx])
         else:
             max_in, _ = torch.max(data_in[idx],dim=0);
-            min_in, _ = torch.min(data_in[idx],dim=0);
+            min_in, _ = torch.min(data_in[idx],dim=0);            
             rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1);
             max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
             min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
@@ -225,7 +225,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign());
+                    inputs_grad_sign.append(element.grad.data.sign().cpu());
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
@@ -278,6 +278,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             input=torch.softmax(pred_fgsm,dim=1),
                             target=torch.softmax(pred_nominal,dim=1),
                             log_target=True,reduction='sum').abs();
+                        #kl_div_fgsm  = torch.nn.functional.mse_loss(
+                        #    input=torch.softmax(pred_fgsm,dim=1),
+                        #    target=torch.softmax(pred_nominal,dim=1),
+                        #    reduction='sum').abs();
                         sum_kl_div_fgsm += kl_div_fgsm;
             
             ## single domain region
