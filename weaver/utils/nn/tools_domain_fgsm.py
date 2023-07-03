@@ -39,10 +39,11 @@ def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
             data_out.append(data_in[idx])
         else:
             max_in, _ = torch.max(data_in[idx],dim=0);
-            min_in, _ = torch.min(data_in[idx],dim=0);            
-            rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1);
+            min_in, _ = torch.min(data_in[idx],dim=0);
             max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
             min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
+            rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1);
+            print(max_in.get_device()," ",min_in.get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device()," ",rand_vec.get_device()," ",data_in[idx].get_device()," ",data_grad_sign[idx].get_device())
             data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float())
         data_out[idx].to(dev,non_blocking=True)
     # Return the perturbed image
