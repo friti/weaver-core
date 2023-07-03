@@ -75,7 +75,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-                
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
             cat_check  = y_cat_check[data_config.labelcheck_names[0]].long()
@@ -176,7 +175,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
-
+ 
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()

@@ -672,8 +672,9 @@ class ParticleTransformerTagger(nn.Module):
                  # output of network
                  num_classes=None,
                  num_targets=None,
-                 num_domains=[],
+                 num_domains=[],                 
                  # network configurations
+                 save_grad_inputs=False,
                  pair_input_dim=4,
                  pair_extra_dim=0,
                  remove_self_pair=False,
@@ -703,7 +704,8 @@ class ParticleTransformerTagger(nn.Module):
         super().__init__(**kwargs)
 
         self.use_amp = use_amp
-
+        self.save_grad_inputs = False if for_inference else save_grad_inputs;
+        
         self.pf_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.lt_trimmer = SequenceTrimmer(enabled=trim and not for_inference)        
@@ -746,14 +748,13 @@ class ParticleTransformerTagger(nn.Module):
         # x: (N, C, P)
         # v: (N, 4, P) [px,py,pz,energy]
         # mask: (N, 1, P) -- real particle = 1, padded = 0
-
-        with torch.no_grad():
+        with torch.set_grad_enabled(self.save_grad_inputs):
             pf_x, pf_v, pf_mask, _ = self.pf_trimmer(pf_x, pf_v, pf_mask)
             sv_x, sv_v, sv_mask, _ = self.sv_trimmer(sv_x, sv_v, sv_mask)
             lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)
             v    = torch.cat([pf_v, sv_v, lt_v], dim=2)
             mask = torch.cat([pf_mask, sv_mask, lt_mask], dim=2)
-
+            
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             pf_x = self.pf_embed(pf_x)  # after embed: (seq_len, batch, embed_dim)
             sv_x = self.sv_embed(sv_x)
@@ -773,6 +774,7 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
                  num_targets=None,
                  num_domains=[],
                  # network configurations
+                 save_grad_inputs=False,
                  pair_input_dim=4,
                  pair_extra_dim=0,
                  remove_self_pair=False,
@@ -799,6 +801,7 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
 
         self.use_amp = use_amp
         self.for_inference = for_inference
+        self.save_grad_inputs = False if self.for_inference else save_grad_inputs;
         
         self.pf_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
@@ -845,7 +848,7 @@ class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
         # v: (N, 4, P) [px,py,pz,energy]
         # mask: (N, 1, P) -- real particle = 1, padded = 0
 
-        with torch.no_grad():
+        with torch.set_grad_enabled(not self.save_grad_inputs):
             if not self.for_inference:
                 if pf_uu_idx is not None:
                     pf_uu = build_sparse_tensor(pf_uu, pf_uu_idx, pf_x.size(-1))
