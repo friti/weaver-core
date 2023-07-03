@@ -100,7 +100,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
                 inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign)
-            else:
                 
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
