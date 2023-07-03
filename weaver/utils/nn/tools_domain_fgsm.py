@@ -34,6 +34,7 @@ def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
     # Create the perturbed image by randomly sampling eps between min and max
     data_out = [];
     for idx,element in enumerate(data_in):        
+        data_in[idx].to(dev,non_blocking=True)
         if data_grad_sign[idx] is None:
             data_out.append(data_in[idx])
         else:
@@ -43,7 +44,6 @@ def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
             max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
             min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
             data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float())
-        data_in[idx].to(dev,non_blocking=True)
         data_out[idx].to(dev,non_blocking=True)
     # Return the perturbed image
     return data_out
@@ -225,7 +225,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign().detach().cpu());
+                    inputs_grad_sign.append(element.grad.data.sign());
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
