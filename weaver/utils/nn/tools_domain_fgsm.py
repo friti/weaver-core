@@ -43,7 +43,8 @@ def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
             max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
             min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
             data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float())
-            data_out[idx].to(dev,non_blocking=True);
+        data_in[idx].to(dev,non_blocking=True)
+        data_out[idx].to(dev,non_blocking=True)
     # Return the perturbed image
     return data_out
 
@@ -93,18 +94,20 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
             
-            ### input features for the model
-            inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-            for idx,element in enumerate(inputs):
-                element.requires_grad = True;
-                
             ## decide if this batch goes to FGSM
             use_fgsm = False;
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
+                inputs = [X[k] for k in data_config.input_names]
+                for idx,element in enumerate(inputs):
+                    element.requires_grad = True;                    
                 inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign,dev)
-            
+            else:
+                inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
+                for idx,element in enumerate(inputs):
+                    element.requires_grad = True;                    
+                
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
             cat_check  = y_cat_check[data_config.labelcheck_names[0]].long()
