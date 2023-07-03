@@ -30,11 +30,10 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 
 
 # FGSM attack code
-def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
+def fgsm_attack(data_in,eps_fgsm,data_grad_sign):
     # Create the perturbed image by randomly sampling eps between min and max
     data_out = [];
     for idx,element in enumerate(data_in):        
-        data_in[idx].to(dev,non_blocking=True)
         if data_grad_sign[idx] is None:
             data_out.append(data_in[idx])
         else:
@@ -45,7 +44,6 @@ def fgsm_attack(data_in,eps_fgsm,data_grad_sign,dev):
             rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1);
             print(max_in.get_device()," ",min_in.get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device()," ",rand_vec.get_device()," ",data_in[idx].get_device()," ",data_grad_sign[idx].get_device())
             data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float())
-        data_out[idx].to(dev,non_blocking=True)
     # Return the perturbed image
     return data_out
 
@@ -96,18 +94,13 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
             
             ## decide if this batch goes to FGSM
+            inputs = [X[k] for k in data_config.input_names]
             use_fgsm = False;
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
-                inputs = [X[k] for k in data_config.input_names]
-                for idx,element in enumerate(inputs):
-                    element.requires_grad = True;                    
-                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign,dev)
+                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign)
             else:
-                inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-                for idx,element in enumerate(inputs):
-                    element.requires_grad = True;                    
                 
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
@@ -178,6 +171,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
 
             ### send to GPU
+            for idx,element in enumerate(inputs):
+                element.to(dev,non_blocking=True);
+                element.requires_grad = True;
+                print("input element device ",element.get_device());
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
             label_domain_check = label_domain_check.to(dev,non_blocking=True)
@@ -200,6 +197,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
                 if use_fgsm:
+                    for idx,element in enumerate(inputs_fgsm):
+                        element.to(dev,non_blocking=True);
+                        print("input FGSM device ",element.get_device());
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
@@ -226,7 +226,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign());
+                    inputs_grad_sign.append(element.grad.data.sign().detach().cpu());
+                    print("element grad device ",inputs_grad_sign[idx].get_device());
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
