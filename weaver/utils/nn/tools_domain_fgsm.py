@@ -28,24 +28,6 @@ def _flatten_preds(preds, mask=None, label_axis=1):
             preds = preds[mask.view(-1)]
     return preds
 
-
-# FGSM attack code
-def fgsm_attack(data_in,eps_fgsm,data_grad_sign):
-    # Create the perturbed image by randomly sampling eps between min and max
-    data_out = [];
-    for idx,element in enumerate(data_in):        
-        if data_grad_sign[idx] is None:
-            data_out.append(data_in[idx])
-        else:
-            max_in, _ = torch.max(data_in[idx],dim=0);
-            min_in, _ = torch.min(data_in[idx],dim=0);
-            max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
-            min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
-            rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1);
-            data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float())
-    # Return the perturbed image
-    return data_out
-
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
 def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, eps_fgsm=None, frac_fgsm=None):
 
@@ -94,11 +76,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             
             ## decide if this batch goes to FGSM
             inputs = [X[k] for k in data_config.input_names]
-            use_fgsm = False;
-            rand_val = np.random.uniform(low=0,high=1);
-            if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
-                use_fgsm = True;
-                inputs_fgsm = fgsm_attack(inputs,eps_fgsm,inputs_grad_sign)
                 
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
@@ -168,14 +145,30 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     else:
                         _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
 
-            ### send to GPU
+            ### send to GPU inputs for model and info for loss-func
             for idx,element in enumerate(inputs):
-                element.to(dev,non_blocking=True);
                 element.requires_grad = True;
+                element.to(dev,non_blocking=True);
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
             label_domain_check = label_domain_check.to(dev,non_blocking=True)
             target = target.to(dev,non_blocking=True)            
+
+            ### build FGSM adversrial when required
+            use_fgsm = False;
+            rand_val = np.random.uniform(low=0,high=1);
+            if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
+                use_fgsm = True;
+                for idx,element in enumerate(inputs):        
+                    if inputs_grad_sign[idx] is None:
+                        inputs_fgsm.append(inputs[idx].to(dev,non_blocking=True))
+                    else:
+                        max_in, _ = torch.max(inputs[idx],dim=0).to(dev,non_blocking=True);
+                        min_in, _ = torch.min(inputs[idx],dim=0).to(dev,non_blocking=True);
+                        max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1).to(dev,non_blocking=True);
+                        min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1).to(dev,non_blocking=True);
+                        rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1).to(dev,non_blocking=True);
+                        inputs_fgsm.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True))
 
             ### loss minimization
             model.zero_grad(set_to_none=True)
@@ -194,8 +187,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
                 if use_fgsm:
-                    for idx,element in enumerate(inputs_fgsm):
-                        element.to(dev,non_blocking=True);
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
@@ -222,7 +213,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign().detach().cpu());
+                    inputs_grad_sign.append(element.grad.data.sign());
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
