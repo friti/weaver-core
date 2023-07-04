@@ -161,6 +161,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 @torch.jit.script
                 def fgsm_attack(data_in,data_grad_in,dev,eps_fgsm):
                     data_out = [];
+                    print(dev);
+                    torch.set_default_tensor_type(dev);
                     for idx,element in enumerate(data_in):        
                         if data_grad_in[idx] is None:
                             data_out.append(data_in[idx].to(dev,non_blocking=True))
@@ -169,8 +171,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             min_in, _ = torch.min(data_in[idx],dim=0);
                             max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
                             min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
-                            rand_vec = torch.clip(eps_fgsm*(1.+torch.randn(size=data_in[idx].shape,device=dev)),min=0,max=1);
-                            print(rand_vec.get_device()," ",data_in[idx].get_device()," ",data_grad_in[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
+                            rand_vec = torch.clip(eps_fgsm*(1.+torch.randn(size=data_in[idx].shape)),min=0,max=1);
                             max_in_mult.to(dev,non_blocking=True);
                             min_in_mult.to(dev,non_blocking=True);
                             rand_vec.to(dev,non_blocking=True);
