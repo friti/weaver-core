@@ -162,8 +162,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(inputs[idx].to(dev,non_blocking=True))
                     else:
-                        max_in.to(dev,non_blocking=True), _ = torch.max(inputs[idx],dim=0);
-                        min_in.to(dev,non_blocking=True), _ = torch.min(inputs[idx],dim=0);
+                        max_in, _ = torch.max(inputs[idx],dim=0);
+                        min_in, _ = torch.min(inputs[idx],dim=0);
                         max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1).to(dev,non_blocking=True);
                         min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1).to(dev,non_blocking=True);
                         rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1).to(dev,non_blocking=True);
