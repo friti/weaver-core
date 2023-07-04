@@ -34,7 +34,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     model.train()
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    torch.jit.enable_onednn_fusion(True);
     gc.enable();
 
     data_config = train_loader.dataset.config
@@ -389,11 +388,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
-        torch.jit.enable_onednn_fusion(True);
     else:
         torch.backends.cudnn.benchmark = False;
         torch.backends.cudnn.enabled = False;
-        torch.jit.enable_onednn_fusion(True);
     gc.enable();
 
     data_config = test_loader.dataset.config
