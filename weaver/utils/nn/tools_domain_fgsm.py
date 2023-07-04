@@ -117,9 +117,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### Number of samples in the batch
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
             num_domain_examples = label_domain.shape[0];
-            num_fgsm_examples = 0;
-            if use_fgsm:
-                num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
 
             ### validity checks
             label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32)
@@ -155,10 +152,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             target = target.to(dev,non_blocking=True)            
 
             ### build FGSM adversrial when required
+            num_fgsm_examples = 0;
             use_fgsm = False;
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
+                num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                 for idx,element in enumerate(inputs):        
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(inputs[idx].to(dev,non_blocking=True))
