@@ -159,7 +159,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 use_fgsm = True;
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                 @torch.jit.script
-                def fgsm_attack(data_in,data_grad_in,dev):
+                def fgsm_attack(data_in,data_grad_in,dev,eps_fgsm):
                     data_out = [];
                     for idx,element in enumerate(data_in):        
                         if data_grad_in[idx] is None:
@@ -169,7 +169,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             min_in, _ = torch.min(data_in[idx],dim=0);
                             max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
                             min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
-                            rand_vec = torch.clip(eps_fgsm*(1+torch.randn(size=data_in[idx].shape,device=dev)),min=0,max=1);
+                            rand_vec = torch.clip(eps_fgsm*(1.+torch.randn(size=data_in[idx].shape,device=dev)),min=0,max=1);
                             print(rand_vec.get_device()," ",data_in[idx].get_device()," ",data_grad_in[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
                             max_in_mult.to(dev,non_blocking=True);
                             min_in_mult.to(dev,non_blocking=True);
@@ -177,7 +177,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_in[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True));
                             print(rand_vec.get_device()," ",data_in[idx].get_device()," ",data_grad_in[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device()," ",data_out[idx].get_device());
                     return data_out;
-                inputs_fgsm = fgsm_attack(inputs,inputs_grad_sign,dev);
+                inputs_fgsm = fgsm_attack(inputs,inputs_grad_sign,dev,eps_fgsm);
                 
             ### loss minimization
             model.zero_grad(set_to_none=True)
