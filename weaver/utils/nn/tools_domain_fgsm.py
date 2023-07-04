@@ -158,6 +158,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
+                inputs_fgsm = [];
                 for idx,element in enumerate(inputs):        
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(inputs[idx].to(dev,non_blocking=True))
