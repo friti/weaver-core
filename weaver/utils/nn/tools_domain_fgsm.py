@@ -164,10 +164,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     else:
                         max_in, _ = torch.max(inputs[idx],dim=0);
                         min_in, _ = torch.min(inputs[idx],dim=0);
-                        max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1).to(dev,non_blocking=True);
-                        min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1).to(dev,non_blocking=True);
-                        rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=data_in[idx].shape)),min=0,max=1).to(dev,non_blocking=True);
-                        inputs_fgsm.append(torch.clip(data_in[idx]+rand_vec*data_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True))
+                        max_in_mult = max_in.repeat(inputs[idx].size(dim=0),1,1).to(dev,non_blocking=True);
+                        min_in_mult = min_in.repeat(inputs[idx].size(dim=0),1,1).to(dev,non_blocking=True);
+                        rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=inputs[idx].shape)),min=0,max=1).to(dev,non_blocking=True);
+                        inputs_fgsm.append(torch.clip(inputs[idx]+rand_vec*inputs_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True))
 
             ### loss minimization
             model.zero_grad(set_to_none=True)
