@@ -34,6 +34,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     model.train()
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
+    torch.jit.enable_onednn_fusion(True);
     gc.enable();
 
     data_config = train_loader.dataset.config
@@ -158,23 +159,27 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
-                inputs_fgsm = [];
-                for idx,element in enumerate(inputs):        
-                    if inputs_grad_sign[idx] is None:
-                        inputs_fgsm.append(inputs[idx].to(dev,non_blocking=True))
-                    else:
-                        max_in, _ = torch.max(inputs[idx],dim=0);
-                        min_in, _ = torch.min(inputs[idx],dim=0);
-                        max_in_mult = max_in.repeat(inputs[idx].size(dim=0),1,1);
-                        min_in_mult = min_in.repeat(inputs[idx].size(dim=0),1,1);
-                        rand_vec = torch.clip(eps_fgsm*(1+torch.randn(size=inputs[idx].shape,device=dev,requires_grad=False,pin_memory=True)),min=0,max=1);
-                        print(rand_vec.get_device()," ",inputs[idx].get_device()," ",inputs_grad_sign[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
-                        max_in_mult.to(dev,non_blocking=True);
-                        min_in_mult.to(dev,non_blocking=True);
-                        rand_vec.to(dev,non_blocking=True);
-                        inputs_fgsm.append(torch.clip(inputs[idx]+rand_vec*inputs_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True));
-                        print(rand_vec.get_device()," ",inputs[idx].get_device()," ",inputs_grad_sign[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device()," ",inputs_fgsm[idx].get_device());
-            
+                @torch.jit.script
+                def fgsm_attack(data_in,data_grad_in,dev):
+                    data_out = [];
+                    for idx,element in enumerate(data_in):        
+                        if data_grad_in[idx] is None:
+                            data_out.append(data_in[idx].to(dev,non_blocking=True))
+                        else:
+                            max_in, _ = torch.max(data_in[idx],dim=0);
+                            min_in, _ = torch.min(data_in[idx],dim=0);
+                            max_in_mult = max_in.repeat(data_in[idx].size(dim=0),1,1);
+                            min_in_mult = min_in.repeat(data_in[idx].size(dim=0),1,1);
+                            rand_vec = torch.clip(eps_fgsm*(1+torch.randn(size=data_in[idx].shape,device=dev)),min=0,max=1);
+                            print(rand_vec.get_device()," ",data_in[idx].get_device()," ",data_grad_in[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
+                            max_in_mult.to(dev,non_blocking=True);
+                            min_in_mult.to(dev,non_blocking=True);
+                            rand_vec.to(dev,non_blocking=True);
+                            data_out.append(torch.clip(data_in[idx]+rand_vec*data_grad_in[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True));
+                            print(rand_vec.get_device()," ",data_in[idx].get_device()," ",data_grad_in[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device()," ",data_out[idx].get_device());
+                    return data_out;
+                inputs_fgsm = fgsm_attack(inputs,inputs_grad_sign,dev);
+                
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
@@ -218,7 +223,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign());
+                    inputs_grad_sign.append(element.grad.data.sign().detach());
 
             ### evaluate loss function and counters
             num_batches += 1
@@ -384,9 +389,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
+        torch.jit.enable_onednn_fusion(True);
     else:
         torch.backends.cudnn.benchmark = False;
         torch.backends.cudnn.enabled = False;
+        torch.jit.enable_onednn_fusion(True);
     gc.enable();
 
     data_config = test_loader.dataset.config
