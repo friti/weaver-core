@@ -168,7 +168,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         max_in_mult = max_in.repeat(inputs[idx].size(dim=0),1,1).to(dev,non_blocking=True);
                         min_in_mult = min_in.repeat(inputs[idx].size(dim=0),1,1).to(dev,non_blocking=True);
                         rand_vec = torch.clip(torch.from_numpy(np.random.normal(loc=eps_fgsm,scale=eps_fgsm,size=inputs[idx].shape)),min=0,max=1).to(dev,non_blocking=True);
-                        print(rand_vec.get_devie()," ",inputs[idx].get_device()," ",inputs_grad_sign[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
+                        print(rand_vec.get_device()," ",inputs[idx].get_device()," ",inputs_grad_sign[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
                         inputs_fgsm.append(torch.clip(inputs[idx]+rand_vec*inputs_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True))
 
             ### loss minimization
