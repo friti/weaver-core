@@ -165,17 +165,16 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     else:
                         max_in, _ = torch.max(inputs[idx],dim=0);
                         min_in, _ = torch.min(inputs[idx],dim=0);
-                        max_in.to(dev,non_blocking=True);
-                        min_in.to(dev,non_blocking=True);
                         max_in_mult = max_in.repeat(inputs[idx].size(dim=0),1,1);
                         min_in_mult = min_in.repeat(inputs[idx].size(dim=0),1,1);
+                        rand_vec = torch.clip(eps_fgsm*(1+torch.randn(size=inputs[idx].shape,device=dev,requires_grad=False,pin_memory=True)),min=0,max=1);
+                        print(rand_vec.get_device()," ",inputs[idx].get_device()," ",inputs_grad_sign[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
                         max_in_mult.to(dev,non_blocking=True);
                         min_in_mult.to(dev,non_blocking=True);
-                        rand_vec = torch.clip(eps_fgsm*(1+torch.randn(size=inputs[idx].shape)),min=0,max=1);
                         rand_vec.to(dev,non_blocking=True);
-                        print(rand_vec.get_device()," ",inputs[idx].get_device()," ",inputs_grad_sign[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device());
                         inputs_fgsm.append(torch.clip(inputs[idx]+rand_vec*inputs_grad_sign[idx]*(max_in_mult-min_in_mult),min=min_in,max=max_in).float().to(dev,non_blocking=True));
-
+                        print(rand_vec.get_device()," ",inputs[idx].get_device()," ",inputs_grad_sign[idx].get_device()," ",max_in_mult.get_device()," ",min_in_mult.get_device()," ",inputs_fgsm.[idx].get_device());
+            
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
@@ -220,6 +219,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     inputs_grad_sign.append(None);
                 else:
                     inputs_grad_sign.append(element.grad.data.sign());
+
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
