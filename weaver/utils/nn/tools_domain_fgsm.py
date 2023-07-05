@@ -142,15 +142,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     else:
                         _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
 
-            ### send to GPU inputs for model and info for loss-func
-            for idx,element in enumerate(inputs):
-                element.requires_grad = True;
-                element.to(dev,non_blocking=True);
-            label_cat = label_cat.to(dev,non_blocking=True)
-            label_domain = label_domain.to(dev,non_blocking=True)
-            label_domain_check = label_domain_check.to(dev,non_blocking=True)
-            target = target.to(dev,non_blocking=True)            
-
             ### build FGSM adversrial when required
             num_fgsm_examples = 0;
             use_fgsm = False;
@@ -160,8 +151,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 use_fgsm = True;
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                 for idx,element in enumerate(inputs):        
+                    element.requires_grad = True;
                     if inputs_grad_sign[idx] is None:
-                        inputs_fgsm.append(inputs[idx].to(dev,non_blocking=True));
+                        inputs_fgsm.append(inputs[idx]);
                     else:
                         @torch.jit.script
                         def fgsm_attack(data: torch.Tensor,
@@ -174,8 +166,19 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             rand_vec = torch.clip(eps_fgsm*(1.+torch.randn(size=data.shape)),min=0,max=1);
                             output = torch.clip(data+rand_vec*data_grad*(max_mult-min_mult),min=mind,max=maxd).float();
                             return output;                        
-                        inputs_fgsm.append(fgsm_attack(inputs[idx],inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True));
-                
+                        inputs_fgsm.append(fgsm_attack(inputs[idx],inputs_grad_sign[idx],eps_fgsm));
+                    ## send to GPU
+                    element.to(dev,non_blocking=True);
+                    inputs_fgsm[idx].to(dev,non_blocking=True);
+            else:
+                for idx,element in enumerate(inputs):
+                    inputs_fgsm[idx].to(dev,non_blocking=True);
+                    
+            label_cat = label_cat.to(dev,non_blocking=True)
+            label_domain = label_domain.to(dev,non_blocking=True)
+            label_domain_check = label_domain_check.to(dev,non_blocking=True)
+            target = target.to(dev,non_blocking=True)            
+
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
@@ -219,7 +222,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign().detach());
+                    inputs_grad_sign.append(element.grad.data.sign().detach().cpu());
 
             ### evaluate loss function and counters
             num_batches += 1
