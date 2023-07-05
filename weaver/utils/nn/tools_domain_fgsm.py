@@ -172,7 +172,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     inputs_fgsm[idx].to(dev,non_blocking=True);
             else:
                 for idx,element in enumerate(inputs):
-                    inputs_fgsm[idx].to(dev,non_blocking=True);
+                    inputs[idx].to(dev,non_blocking=True);
                     
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
