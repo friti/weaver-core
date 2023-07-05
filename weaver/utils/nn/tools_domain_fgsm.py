@@ -152,6 +152,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                 for idx,element in enumerate(inputs):        
                     element.requires_grad = True;
+                    element.to(dev,non_blocking=True);
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(inputs[idx]);
                     else:
@@ -168,7 +169,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             return output;                        
                         inputs_fgsm.append(fgsm_attack(inputs[idx],inputs_grad_sign[idx],eps_fgsm));
                     ## send to GPU
-                    element.to(dev,non_blocking=True);
                     inputs_fgsm[idx].to(dev,non_blocking=True);
             else:
                 for idx,element in enumerate(inputs):
@@ -222,7 +222,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign().detach().cpu());
+                    inputs_grad_sign.append(element.grad.data.sign());
 
             ### evaluate loss function and counters
             num_batches += 1
