@@ -221,13 +221,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 scheduler.step()
 
             ### save the gradient (only for some inputs is present otherwise zero out)
+            '''
             inputs_grad_sign = [];
             for idx,element in enumerate(inputs):
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign().detach()[index_cat]);
-
+                    inputs_grad_sign.append(element.grad.data.sign().detach());
+            '''
+            
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
