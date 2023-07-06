@@ -75,7 +75,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
             
             ## decide if this batch goes to FGSM
-            inputs = [X[k] for k in data_config.input_names]
+            inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 
             ### build classification true labels (numpy argmax)
             label_cat  = y_cat[data_config.label_names[0]].long()
@@ -152,7 +152,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 for idx,element in enumerate(inputs):        
                     element.requires_grad = True;
                     element.retain_grad();
-                    element.to(dev,non_blocking=True);
                     #inputs_fgsm.append(element[index_cat]);
                     ## send to GPU
                     #inputs_fgsm[idx].to(dev,non_blocking=True);
@@ -173,11 +172,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             return output;                        
                         inputs_fgsm.append(fgsm_attack(element[index_cat],inputs_grad_sign[idx],eps_fgsm));
                 '''
-            else:
-                for idx,element in enumerate(inputs):
-                    element.requires_grad = True;
-                    element.retain_grad();
-                    element.to(dev,non_blocking=True);
                     
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
