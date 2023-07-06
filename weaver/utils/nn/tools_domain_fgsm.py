@@ -155,24 +155,19 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             if use_fgsm:
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
-                inputs_fgsm = [element.to(dev,non_blocking=True) for element in inputs]
-                '''
-                    if inputs_grad_sign[idx] is None:
-                        inputs_fgsm.append(element[index_cat]);
-                    else:
-                        @torch.jit.script
-                        def fgsm_attack(data: torch.Tensor,
-                                        data_grad: torch.Tensor,
-                                        eps_fgsm: float):
-                            maxd, _ = torch.max(data,dim=0);
-                            mind, _ = torch.min(data,dim=0);
-                            max_mult = maxd.repeat(data.size(dim=0),1,1);
-                            min_mult = mind.repeat(data.size(dim=0),1,1);
-                            rand_vec = torch.clip(eps_fgsm*(1.+torch.randn(size=data.shape)),min=0,max=1);
-                            output = torch.clip(data+rand_vec*data_grad*(max_mult-min_mult),min=mind,max=maxd).float();
-                            return output;                        
-                        inputs_fgsm.append(fgsm_attack(element[index_cat],inputs_grad_sign[idx],eps_fgsm));
-                '''
+                @torch.jit.script
+                def fgsm_attack(data: torch.Tensor,
+                                data_grad: torch.Tensor,
+                                eps_fgsm: float):
+                    maxd, _ = torch.max(data,dim=0);
+                    mind, _ = torch.min(data,dim=0);
+                    max_mult = maxd.repeat(data.size(dim=0),1,1);
+                    min_mult = mind.repeat(data.size(dim=0),1,1);
+                    output   = data+torch.clip(eps_fgsm*(1+torch.randn_like(data),min=0,max=1))*data_grad*(max_mult-min_mult);
+                    output   = torch.clip(output,min=mind,max=maxd).detach();
+                    return output;                        
+                inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else
+                               fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
