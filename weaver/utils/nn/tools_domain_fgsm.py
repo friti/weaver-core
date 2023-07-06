@@ -45,6 +45,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;    
     inputs_grad_sign, inputs_fgsm, model_output_fgsm = None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, kl_div_fgsm, sum_kl_div_fgsm = 0, 0, 0, 0, 0;
+    use_fgsm, enables_fgsm = False, False;
     
     ### number of classification labels
     num_labels = len(data_config.label_value);
@@ -69,7 +70,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     label_domain_counter = [];
     for idx, names in enumerate(data_config.label_domain_names):
         label_domain_counter.append(Counter())
-
+    
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
@@ -144,20 +145,24 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ### build FGSM adversrial when required
             num_fgsm_examples = 0;
-            use_fgsm = False;
             rand_val = np.random.uniform(low=0,high=1);
-            for idx,element in enumerate(inputs):        
-                element.requires_grad = True;
-                element.retain_grad();
+            ### if fgsm is enabled, use becomes true (gradient are available)
+            use_fgsm = True if enables_fgsm else False;
+            ### if conditions are respected enables fgsm
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
-                use_fgsm = True;
-                num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                 for idx,element in enumerate(inputs):        
                     element.requires_grad = True;
                     element.retain_grad();
-                    #inputs_fgsm.append(element[index_cat]);
-                    ## send to GPU
-                    #inputs_fgsm[idx].to(dev,non_blocking=True);
+                    enables_fgsm = True;
+            else:
+                    enables_fgsm = False;
+                    
+            if use_fgsm:
+                num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
+                for idx,element in enumerate(inputs):
+                    inputs_fgsm.append(element[index_cat]);
+                ## send to GPU
+                #inputs_fgsm[idx].to(dev,non_blocking=True);
                 '''
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(element[index_cat]);
@@ -217,15 +222,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
 
-            ### save the gradient (only for some inputs is present otherwise zero out)
-            '''
-            inputs_grad_sign = [];
-            for idx,element in enumerate(inputs):
-                if element.grad is None:
-                    inputs_grad_sign.append(None);
-                else:
-                    inputs_grad_sign.append(element.grad.data.sign().detach());
-            '''
+            ## save the gradient (only for some inputs is present otherwise zero out)
+            if enables_fgsm:
+                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach() for idx,element in enumerate(inputs)]
             
             ### evaluate loss function and counters
             num_batches += 1
@@ -284,7 +283,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         #    target=torch.softmax(pred_nominal,dim=1),
                         #    reduction='sum').abs();
                         sum_kl_div_fgsm += kl_div_fgsm;
-            
+                use_fgsm = False;
             ## single domain region
             if num_domains == 1:
                 if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
