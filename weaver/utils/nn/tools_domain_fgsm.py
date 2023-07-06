@@ -146,7 +146,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             num_fgsm_examples = 0;
             use_fgsm = False;
             rand_val = np.random.uniform(low=0,high=1);
-            inputs_fgsm = [];
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 use_fgsm = True;
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
@@ -154,7 +153,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     element.to(dev,non_blocking=True);
                     element.requires_grad = True;
                     if inputs_grad_sign[idx] is None:
-                        inputs_fgsm.append(inputs[idx]);
+                        inputs_fgsm.append(element[index_cat]);
                     else:
                         @torch.jit.script
                         def fgsm_attack(data: torch.Tensor,
@@ -167,7 +166,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                             rand_vec = torch.clip(eps_fgsm*(1.+torch.randn(size=data.shape)),min=0,max=1);
                             output = torch.clip(data+rand_vec*data_grad*(max_mult-min_mult),min=mind,max=maxd).float();
                             return output;                        
-                        inputs_fgsm.append(fgsm_attack(inputs[idx],inputs_grad_sign[idx],eps_fgsm));
+                        inputs_fgsm.append(fgsm_attack(element[index_cat],inputs_grad_sign[idx],eps_fgsm));
                     ## send to GPU
                     inputs_fgsm[idx].to(dev,non_blocking=True);
             else:
@@ -197,8 +196,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 target = target.squeeze();
                 if use_fgsm:
                     model_output_fgsm = model(*inputs_fgsm)
-                    model_output_fgsm = model_output_fgsm[:,:num_labels];
-                    model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
+                    model_output_fgsm = model_output_fgsm[:,:num_labels]..squeeze().float();
                     ### evaluate loss function            
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm);
                 else:
@@ -222,7 +220,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element.grad.data.sign().detach());
+                    inputs_grad_sign.append(element[index_cat].grad.data.sign().detach());
 
             ### evaluate loss function and counters
             num_batches += 1
