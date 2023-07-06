@@ -196,7 +196,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 target = target.squeeze();
                 if use_fgsm:
                     model_output_fgsm = model(*inputs_fgsm)
-                    model_output_fgsm = model_output_fgsm[:,:num_labels]..squeeze().float();
+                    model_output_fgsm = model_output_fgsm[:,:num_labels].squeeze().float();
                     ### evaluate loss function            
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm);
                 else:
