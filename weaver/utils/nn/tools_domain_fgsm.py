@@ -152,11 +152,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     element.requires_grad = True;
                     element.retain_grad();
                     enables_fgsm = True;
-                    
+
             if use_fgsm:
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
-                for idx,element in enumerate(inputs):
-                    inputs_fgsm.append(element[index_cat]);
+                inputs_fgsm = [element for element in inputs];
+                #for idx,element in enumerate(inputs):
+                #inputs_fgsm.append(element[index_cat]);
                 ## send to GPU
                 #inputs_fgsm[idx].to(dev,non_blocking=True);
                 '''
