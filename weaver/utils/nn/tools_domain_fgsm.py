@@ -174,6 +174,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             else:
                 for idx,element in enumerate(inputs):
                     inputs[idx].to(dev,non_blocking=True);
+                    element.requires_grad = True;
                     
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
