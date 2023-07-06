@@ -150,8 +150,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 use_fgsm = True;
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                 for idx,element in enumerate(inputs):        
-                    element.to(dev,non_blocking=True);
                     element.requires_grad = True;
+                    element.to(dev,non_blocking=True);
                 '''
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(element[index_cat]);
@@ -173,8 +173,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 '''
             else:
                 for idx,element in enumerate(inputs):
-                    inputs[idx].to(dev,non_blocking=True);
                     element.requires_grad = True;
+                    inputs[idx].to(dev,non_blocking=True);
                     
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
