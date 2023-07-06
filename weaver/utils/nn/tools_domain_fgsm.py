@@ -153,9 +153,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     element.requires_grad = True;
                     element.retain_grad();
                     element.to(dev,non_blocking=True);
-                    inputs_fgsm.append(element[index_cat]);
+                    #inputs_fgsm.append(element[index_cat]);
                     ## send to GPU
-                    inputs_fgsm[idx].to(dev,non_blocking=True);
+                    #inputs_fgsm[idx].to(dev,non_blocking=True);
                 '''
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(element[index_cat]);
