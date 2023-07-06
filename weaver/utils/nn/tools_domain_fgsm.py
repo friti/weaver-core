@@ -155,11 +155,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             if use_fgsm:
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
-                
-                #for idx,element in enumerate(inputs):
-                #inputs_fgsm.append(element[index_cat]);
-                ## send to GPU
-                #inputs_fgsm[idx].to(dev,non_blocking=True);
+                inputs_fgsm = [element[index_cat].to(dev,non_blocking=True) for element in inputs]
                 '''
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(element[index_cat]);
@@ -302,7 +298,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ## save the gradient (only for some inputs is present otherwise zero out)
             if enables_fgsm:
-                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach() for idx,element in enumerate(inputs)]
+                index_cat = index_cat.to(dev,non_blocking=True)
+                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach()[index_cat].to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                 use_fgsm = True;
                 enables_fgsm = False;
             else:
@@ -511,7 +508,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 label_domain = label_domain.to(dev,non_blocking=True)
                 label_domain_check = label_domain_check.to(dev,non_blocking=True)
                 target = target.to(dev,non_blocking=True)            
-
+                
                 ### store truth labels for classification and regression as well as observers
                 for k, v in y_cat.items():
                     if not for_training:
