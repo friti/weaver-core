@@ -155,7 +155,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             if use_fgsm:
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
-                inputs_fgsm = [element[index_cat].to(dev,non_blocking=True) for element in inputs]
+                inputs_fgsm = [element.to(dev,non_blocking=True) for element in inputs]
                 '''
                     if inputs_grad_sign[idx] is None:
                         inputs_fgsm.append(element[index_cat]);
@@ -298,8 +298,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ## save the gradient (only for some inputs is present otherwise zero out)
             if enables_fgsm:
-                index_cat = index_cat.to(dev,non_blocking=True)
-                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach()[index_cat].to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                 use_fgsm = True;
                 enables_fgsm = False;
             else:
