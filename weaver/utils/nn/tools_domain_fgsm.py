@@ -226,7 +226,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 if element.grad is None:
                     inputs_grad_sign.append(None);
                 else:
-                    inputs_grad_sign.append(element[index_cat].grad.data.sign().detach());
+                    inputs_grad_sign.append(element.grad.data.sign().detach()[index_cat]);
 
             ### evaluate loss function and counters
             num_batches += 1
