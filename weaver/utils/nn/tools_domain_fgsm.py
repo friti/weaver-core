@@ -196,13 +196,21 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
                 if use_fgsm:
-                    model_output_fgsm = model(*inputs_fgsm)
-                    model_output_fgsm = model_output_fgsm[:,:num_labels];
-                    model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
+                    model.eval();
+                    with torch.no_grad():
+                        model_output_fgsm = model(*inputs_fgsm)
+                        model_output_fgsm = model_output_fgsm[:,:num_labels];
+                        model_output_fgsm = _flatten_preds(model_output_fgsm,None);
+                        model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
+                        model_output_ref = model(*inputs);
+                        model_output_ref = model_output_ref[:,:num_labels];
+                        model_output_ref = _flatten_preds(model_output_ref,None);
+                        model_output_ref = model_output_ref[index_cat].squeeze().float();
+                    model.train();
                     ### evaluate loss function            
-                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm);
+                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_ref);
                 else:
-                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor());
+                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
 
             ### back propagation
             if grad_scaler is None:
@@ -258,19 +266,17 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     loss_fgsm = loss_fgsm.detach().item()
                     total_fgsm_loss += loss_fgsm;
                 model_output_fgsm = model_output_fgsm.detach();
-                if (torch.is_tensor(label_cat) and torch.is_tensor(model_output_cat) and torch.is_tensor(model_output_fgsm) and 
-                    np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_cat)):
-                    pred_fgsm = model_output_fgsm.float();
-                    pred_nominal = model_output_cat.float();
-                    if pred_fgsm.shape == pred_nominal.shape:
+                if (torch.is_tensor(label_cat) and torch.is_tensor(model_output_ref) and torch.is_tensor(model_output_fgsm) and 
+                    np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_ref)):
+                    if model_output_ref.shape == model_output_fgsm.shape:
                         count_fgsm += num_fgsm_examples;
                         kl_div_fgsm  = torch.nn.functional.kl_div(
-                            input=torch.softmax(pred_fgsm,dim=1),
-                            target=torch.softmax(pred_nominal,dim=1),
+                            input=torch.softmax(model_output_fgsm,dim=1),
+                            target=torch.softmax(model_output_ref,dim=1),
                             log_target=True,reduction='sum').abs();
                         #kl_div_fgsm  = torch.nn.functional.mse_loss(
-                        #    input=torch.softmax(pred_fgsm,dim=1),
-                        #    target=torch.softmax(pred_nominal,dim=1),
+                        #    input=torch.softmax(model_output_fgsm,dim=1),
+                        #    target=torch.softmax(model_output_ref,dim=1),
                         #    reduction='sum').abs();
                         sum_kl_div_fgsm += kl_div_fgsm;
             ## single domain region
