@@ -146,16 +146,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### build FGSM adversrial when required
             num_fgsm_examples = 0;
             rand_val = np.random.uniform(low=0,high=1);
-            ### if fgsm is enabled, use becomes true (gradient are available)
-            use_fgsm = True if enables_fgsm else False;
             ### if conditions are respected enables fgsm
             if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
                 for idx,element in enumerate(inputs):        
                     element.requires_grad = True;
                     element.retain_grad();
                     enables_fgsm = True;
-            else:
-                    enables_fgsm = False;
                     
             if use_fgsm:
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
@@ -222,10 +218,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
 
-            ## save the gradient (only for some inputs is present otherwise zero out)
-            if enables_fgsm:
-                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach() for idx,element in enumerate(inputs)]
-            
             ### evaluate loss function and counters
             num_batches += 1
             loss = loss.detach().item()
@@ -283,7 +275,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         #    target=torch.softmax(pred_nominal,dim=1),
                         #    reduction='sum').abs();
                         sum_kl_div_fgsm += kl_div_fgsm;
-                use_fgsm = False;
             ## single domain region
             if num_domains == 1:
                 if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
@@ -307,7 +298,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples;
 
-
+            ## save the gradient (only for some inputs is present otherwise zero out)
+            if enables_fgsm:
+                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach() for idx,element in enumerate(inputs)]
+                use_fgsm = True;
+                enables_fgsm = False;
+            else:
+                use_fgsm = False;
+            
             ### monitor metrics
             postfix = {
                 'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
