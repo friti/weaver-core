@@ -591,7 +591,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 index_offset += (num_cat_examples+num_domain_examples)
 
                 if loss_func != None:
-                    loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);                
+                    loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());                
                     loss = loss.item()
                     if loss_cat:
                         loss_cat = loss_cat.item()
