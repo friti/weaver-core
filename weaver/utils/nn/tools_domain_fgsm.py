@@ -161,10 +161,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                                 eps_fgsm: float):
                     maxd, _ = torch.max(data,dim=0);
                     mind, _ = torch.min(data,dim=0);
-                    #max_mult = maxd.repeat(data.size(dim=0),1,1);
-                    #min_mult = mind.repeat(data.size(dim=0),1,1);
-                    output   = data_grad*torch.clip(1+torch.randn_like(data),min=0,max=1)*eps_fgsm;
-                    #output  = torch.clip(data+output*(max_mult-min_mult),min=mind,max=maxd).detach();
+                    max_mult = maxd.repeat(data.size(dim=0),1,1);
+                    min_mult = mind.repeat(data.size(dim=0),1,1);
+                    output  = torch.clip(data+output*(max_mult-min_mult),min=mind,max=maxd).detach();
                     output   = torch.clip(data+output,min=mind,max=maxd).detach();
                     return output
                 inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else
