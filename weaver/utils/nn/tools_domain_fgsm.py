@@ -398,7 +398,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     sum_sqr_err, count_cat, count_domain = 0, 0, 0;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
     pred_cat, pred_domain, pred_reg, correct_cat, correct_domain = None, None, None, None, None;
-    loss, loss_cat, loss_domain, loss_reg = None, None, None, None;
+    loss, loss_cat, loss_domain, loss_reg, loss_fgsm = None, None, None, None, None;
     scores_cat, scores_reg, indexes_cat = [], [], [];
     scores_domain  = defaultdict(list); 
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
@@ -590,7 +590,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 index_offset += (num_cat_examples+num_domain_examples)
 
                 if loss_func != None:
-                    loss, loss_cat, loss_reg, loss_domain = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());                
+                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());                
                     loss = loss.item()
                     if loss_cat:
                         loss_cat = loss_cat.item()
