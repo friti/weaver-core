@@ -44,7 +44,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;    
     inputs_grad_sign, inputs_fgsm, model_output_fgsm = None, None, None;
-    num_batches_fgsm, total_fgsm_loss, count_fgsm, kl_div_fgsm, sum_kl_div_fgsm = 0, 0, 0, 0, 0;
+    num_batches_fgsm, total_fgsm_loss, count_fgsm, mse_fgsm, sum_mse_fgsm = 0, 0, 0, 0, 0;
     use_fgsm, enables_fgsm = False, False;
     
     ### number of classification labels
