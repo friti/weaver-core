@@ -268,7 +268,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         mse_fgsm  = torch.nn.functional.mse_loss(
                             input=torch.softmax(model_output_fgsm,dim=1),
                             target=torch.softmax(model_output_ref,dim=1),
-                            reduction='mean');
+                            reduction = "sum"
+                        );
                         sum_mse_fgsm += mse_fgsm;
             ## single domain region
             if num_domains == 1:
