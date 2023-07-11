@@ -265,15 +265,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_ref)):
                     if model_output_ref.shape == model_output_fgsm.shape:
                         count_fgsm += num_fgsm_examples;
-                        kl_div_fgsm  = torch.nn.functional.kl_div(
+                        mse_fgsm  = torch.nn.functional.mse_loss(
                             input=torch.softmax(model_output_fgsm,dim=1),
                             target=torch.softmax(model_output_ref,dim=1),
-                            log_target=True,reduction='batchmean').abs();
-                        #kl_div_fgsm  = torch.nn.functional.mse_loss(
-                        #    input=torch.softmax(model_output_fgsm,dim=1),
-                        #    target=torch.softmax(model_output_ref,dim=1),
-                        #    reduction='mean').abs();
-                        sum_kl_div_fgsm += kl_div_fgsm;
+                            reduction='mean');
+                        sum_mse_fgsm += mse_fgsm;
             ## single domain region
             if num_domains == 1:
                 if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
@@ -316,8 +312,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 'AvgAccDomain': '%.4f' % (total_domain_correct / (count_domain) if count_domain else 0),
                 'MSE': '%.4f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
                 'AvgMSE': '%.4f' % (sum_sqr_err / count_cat if count_cat else 0),
-                'FGSM':  '%.4f' % (kl_div_fgsm if num_fgsm_examples else 0),
-                'AvgFGSM': '%.4f' % (sum_kl_div_fgsm / num_batches_fgsm if num_batches_fgsm else 0)
+                'FGSM':  '%.4f' % (mse_fgsm if num_fgsm_examples else 0),
+                'AvgFGSM': '%.4f' % (mse_fgsm / num_batches_fgsm if num_batches_fgsm else 0)
             }
                             
             tq.set_postfix(postfix);
@@ -328,7 +324,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     ("AccCat/train", correct_cat / num_cat_examples if num_cat_examples else 0, tb_helper.batch_train_count + num_batches),
                     ("AccDomain/train", correct_domain / (num_domain_examples) if num_domain_examples else 0, tb_helper.batch_train_count + num_batches),
                     ("MSE/train", sqr_err / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches),
-                    ("FGSM/train", kl_div_fgsm  if num_fgsm_examples else 0, tb_helper.batch_train_count + num_batches)
+                    ("FGSM/train", mse_fgsm  if num_fgsm_examples else 0, tb_helper.batch_train_count + num_batches)
                 ]
                     
                 tb_helper.write_scalars(tb_help);
@@ -351,7 +347,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
-    _logger.info('Train AvgKLDiv FGSM: %.5f'%(sum_kl_div_fgsm / num_batches_fgsm if num_batches_fgsm else 0))    
+    _logger.info('Train AvgFGSM FGSM: %.5f'%(sum_mse_fgsm / num_batches_fgsm if num_batches_fgsm else 0))    
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
                 
@@ -366,7 +362,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ("AccCat/train (epoch)", total_cat_correct / count_cat, epoch),
             ("AccDomain/train (epoch)", total_domain_correct / (count_domain), epoch),
             ("MSE/train (epoch)", sum_sqr_err / count, epoch),            
-            ("KLDiv/train FGSM (epoch)", sum_kl_div_fgsm / num_batches_fgsm, epoch),            
+            ("FGSM/train FGSM (epoch)", sum_mse_fgsm / num_batches_fgsm, epoch),            
         ])
         
         if tb_helper.custom_fn:
