@@ -314,7 +314,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 'MSE': '%.4f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
                 'AvgMSE': '%.4f' % (sum_sqr_err / count_cat if count_cat else 0),
                 'FGSM':  '%.4f' % (mse_fgsm if num_fgsm_examples else 0),
-                'AvgFGSM': '%.4f' % (mse_fgsm / num_batches_fgsm if num_batches_fgsm else 0)
+                'AvgFGSM': '%.4f' % (sum_mse_fgsm / count_fgsm if count_fgsm else 0)
             }
                             
             tq.set_postfix(postfix);
@@ -348,7 +348,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
-    _logger.info('Train AvgFGSM FGSM: %.5f'%(sum_mse_fgsm / num_batches_fgsm if num_batches_fgsm else 0))    
+    _logger.info('Train AvgFGSM FGSM: %.5f'%(sum_mse_fgsm / count_fgsm if count_fgsm else 0))    
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
                 
@@ -363,7 +363,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ("AccCat/train (epoch)", total_cat_correct / count_cat, epoch),
             ("AccDomain/train (epoch)", total_domain_correct / (count_domain), epoch),
             ("MSE/train (epoch)", sum_sqr_err / count, epoch),            
-            ("FGSM/train FGSM (epoch)", sum_mse_fgsm / num_batches_fgsm, epoch),            
+            ("FGSM/train FGSM (epoch)", sum_mse_fgsm / count_fgsm, epoch),            
         ])
         
         if tb_helper.custom_fn:
