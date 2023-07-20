@@ -111,9 +111,6 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
     assert (len(outputs) == num_outputs)
     return torch.cat(outputs, dim=1)
 
-def tril_indices(rows: int, cols: int, offset: int=0):
-    return torch.ones(rows, cols).tril(offset).nonzero().t()
-
 def build_sparse_tensor(uu, idx, seq_len):
     # inputs: uu (N, C, num_pairs), idx (N, 2, num_pairs)
     # return: (N, C, seq_len, seq_len)
@@ -129,7 +126,6 @@ def build_sparse_tensor(uu, idx, seq_len):
         i, uu.flatten(),
         size=(batch_size, num_fts, seq_len + 1, seq_len + 1),
         device=uu.device).to_dense()[:, :, :seq_len, :seq_len]
-
 
 def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
     # From https://github.com/rwightman/pytorch-image-models/blob/18ec173f95aa220af753358bf860b16b6691edb2/timm/layers/weight_init.py#L8
@@ -337,15 +333,11 @@ class PairEmbed(nn.Module):
                     uu = uu[:, :, i, j]
             else:
                 if x is not None:
-                    ij_ = tril_indices(seq_len, seq_len, offset = 0);
-                    i, j = ij_[0], ij_[1];
-                    x = x.unsqueeze(-1).repeat(1, 1, 1, seq_len)
-                    xi = x[:, :, i, j]
-                    xj = x[:, :, j, i]
-                    x = self.pairwise_lv_fts(xi, xj);
+                    x = self.pairwise_lv_fts(x.unsqueeze(-1), x.unsqueeze(-2))
                     if self.remove_self_pair:
                         i = torch.arange(0, seq_len, device=x.device)
                         x[:, :, i, i] = 0
+                    x = x.view(-1, self.pairwise_lv_dim, seq_len * seq_len)
                 if uu is not None:
                     uu = uu.view(-1, self.pairwise_input_dim, seq_len * seq_len)
 
