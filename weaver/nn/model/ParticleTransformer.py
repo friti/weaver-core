@@ -111,6 +111,8 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
     assert (len(outputs) == num_outputs)
     return torch.cat(outputs, dim=1)
 
+def tril_indices(rows: int, cols: int, offset: int=0):
+    return torch.ones(rows, cols).tril(offset).nonzero().t()
 
 def build_sparse_tensor(uu, idx, seq_len):
     # inputs: uu (N, C, num_pairs), idx (N, 2, num_pairs)
@@ -335,13 +337,18 @@ class PairEmbed(nn.Module):
                     uu = uu[:, :, i, j]
             else:
                 if x is not None:
-                    x = self.pairwise_lv_fts(x.unsqueeze(-1), x.unsqueeze(-2))
+                    ij_ = tril_indices(seq_len, seq_len, offset = 0);
+                    i, j = ij_[0], ij_[1];
+                    x = x.unsqueeze(-1).repeat(1, 1, 1, seq_len)
+                    xi = x[:, :, i, j]
+                    xj = x[:, :, j, i]
+                    x = self.pairwise_lv_fts(xi, xj);
                     if self.remove_self_pair:
                         i = torch.arange(0, seq_len, device=x.device)
                         x[:, :, i, i] = 0
-                    x = x.view(-1, self.pairwise_lv_dim, seq_len * seq_len)
                 if uu is not None:
                     uu = uu.view(-1, self.pairwise_input_dim, seq_len * seq_len)
+
             if self.mode == 'concat':
                 if x is None:
                     pair_fts = uu
@@ -365,7 +372,9 @@ class PairEmbed(nn.Module):
             y[:, :, i, j] = elements
             y[:, :, j, i] = elements
         else:
-            y = elements.view(-1, self.out_dim, seq_len, seq_len)
+            y = torch.zeros(batch_size, self.out_dim, seq_len, seq_len, dtype=elements.dtype, device=x.device)
+            y[:, :, i, j] = elements
+            y[:, :, j, i] = elements
         return y
 
 
