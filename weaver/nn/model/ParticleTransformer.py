@@ -364,9 +364,7 @@ class PairEmbed(nn.Module):
             y[:, :, i, j] = elements
             y[:, :, j, i] = elements
         else:
-            y = torch.zeros(batch_size, self.out_dim, seq_len, seq_len, dtype=elements.dtype, device=x.device)
-            y[:, :, i, j] = elements
-            y[:, :, j, i] = elements
+            y = elements.view(-1, self.out_dim, seq_len, seq_len)
         return y
 
 
