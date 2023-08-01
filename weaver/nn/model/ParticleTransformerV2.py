@@ -286,8 +286,8 @@ class PairEmbed(nn.Module):
                 module_list = [nn.BatchNorm1d(input_dim)] if normalize_input else []
                 for dim in dims:
                     module_list.extend([
-                        nn.BatchNorm1d(dim),
                         nn.Conv1d(input_dim, dim, 1),
+                        nn.BatchNorm1d(dim),
                         nn.GELU() if activation == 'gelu' else nn.ReLU(),
                     ])
                     input_dim = dim
