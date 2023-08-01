@@ -200,7 +200,7 @@ class SequenceTrimmer(nn.Module):
                 self._counter += 1
             else:
                 if self.training:
-                    q = min(1, random.uniform(*self.target))
+                    q = torch.min(torch.ones(1, device=mask.device), torch.rand(1, device=mask.device) * (self.target[1] - self.target[0]) + self.target[0])[0]
                     maxlen = torch.quantile(mask.type_as(x).sum(dim=-1), q).long()
                     rand = torch.rand_like(mask.type_as(x))
                     rand.masked_fill_(~mask, -1)
@@ -413,20 +413,20 @@ class Block(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
 
+        padding_mask = torch.zeros_like(padding_mask, dtype=x.dtype).masked_fill(padding_mask, float('-inf'))                
         if x_cls is not None:
             with torch.no_grad():
-                # prepend one element for x_cls: -> (batch, 1+seq_len)
                 padding_mask = torch.cat((torch.zeros_like(padding_mask[:, :1]), padding_mask), dim=1)
             # class attention: https://arxiv.org/pdf/2103.17239.pdf
             residual = x_cls
             u = torch.cat((x_cls, x), dim=0)  # (seq_len+1, batch, embed_dim)
             u = self.pre_attn_norm(u)
-            x = self.attn(x_cls, u, u, key_padding_mask=padding_mask)[0]  # (1, batch, embed_dim)
+            x = self.attn(x_cls, u, u, key_padding_mask=padding_mask, need_weights=False)[0]  # (1, batch, embed_dim)
         else:
             residual = x
             x = self.pre_attn_norm(x)
             x = self.attn(x, x, x, key_padding_mask=padding_mask,
-                          attn_mask=attn_mask)[0]  # (seq_len, batch, embed_dim)
+                          attn_mask=attn_mask, need_weights=False)[0]  # (seq_len, batch, embed_dim)
 
         if self.c_attn is not None:
             tgt_len = x.size(0)
