@@ -29,7 +29,7 @@ def _flatten_preds(preds, mask=None, label_axis=1):
     return preds
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
-def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, eps_fgsm=None, frac_fgsm=None):
+def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, eps_fgsm=None, frac_fgsm=None, epoch_start_fgsm=None):
 
     model.train()
     torch.backends.cudnn.benchmark = True;
@@ -147,13 +147,13 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             num_fgsm_examples = 0;
             rand_val = np.random.uniform(low=0,high=1);
             ### if conditions are respected enables fgsm
-            if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0:
+            if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0 and epoch >= epoch_start_fgsm:
                 for idx,element in enumerate(inputs):        
                     element.requires_grad = True;
                     element.retain_grad();
                     enables_fgsm = True;
 
-            if use_fgsm:
+            if use_fgsm and epoch >= epoch_start_fgsm:
                 num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                 @torch.jit.script
                 def fgsm_attack(data: torch.Tensor,
@@ -190,7 +190,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 label_domain = label_domain.squeeze();
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
-                if use_fgsm:
+                if use_fgsm and epoch >= epoch_start_fgsm:
                     model.eval();
                     with torch.no_grad():
                         model_output_fgsm = model(*inputs_fgsm)
@@ -255,7 +255,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ## fast gradient attack loss residual w.r.t. nominal
             sqr_err_fgsm = 0;
-            if use_fgsm:
+            if use_fgsm and epoch >= epoch_start_fgsm:
                 num_batches_fgsm += 1;
                 if loss_fgsm:
                     loss_fgsm = loss_fgsm.detach().item()

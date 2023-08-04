@@ -161,6 +161,8 @@ parser.add_argument('--eps-fgsm', type=float, default=None,
                     help='value of the epsilon parameter in FGSM')
 parser.add_argument('--frac-fgsm', type=float, default=None,                    
                     help='fraction of batches for FGSM')
+parser.add_argument('--epoch-start-fgsm', type=int, default=0,                    
+                    help='Epoch from which start the FGSM attack')
 parser.add_argument('--predict-output', type=str,
                     help='path to save the prediction output, support `.root` and `.parquet` format')
 parser.add_argument('--export-onnx', type=str, default=None,
@@ -955,7 +957,7 @@ def _main(args):
             _logger.info('Epoch #%d training' % epoch)
 
             if "fgsm" in args.weaver_mode:
-                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, eps_fgsm=args.eps_fgsm, frac_fgsm=args.frac_fgsm);
+                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, eps_fgsm=args.eps_fgsm, frac_fgsm=args.frac_fgsm, epoch_start_fgsm=args.epoch_start_fgsm);
             else:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
                 
