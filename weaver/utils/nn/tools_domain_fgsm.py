@@ -310,7 +310,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 'AvgAccDomain': '%.4f' % (total_domain_correct / (count_domain) if count_domain else 0),
                 'MSE': '%.4f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
                 'AvgMSE': '%.4f' % (sum_sqr_err / count_cat if count_cat else 0),
-                'FGSM':  '%.4f' % (sqr_err_fgsm if num_fgsm_examples else 0),
+                'FGSM':  '%.4f' % (sqr_err_fgsm / num_fgsm_examples if num_fgsm_examples else 0),
                 'AvgFGSM': '%.4f' % (sum_sqr_err_fgsm / count_fgsm if count_fgsm else 0)
             }
                             
@@ -322,7 +322,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     ("AccCat/train", correct_cat / num_cat_examples if num_cat_examples else 0, tb_helper.batch_train_count + num_batches),
                     ("AccDomain/train", correct_domain / (num_domain_examples) if num_domain_examples else 0, tb_helper.batch_train_count + num_batches),
                     ("MSE/train", sqr_err / num_examples_cat if num_examples_cat else 0, tb_helper.batch_train_count + num_batches),
-                    ("FGSM/train", sqr_err_fgsm  if num_fgsm_examples else 0, tb_helper.batch_train_count + num_batches)
+                    ("FGSM/train", sqr_err_fgsm / num_fgsm_examples if num_fgsm_examples else 0, tb_helper.batch_train_count + num_batches)
                 ]
                     
                 tb_helper.write_scalars(tb_help);
