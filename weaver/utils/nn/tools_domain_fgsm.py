@@ -341,7 +341,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     _logger.info('Train AvgLoss Cat: %.5f'% (total_cat_loss / num_batches))
     _logger.info('Train AvgLoss Domain: %.5f'% (total_domain_loss / num_batches))
     _logger.info('Train AvgLoss Reg: %.5f'% (total_reg_loss / num_batches))
-    _logger.info('Train AvgLoss FGSM: %.5f'% (total_fgsm_loss / num_batches_fgsm))
+    _logger.info('Train AvgLoss FGSM: %.5f'% (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0))
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
@@ -355,11 +355,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ("Loss Cat/train (epoch)", total_cat_loss / num_batches, epoch),
             ("Loss Domain/train (epoch)", total_domain_loss / num_batches, epoch),
             ("Loss Reg/train (epoch)", total_reg_loss / num_batches, epoch),
-            ("Loss FGSM/train (epoch)", total_fgsm_loss / num_batches_fgsm, epoch),
-            ("AccCat/train (epoch)", total_cat_correct / count_cat, epoch),
-            ("AccDomain/train (epoch)", total_domain_correct / (count_domain), epoch),
-            ("MSE/train (epoch)", sum_sqr_err / count, epoch),            
-            ("FGSM/train FGSM (epoch)", sum_sqr_err_fgsm / count_fgsm, epoch),            
+            ("Loss FGSM/train (epoch)", total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0, epoch),
+            ("AccCat/train (epoch)", total_cat_correct / count_cat if count_cat else 0, epoch),
+            ("AccDomain/train (epoch)", total_domain_correct / count_domain if count_domain else 0, epoch),
+            ("MSE/train (epoch)", sum_sqr_err / count_cat if count_cat else 0, epoch),            
+            ("FGSM/train FGSM (epoch)", sum_sqr_err_fgsm / count_fgsm if count_fgsm else 0, epoch),            
         ])
         
         if tb_helper.custom_fn:
