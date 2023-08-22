@@ -236,6 +236,7 @@ class Embed(nn.Module):
             module_list.extend([
                 nn.LayerNorm(input_dim),
                 nn.Linear(input_dim, dim),
+                nn.BatchNorm1d(input_dim),
                 nn.GELU() if activation == 'gelu' else nn.ReLU(),
             ])
             input_dim = dim
