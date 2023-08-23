@@ -234,8 +234,7 @@ class Embed(nn.Module):
         module_list = []
         for dim in dims:
             module_list.extend([
-                nn.LayerNorm(input_dim),
-                nn.Linear(input_dim, dim),
+                nn.Conv1d(input_dim, dim, 1),
                 nn.BatchNorm1d(dim),
                 nn.GELU() if activation == 'gelu' else nn.ReLU(),
             ])
