@@ -245,7 +245,7 @@ class Embed(nn.Module):
         if self.input_bn is not None:
             # x: (batch, embed_dim, seq_len)
             x = self.input_bn(x)
-            #x = x.permute(2, 0, 1).contiguous()
+            x = x.permute(2, 0, 1).contiguous()
         return self.embed(x)
 
 
