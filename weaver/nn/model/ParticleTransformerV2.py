@@ -763,8 +763,9 @@ class ParticleTransformerTagger(nn.Module):
             pf_x = self.pf_embed(pf_x)  # after embed: (seq_len, batch, embed_dim)
             sv_x = self.sv_embed(sv_x)
             lt_x = self.lt_embed(lt_x)
-            x = torch.cat([pf_x, sv_x, lt_x], dim=0)
-
+            #x = torch.cat([pf_x, sv_x, lt_x], dim=0)
+            x = torch.cat([pf_x, sv_x, lt_x], dim=2)
+            
             return self.part(x, v, mask)
 
 
