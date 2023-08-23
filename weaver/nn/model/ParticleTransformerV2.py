@@ -234,8 +234,8 @@ class Embed(nn.Module):
         module_list = []
         for dim in dims:
             module_list.extend([
-                nn.Conv1d(input_dim, dim, 1),
-                nn.BatchNorm1d(dim),
+                nn.LayerNorm(input_dim),
+                nn.Linear(input_dim, dim),
                 nn.GELU() if activation == 'gelu' else nn.ReLU(),
             ])
             input_dim = dim
@@ -763,8 +763,7 @@ class ParticleTransformerTagger(nn.Module):
             pf_x = self.pf_embed(pf_x)  # after embed: (seq_len, batch, embed_dim)
             sv_x = self.sv_embed(sv_x)
             lt_x = self.lt_embed(lt_x)
-            #x = torch.cat([pf_x, sv_x, lt_x], dim=0)
-            x = torch.cat([pf_x, sv_x, lt_x], dim=2)
+            x = torch.cat([pf_x, sv_x, lt_x], dim=0)
             
             return self.part(x, v, mask)
 
