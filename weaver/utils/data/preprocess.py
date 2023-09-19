@@ -63,10 +63,10 @@ def _build_weights(table, data_config, reweight_hists=None):
             wgt[pos] = hist[x_indices, y_indices]
             sum_evts += np.sum(pos)
         ## loop oover the domain label and fix weights to 1 in order to be always sampled
-        if data_config.reweight_exclude_classes:
-            for label in data_config.reweight_exclude_classes:
+        if data_config.domain_classes:
+            for idx,label in enumerate(data_config.domain_classes):
                 pos = table[label] == 1
-                wgt[pos] = -1.;
+                wgt[pos] = -1.*data_config.domain_weights[idx];
                 sum_evts += np.sum(pos)
         if sum_evts != len(table):
             warn_n_times(

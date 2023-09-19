@@ -153,8 +153,6 @@ parser.add_argument('--num-workers-test', type=int, default=1,
                     help='number of threads to load the testing dataset; memory consumption and disk access load increases (~linearly) with this numbers')
 parser.add_argument('--max-resample', type=int, default=10,
                     help='re-sampling factor for classification/regression events')
-parser.add_argument('--max-resample-dom', type=int, default=7,
-                    help='re-sampling factor for domain adaptation events')
 parser.add_argument('--predict', action='store_true', default=False,                    
                     help='run prediction instead of training')
 parser.add_argument('--eps-fgsm', type=float, default=None,                    
@@ -281,7 +279,6 @@ def train_load(args):
         infinity_mode=args.steps_per_epoch is not None,
         in_memory=args.in_memory,
         max_resample=args.max_resample,
-        max_resample_dom=args.max_resample_dom,
         name='train' + ('' if args.local_rank is None else '_rank%d' % args.local_rank)
     )
 
@@ -302,7 +299,6 @@ def train_load(args):
         infinity_mode=args.steps_per_epoch_val is not None,
         in_memory=args.in_memory,
         max_resample=args.max_resample,
-        max_resample_dom=args.max_resample_dom,
         name='val' + ('' if args.local_rank is None else '_rank%d' % args.local_rank)
     )
 
@@ -342,7 +338,6 @@ def preprocess_load(args):
         infinity_mode=args.steps_per_epoch is not None,
         in_memory=args.in_memory,
         max_resample=1,
-        max_resample_dom=1,
         name='preprocess' + ('' if args.local_rank is None else '_rank%d' % args.local_rank)
     )
 
@@ -718,7 +713,7 @@ def iotest(args, data_loader):
         _logger.info('Monitor info written to %s' % monitor_output_path)
 
 
-def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers):
+def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, isFGSM=False):
     """
     Saves as .root
     :param data_config:
@@ -757,9 +752,7 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
         else:
             for idx, label_name in enumerate(data_config.label_domain_value):
                 output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
-                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]    
-
-            
+                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]                
     else:
         _logger.warning("Weaver mode not recognized when saving output file --> abort")
         sys.exit(0);
@@ -792,6 +785,10 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
             continue
         output[k] = v
 
+    ## add a label fgsm
+    if "fgsm" in args.weaver_mode:
+        output["label_fgsm"] = np.empty(len(labels[labels.keys()[0]])).fill(1) if isFGSM else np.empty(len(labels[labels.keys()[0]])).fill(0);
+    
     _write_root(output_path, output)
 
 
@@ -957,7 +954,8 @@ def _main(args):
             _logger.info('Epoch #%d training' % epoch)
 
             if "fgsm" in args.weaver_mode:
-                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, eps_fgsm=args.eps_fgsm, frac_fgsm=args.frac_fgsm, epoch_start_fgsm=args.epoch_start_fgsm);
+                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb,
+                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm);
             else:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
                 
@@ -1020,8 +1018,12 @@ def _main(args):
                 test_metric, scores, labels, targets, labels_domain, observers = evaluate_onnx(
                     args.model_prefix, test_loader)
             else:
-                test_metric, scores, labels, targets, labels_domain, observers = evaluate(
-                    model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)            
+                if "fgsm" in args.weaver_mode:
+                    test_metric, scores, labels, targets, labels_domain, observers, scores_fgsm = evaluate(
+                        model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, frac_fgsm=args.frac_fgsm)
+                else:
+                    test_metric, scores, labels, targets, labels_domain, observers = evaluate(
+                        model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)
             _logger.info('Test metric %.5f' % test_metric, color='bold')
 
             if args.predict_output and scores.ndim:
@@ -1037,8 +1039,10 @@ def _main(args):
                 else:
                     base, ext = os.path.splitext(predict_output)
                     output_path = base + '_' + name + ext
-                if output_path.endswith('.root'):
+                if if output_path.endswith('.root'):
                     save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers)
+                    if "fgsm" in args.weaver_mode:
+                        save_root(args, output_path, data_config, scores_fgsm, labels, targets, labels_domain, observers,isFGSM=True)
                 else:
                     save_parquet(args, output_path, scores, labels, targets, domains, labels_domain, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')

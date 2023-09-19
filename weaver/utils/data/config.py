@@ -172,6 +172,7 @@ class DataConfig(object):
             if self.use_precomputed_weights:
                 self.var_funcs[self.weight_name] = '*'.join(opts['weights']['weight_branches'])
             else:
+                ## re-weight
                 self.reweight_method = opts['weights']['reweight_method']
                 self.reweight_basewgt = opts['weights'].get('reweight_basewgt', None)
                 if self.reweight_basewgt:
@@ -179,26 +180,31 @@ class DataConfig(object):
                 self.reweight_branches = tuple(opts['weights']['reweight_vars'].keys())
                 self.reweight_bins = tuple(opts['weights']['reweight_vars'].values())
                 self.reweight_classes = tuple(opts['weights']['reweight_classes'])
-                if 'reweight_exclude_classes' in opts['weights']:
-                    self.reweight_exclude_classes = tuple(opts['weights']['reweight_exclude_classes'])
-                else:
-                    self.reweight_exclude_classes = None
                 self.class_weights = opts['weights'].get('class_weights', None)
                 if self.class_weights is None:
-                    self.class_weights = np.ones(len(self.reweight_classes))
+                    self.class_weights = np.ones(len(self.reweight_classes))                    
                 self.reweight_threshold = opts['weights'].get('reweight_threshold', 10)
                 self.reweight_discard_under_overflow = opts['weights'].get('reweight_discard_under_overflow', True)
                 self.reweight_hists = opts['weights'].get('reweight_hists', None)
                 if self.reweight_hists is not None:
                     for k, v in self.reweight_hists.items():
                         self.reweight_hists[k] = np.array(v, dtype='float32')
+            ## domain part
+            if 'domain_classes' in opts['weights']:
+                self.domain_classes = tuple(opts['weights']['domain_classes'])
+                self.domain_weights = opts['weights'].get('domain_weights', None)
+                if self.domain_weights is None:
+                    self.domain_weights = np.ones(len(self.domain_classes))
+            else:
+                self.domain_classes = None
+                self.domain_weights = None
+
         # observers
         self.observer_names = tuple(opts['observers'])
         # monitor variables
         self.monitor_variables = tuple(opts['monitor_variables'])
         # Z variables: returned as `Z` in the dataloader (use monitor_variables for training, observers for eval)
         self.z_variables = self.observer_names if len(self.observer_names) > 0 else self.monitor_variables
-
         # remove self mapping from var_funcs
         for k, v in self.var_funcs.items():
             if k == v:
@@ -232,8 +238,8 @@ class DataConfig(object):
                     _log('weight: %s' % self.var_funcs[self.weight_name])
                 else:
                     for k in ['reweight_method', 'reweight_basewgt', 'reweight_branches', 'reweight_bins',
-                              'reweight_classes', 'reweight_exclude_classes', 'class_weights', 'reweight_threshold',
-                              'reweight_discard_under_overflow']:
+                              'reweight_classes', 'class_weights', 'reweight_threshold',  'reweight_discard_under_overflow',
+                              'domain_classes', 'domain_weights']:
                         _log('%s: %s' % (k, getattr(self, k)))
 
         # parse config
