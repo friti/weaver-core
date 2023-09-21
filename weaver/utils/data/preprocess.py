@@ -66,12 +66,12 @@ def _build_weights(table, data_config, reweight_hists=None):
         if data_config.domain_classes:
             for idx,label in enumerate(data_config.domain_classes):
                 pos = table[label] == 1
-                wgt[pos] = -1.*data_config.domain_weights[idx];
+                wgt[pos] = -1.*(idx+1);
                 sum_evts += np.sum(pos)
         if sum_evts != len(table):
             warn_n_times(
                 'Not all selected events used in the reweighting. '
-                'Check consistency between `selection` and `reweight_classes` + `reweight_exclude_classes` definition, or with the `reweight_vars` binnings '
+                'Check consistency between `selection` and `reweight_classes` + `domain_classes` definition, or with the `reweight_vars` binnings '
                 '(under- and overflow bins are discarded by default, unless `reweight_discard_under_overflow` is set to `False` in the `weights` section).',
             )
         if data_config.reweight_basewgt:
@@ -173,8 +173,8 @@ class WeightMaker(object):
         self._data_config = data_config.copy()
 
     def read_file(self, filelist):
-        if self._data_config.reweight_exclude_classes:
-            self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes + self._data_config.reweight_exclude_classes +
+        if self._data_config.domain_classes:
+            self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes + self._data_config.domain_classes +
                                      (self._data_config.basewgt_name,))
         else:
             self.keep_branches = set(self._data_config.reweight_branches + self._data_config.reweight_classes +
@@ -215,6 +215,8 @@ class WeightMaker(object):
         _logger.info('Using %d events to make weights', len(table))
 
         sum_evts = 0
+        class_evts = 0
+        domain_evts = 0
         max_weight = 0.9
         raw_hists = {}
         class_events = {}
@@ -226,22 +228,26 @@ class WeightMaker(object):
             y = ak.to_numpy(table[y_var][pos])
             hist, _, _ = np.histogram2d(x, y, bins=self._data_config.reweight_bins)
             _logger.info('%s (unweighted):\n %s', label, str(hist.astype('int64')))
-            sum_evts += hist.sum()
+            class_evts += hist.sum()
             if self._data_config.reweight_basewgt:
                 w = ak.to_numpy(table[self._data_config.basewgt_name][pos])
                 hist, _, _ = np.histogram2d(x, y, weights=w, bins=self._data_config.reweight_bins)
                 _logger.info('%s (weighted):\n %s', label, str(hist.astype('float32')))
             raw_hists[label] = hist.astype('float32')
             result[label] = hist.astype('float32')
+        _logger.info("sum of events belonging to re-weight classes = %d "%(class_evts));
+        sum_evts += class_evts;
         ## add back the domain adaptation events that must be excluded from re-weight
-        if self._data_config.reweight_exclude_classes:
-            for label in self._data_config.reweight_exclude_classes:
+        if self._data_config.domain_classes:
+            for label in self._data_config.domain_classes:
                 pos = table[label] == 1
-                sum_evts += np.sum(pos) 
+                domain_evts += np.sum(pos)
+        sum_evts += domain_evts;
+        _logger.info("sum of events belonging to domain classes = %d "%(domain_evts));
         if sum_evts != len(table):
             _logger.warning(
                 'Only %d (out of %d) events actually used in the reweighting. '
-                'Check consistency between `selection` and `reweight_classes` + `reweight_exclude_classes` definition, or with the `reweight_vars` binnings '
+                'Check consistency between `selection` and `reweight_classes` + `domain_classes` definition, or with the `reweight_vars` binnings '
                 '(under- and overflow bins are discarded by default, unless `reweight_discard_under_overflow` is set to `False` in the `weights` section).',
                 sum_evts, len(table))
         if self._data_config.reweight_method == 'flat':

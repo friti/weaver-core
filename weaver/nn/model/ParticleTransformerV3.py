@@ -653,7 +653,7 @@ class ParticleTransformer(nn.Module):
             x_cls = self.norm(cls_tokens).squeeze(0)
 
             # fc
-            if self.fc is None:
+            if self.fc_class is None:
                 return x_cls
             
             output_class = self.fc_class(x_cls)

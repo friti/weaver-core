@@ -59,19 +59,18 @@ def _finalize_inputs(table, data_config):
     return output
 
 
-def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale=1, domain_weights=None):
+def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale=1, domain_classes=None, domain_weights=None):
 
     ## separate domain events from normal ones
     indices_cat = np.argwhere(weights>=0).squeeze();
     weights_cat = weights[indices_cat].squeeze();
     randwgt_cat = np.random.uniform(low=0, high=weight_scale, size=len(weights_cat))
     keep_flags_cat  = randwgt_cat < weights_cat
-
     if not up_sample:
         keep_indices_cat = indices_cat[keep_flags_cat]
         indices_dom = np.argwhere(weights<0).squeeze();
         weights_dom = weights[indices_dom].squeeze();
-        randwgt_dom    = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom))
+        randwgt_dom = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom))
         keep_flags_dom = randwgt_dom < np.absolute(weights_dom)
         if not np.any(indices_dom):
             return keep_indices_cat.copy()
@@ -85,23 +84,22 @@ def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale
         indices_cat = np.repeat(indices_cat,n_repeats)
         randwgt_cat = np.random.uniform(low=0, high=weight_scale, size=len(weights_cat) * n_repeats)
         keep_indices_cat = indices_cat[randwgt_cat < np.repeat(weights_cat, n_repeats)]
-        if not domain_weights:
+        if not domain_classes:
              keep_indices_cat.copy()
-             
+        
         ## domain indexes
         keep_indices = keep_indices_cat;
-        if domain_weights:
-            w_dom = list(dict.fromkeys(domain_weights))
-            for idx,value in enumerate(w_dom):        
-                indices_dom = np.argwhere(weights==-1*value).squeeze();
+        if domain_classes:
+            w_dom = list(dict.fromkeys(domain_classes))
+            for idx,value in enumerate(w_dom):
+                indices_dom = np.argwhere(weights==-1*(idx+1)).squeeze();
                 weights_dom = weights[indices_dom].squeeze();
                 randwgt_dom = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom))
-                keep_flags_dom = randwgt_dom < np.absolute(weights_dom)
                 if np.any(indices_dom):
-                    indices_dom = np.repeat(indices_dom,value)
-                    randwgt_dom = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom)*value)
-                    keep_indices_dom = indices_dom[randwgt_dom < np.repeat(np.absolute(weights_dom),value)]
-                    keep_indices = np.concatenate((keep_indices,keep_indices_dom),axis=0)
+                    indices_dom = np.repeat(indices_dom,domain_weights[idx])
+                    randwgt_dom = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom)*domain_weights[idx])
+                    keep_indices_dom = indices_dom[randwgt_dom < np.repeat(np.absolute(weights_dom),domain_weights[idx])]
+                    keep_indices = np.concatenate((keep_indices,keep_indices_dom),axis=0)            
         return keep_indices.copy()
 
 
@@ -145,7 +143,8 @@ def _preprocess(table, data_config, options):
             up_sample=options['up_sample'],
             weight_scale=options['weight_scale'],
             max_resample=options['max_resample'],
-            domain_labels=data_config.domain_classes,
+            domain_classes=data_config.domain_classes,
+            domain_weights=data_config.domain_weights,
         )
     else:
         if len(data_config.label_names) > 0:

@@ -955,7 +955,7 @@ def _main(args):
 
             if "fgsm" in args.weaver_mode:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb,
-                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm);
+                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm, frac_fgsm=args.frac_fgsm);
             else:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
                 
@@ -1039,7 +1039,7 @@ def _main(args):
                 else:
                     base, ext = os.path.splitext(predict_output)
                     output_path = base + '_' + name + ext
-                if if output_path.endswith('.root'):
+                if output_path.endswith('.root'):
                     save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers)
                     if "fgsm" in args.weaver_mode:
                         save_root(args, output_path, data_config, scores_fgsm, labels, targets, labels_domain, observers,isFGSM=True)
