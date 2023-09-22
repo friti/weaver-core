@@ -1020,7 +1020,7 @@ def _main(args):
             else:
                 if "fgsm" in args.weaver_mode:
                     test_metric, scores, labels, targets, labels_domain, observers, scores_fgsm = evaluate(
-                        model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, frac_fgsm=args.frac_fgsm)
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, eval_fgsm=True)
                 else:
                     test_metric, scores, labels, targets, labels_domain, observers = evaluate(
                         model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)

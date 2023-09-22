@@ -41,7 +41,7 @@ def fgsm_attack(data: torch.Tensor,
     return output
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
-def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, eps_fgsm=None, frac_fgsm=None, epoch_start_fgsm=None):
+def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, frac_fgsm=None, epoch_start_fgsm=None, eps_fgsm=None):
 
     model.train()
     torch.backends.cudnn.benchmark = True;
@@ -57,7 +57,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;    
     inputs_grad_sign, inputs_fgsm, model_output_fgsm = None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_sqr_err_fgsm = 0, 0, 0, 0, 0;
-    use_fgsm, enables_fgsm = False, False;
+    use_fgsm = False;
     
     ### number of classification labels
     num_labels = len(data_config.label_value);
@@ -372,7 +372,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eps_fgsm=None, eval_fgsm=None, epoch_start_fgsm=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_fgsm=None, eps_fgsm=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
@@ -384,7 +384,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         torch.backends.cudnn.benchmark = False;
         torch.backends.cudnn.enabled = False;
     gc.enable();
-
+    
     data_config = test_loader.dataset.config
     label_cat_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
@@ -425,7 +425,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     for idx, names in enumerate(data_config.label_domain_names):
         label_domain_counter.append(Counter())
 
-    start_time = time.time()
+    start_time = time.time()    
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check in tq:
@@ -497,16 +497,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### update counters
                 num_cat_examples = max(label_cat.shape[0],target.shape[0]);
                 num_domain_examples = label_domain.shape[0]
-
-                ## create adversarial testing fgsm features and evaluate the model
-                if eval_fgsm and epoch >= epoch_start_fgsm:
-                    for idx,element in enumerate(inputs):        
-                        element.requires_grad = True;
-                        element.retain_grad();
-                        enables_fgsm = True;
-                    num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
-                    inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else
-                                   fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     
                 ### send to gpu
                 label_cat = label_cat.to(dev,non_blocking=True)
@@ -541,9 +531,17 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).cpu().numpy().astype(dtype=np.int32));
                     else:
                         labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]]].squeeze().cpu().numpy().astype(dtype=np.int32))
-                            
+
                 ### evaluate model
-                model_output  = model(*inputs)
+                if eval_fgsm and not for_training:
+                    torch.set_grad_enabled(True) ;
+                    for idx,element in enumerate(inputs):        
+                        element.requires_grad = True;
+                    num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);                    
+                    model_output  = model(*inputs)
+                else:
+                    model_output = model(*inputs)
+                    
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
@@ -552,7 +550,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 label_domain = label_domain.squeeze();
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
-
+                
                 ### in validation only filter interesting events
                 if for_training:                        
                     model_output_cat = model_output_cat[index_cat];
@@ -562,24 +560,23 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_cat = model_output_cat.squeeze().float();
                     model_output_reg = model_output_reg.squeeze().float();
                     model_output_domain = model_output_domain.squeeze().float();
-                    
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
-                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
+                    ### save the scores
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
+                    scores_reg.append(model_output_reg.detach().cpu().numpy().astype(dtype=np.float32));
                     for idx, name in enumerate(y_domain.keys()):
                         id_dom = idx*ldomain[idx];
                         score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                        scores_domain[name].append(torch.softmax(score_domain[index_domain[list(y_domain_check.keys())[idx]]].squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
-                else:
-                    
+                        scores_domain[name].append(torch.softmax(score_domain[index_domain[list(y_domain_check.keys())[idx]]].squeeze(),dim=1).detach().cpu().numpy().astype(dtype=np.float32));
+                else:                    
                     model_output_cat = model_output_cat.float();
                     model_output_reg = model_output_reg.float();
                     model_output_domain = model_output_domain.float();                    
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
-                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
+                    scores_reg.append(model_output_reg.detach().cpu().numpy().astype(dtype=np.float32));
                     for idx, name in enumerate(y_domain.keys()):
                         id_dom = idx*ldomain[idx];
                         score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                        scores_domain[name].append(torch.softmax(score_domain.squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
+                        scores_domain[name].append(torch.softmax(score_domain.squeeze(),dim=1).detach().cpu().numpy().astype(dtype=np.float32));
                         
                     model_output_cat = model_output_cat[index_cat];
                     model_output_reg = model_output_reg[index_cat];
@@ -589,7 +586,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_reg = model_output_reg.squeeze().float();
                     model_output_domain = model_output_domain.squeeze().float();
 
-                if eval_fgsm and epoch >= epoch_start_fgsm:
+                ## create adversarial testing fgsm features and evaluate the model
+                if eval_fgsm and not for_training:
+                    loss, _ , _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
+                    model.zero_grad();
+                    loss.backward();
+                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    torch.set_grad_enabled(False);
+                    inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None);
@@ -598,14 +602,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_ref = model_output_ref[:,:num_labels];
                     model_output_ref = _flatten_preds(model_output_ref,None);
                     model_output_ref = model_output_ref[index_cat].squeeze().float();
-                    scores_fgsm.append(torch.softmax(model_output_fgsm,dim=1).cpu().numpy().astype(dtype=np.float32));
+                    scores_fgsm.append(torch.softmax(model_output_fgsm,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
 
                 ### evaluate loss function
                 num_batches += 1
                 index_offset += (num_cat_examples+num_domain_examples)
 
                 if loss_func != None:
-                    if eval_fgsm and epoch >= epoch_start_fgsm:
+                    if eval_fgsm and not for_training:
                         loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_ref);
                     else:
                         loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());           
@@ -642,7 +646,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## fast gradient attack loss residual w.r.t. nominal
                 sqr_err_fgsm = 0;
-                if eval_fgsm and epoch >= epoch_start_fgsm:
+                if eval_fgsm and not for_training:
                     num_batches_fgsm += 1;
                     if loss_fgsm:
                         loss_fgsm = loss_fgsm.detach().item()
@@ -677,11 +681,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         correct_domain += (pred_domain == label).sum().item()
                     total_domain_correct += correct_domain
                     count_domain += num_domain_examples                
-
-                if eval_fgsm and epoch >= epoch_start_fgsm:
-                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                
-                    
+                                    
                 ### monitor results
                 tq.set_postfix({
                     'Loss': '%.5f' % loss,
