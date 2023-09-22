@@ -155,30 +155,23 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     else:
                         _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
 
-            ### build FGSM adversrial when required
-            num_fgsm_examples = 0;
-            rand_val = np.random.uniform(low=0,high=1);
-            ### if conditions are respected enables fgsm
-            if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and num_batches > 0 and epoch >= epoch_start_fgsm:                
-                for idx,element in enumerate(inputs):        
-                    element.requires_grad = True;
-                    element.retain_grad();
-                    enables_fgsm = True;
-                    
-            if use_fgsm and epoch >= epoch_start_fgsm:
-                num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
-                inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else
-                               fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
             label_domain_check = label_domain_check.to(dev,non_blocking=True)
             target = target.to(dev,non_blocking=True)            
 
+            ### build FGSM adversrial when required
+            num_fgsm_examples = 0;
+            rand_val = np.random.uniform(low=0,high=1);
+            ### if conditions are respected enables fgsm
+            if eps_fgsm and frac_fgsm and rand_val < frac_fgsm and epoch >= epoch_start_fgsm:
+                for idx,element in enumerate(inputs):        
+                    element.requires_grad = True;
+                    element.retain_grad();
+                use_fgsm = True;
             ### loss minimization
-            model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
-                ### evaluate the model
+                model.zero_grad(set_to_none=True)
                 model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
@@ -191,17 +184,21 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 label_domain = label_domain.squeeze();
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
-                if use_fgsm and epoch >= epoch_start_fgsm:
+            
+                if use_fgsm:
                     model.eval();
-                    with torch.no_grad():
-                        model_output_fgsm = model(*inputs_fgsm)
-                        model_output_fgsm = model_output_fgsm[:,:num_labels];
-                        model_output_fgsm = _flatten_preds(model_output_fgsm,None);
-                        model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
-                        model_output_ref = model(*inputs);
-                        model_output_ref = model_output_ref[:,:num_labels];
-                        model_output_ref = _flatten_preds(model_output_ref,None);
-                        model_output_ref = model_output_ref[index_cat].squeeze().float();
+                    loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
+                    loss.backward(retain_graph=True);
+                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    model_output_fgsm = model(*inputs_fgsm)
+                    model_output_fgsm = model_output_fgsm[:,:num_labels];
+                    model_output_fgsm = _flatten_preds(model_output_fgsm,None);
+                    model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
+                    model_output_ref = model(*inputs);
+                    model_output_ref = model_output_ref[:,:num_labels];
+                    model_output_ref = _flatten_preds(model_output_ref,None);
+                    model_output_ref = model_output_ref[index_cat].squeeze().float();
                     model.train();
                     ### evaluate loss function
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_ref);
@@ -256,7 +253,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             ## fast gradient attack loss residual w.r.t. nominal
             sqr_err_fgsm = 0;
-            if use_fgsm and epoch >= epoch_start_fgsm:
+            if use_fgsm:
                 num_batches_fgsm += 1;
                 if loss_fgsm:
                     loss_fgsm = loss_fgsm.detach().item()
@@ -292,12 +289,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 total_domain_correct += correct_domain
                 count_domain += num_domain_examples;
 
-            ## save the gradient (only for some inputs is present otherwise zero out)
-            if enables_fgsm:
-                inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                use_fgsm, enables_fgsm = True, False;
-            else:
-                use_fgsm = False;
+            ## set use_fgsm always false
+            use_fgsm = False;
             
             ### monitor metrics
             postfix = {
