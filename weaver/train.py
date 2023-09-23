@@ -715,7 +715,7 @@ def iotest(args, data_loader):
         _logger.info('Monitor info written to %s' % monitor_output_path)
 
 
-def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, isFGSM=False):
+def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_fgsm=np.array([])):
     """
     Saves as .root
     :param data_config:
@@ -727,25 +727,17 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
     from utils.data.fileio import _write_root
     output = {}
 
-    if args.weaver_mode == "class":
+    ### save classification nodes
+    if "class" in args.weaver_mode:
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
             output['score_' + label_name] = scores[:,idx]
-    elif args.weaver_mode == "reg":
+    ### save regression nodes
+    if "reg" in args.weaver_mode:
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:,idx]
-    elif args.weaver_mode == "classreg":
-        for idx, label_name in enumerate(data_config.label_value):
-            output[label_name] = (labels[data_config.label_names[0]] == idx)
-            output['score_' + label_name] = scores[:,idx]
-        for idx, target_name in enumerate(data_config.target_value):
-            output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
-    elif args.weaver_mode == "classregdomain" or args.weaver_mode == "classregdomainfgsm":
-        for idx, label_name in enumerate(data_config.label_value):
-            output[label_name] = (labels[data_config.label_names[0]] == idx)
-            output['score_' + label_name] = scores[:,idx]
-        for idx, target_name in enumerate(data_config.target_value):
-            output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
+    ### save domain nodes
+    if "domain" in args.weaver_mode:
         if type(data_config.label_domain_value) == dict:
             for idx, (k,v) in enumerate(data_config.label_domain_value.items()):
                 for idy, label_name in enumerate(v):
@@ -754,11 +746,18 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
         else:
             for idx, label_name in enumerate(data_config.label_domain_value):
                 output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
-                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]                
-    else:
+                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]
+    ### save fgsm scores
+    if  scores_fgsm.any():
+        for idx, label_name in enumerate(data_config.label_value):
+            output['score_' + label_name + "_fgsm"] = scores_fgsm[:,idx]
+
+    ## break if nothing appears in the output
+    if not output:
         _logger.warning("Weaver mode not recognized when saving output file --> abort")
         sys.exit(0);
 
+    ## check output informatuion
     for k, v in labels.items():
         if k == data_config.label_names[0]:
             continue
@@ -787,10 +786,6 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
             continue
         output[k] = v
 
-    ## add a label fgsm
-    if "fgsm" in args.weaver_mode:
-        output["label_fgsm"] = np.empty(len(labels[labels.keys()[0]])).fill(1) if isFGSM else np.empty(len(labels[labels.keys()[0]])).fill(0);
-    
     _write_root(output_path, output)
 
 
@@ -957,7 +952,7 @@ def _main(args):
 
             if "fgsm" in args.weaver_mode:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb,
-                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm, frac_fgsm=args.frac_fgsm);
+                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm, frac_fgsm=args.frac_fgsm, network_option=args.network_option);
             else:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
                 
@@ -1020,12 +1015,12 @@ def _main(args):
                 test_metric, scores, labels, targets, labels_domain, observers = evaluate_onnx(
                     args.model_prefix, test_loader)
             else:
-                if "fgsm" in args.weaver_mode:
+                if args.eval_fgsm:
                     test_metric, scores, labels, targets, labels_domain, observers, scores_fgsm = evaluate(
-                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, eval_fgsm=args.eval_fgsm)
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, eval_fgsm=args.eval_fgsm, network_option=args.network_option)
                 else:
                     test_metric, scores, labels, targets, labels_domain, observers = evaluate(
-                        model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb)
             _logger.info('Test metric %.5f' % test_metric, color='bold')
 
             if args.predict_output and scores.ndim:
@@ -1041,10 +1036,12 @@ def _main(args):
                 else:
                     base, ext = os.path.splitext(predict_output)
                     output_path = base + '_' + name + ext
+
                 if output_path.endswith('.root'):
-                    save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers)
-                    if "fgsm" in args.weaver_mode:
-                        save_root(args, output_path, data_config, scores_fgsm, labels, targets, labels_domain, observers,isFGSM=True)
+                    if args.eval_fgsm:
+                        save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_fgsm)
+                    else:
+                        save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers)
                 else:
                     save_parquet(args, output_path, scores, labels, targets, domains, labels_domain, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
