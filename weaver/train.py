@@ -161,6 +161,8 @@ parser.add_argument('--frac-fgsm', type=float, default=None,
                     help='fraction of batches for FGSM')
 parser.add_argument('--epoch-start-fgsm', type=int, default=0,                    
                     help='Epoch from which start the FGSM attack')
+parser.add_argument('--eval-fgsm', action='store_true', default=False,
+                    help='Add FGSM varied scores in the output files')
 parser.add_argument('--predict-output', type=str,
                     help='path to save the prediction output, support `.root` and `.parquet` format')
 parser.add_argument('--export-onnx', type=str, default=None,
@@ -1020,7 +1022,7 @@ def _main(args):
             else:
                 if "fgsm" in args.weaver_mode:
                     test_metric, scores, labels, targets, labels_domain, observers, scores_fgsm = evaluate(
-                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, eval_fgsm=True)
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, eval_fgsm=args.eval_fgsm)
                 else:
                     test_metric, scores, labels, targets, labels_domain, observers = evaluate(
                         model, test_loader, dev, epoch=None, for_training=False, tb_helper=tb)
