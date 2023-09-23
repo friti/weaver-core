@@ -4,6 +4,7 @@ import tqdm
 import time
 import torch
 import gc
+import ast
 
 from collections import defaultdict, Counter
 from collections.abc import Iterable  
@@ -295,7 +296,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_fgsm=None, eps_fgsm=None, network_option=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
@@ -313,9 +314,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
     sum_sqr_err, count_cat, count_domain = 0, 0, 0;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
+    inputs_grad_sign, inputs_fgsm, model_output_fgsm = None, None, None;
     pred_cat, pred_domain, pred_reg, correct_cat, correct_domain = None, None, None, None, None;
     loss, loss_cat, loss_domain, loss_reg = None, None, None, None;
-    scores_cat, scores_reg, indexes_cat = [], [], [];
+    num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
+    scores_cat, scores_reg, indexes_cat, scores_fgsm = [], [], [], [];
     scores_domain  = defaultdict(list); 
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
     indexes_domain = defaultdict(list); 
@@ -345,6 +348,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     label_domain_counter = [];
     for idx, names in enumerate(data_config.label_domain_names):
         label_domain_counter.append(Counter())
+
+    network_options = {k: ast.literal_eval(v) for k, v in network_option}
 
     start_time = time.time()
     with torch.no_grad():
@@ -453,7 +458,16 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]]].squeeze().cpu().numpy().astype(dtype=np.int32))
                             
                 ### evaluate model
-                model_output  = model(*inputs)
+                num_fgsm_examples = 0;
+                if eval_fgsm and not for_training:
+                    torch.set_grad_enabled(True) ;
+                    for idx,element in enumerate(inputs):        
+                        element.requires_grad = True;
+                    num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);                    
+                    model_output  = model(*inputs)
+                else:
+                    model_output = model(*inputs)
+
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
@@ -471,8 +485,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     ### adjsut outputs
                     model_output_cat = model_output_cat.squeeze().float();
                     model_output_reg = model_output_reg.squeeze().float();
-                    model_output_domain = model_output_domain.squeeze().float();
-                    
+                    model_output_domain = model_output_domain.squeeze().float();                    
                     scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
                     scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
                     for idx, name in enumerate(y_domain.keys()):
@@ -499,6 +512,24 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_cat = model_output_cat.squeeze().float();
                     model_output_reg = model_output_reg.squeeze().float();
                     model_output_domain = model_output_domain.squeeze().float();
+                    
+                ## create adversarial testing fgsm features and evaluate the model
+                if eval_fgsm and not for_training:
+                    loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                    model.zero_grad();
+                    loss.backward();
+                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    torch.set_grad_enabled(False);
+                    inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    model_output_fgsm = model(*inputs_fgsm)
+                    model_output_fgsm = model_output_fgsm[:,:num_labels];
+                    model_output_fgsm = _flatten_preds(model_output_fgsm,None);
+                    model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
+                    model_output_ref = model(*inputs);
+                    model_output_ref = model_output_ref[:,:num_labels];
+                    model_output_ref = _flatten_preds(model_output_ref,None);
+                    model_output_ref = model_output_ref[index_cat].squeeze().float();
+                    scores_fgsm.append(torch.softmax(model_output_fgsm,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
 
                 ### evaluate loss function
                 num_batches += 1
@@ -532,6 +563,27 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         residual_reg = pred_reg - target;
                         sqr_err = residual_reg.square().sum().item()
                         sum_sqr_err += sqr_err
+                        
+                ## fast gradient attack loss residual w.r.t. nominal
+                residual_fgsm = 0;
+                if eval_fgsm and not for_training:
+                    num_batches_fgsm += 1;
+                    model_output_fgsm = model_output_fgsm.detach();
+                    if (torch.is_tensor(label_cat) and torch.is_tensor(model_output_ref) and torch.is_tensor(model_output_fgsm) and 
+                        np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_ref)):
+                        if model_output_ref.shape == model_output_fgsm.shape:
+                            count_fgsm += num_fgsm_examples;
+                            if network_options.get('select_label',True):
+                                residual_fgsm = torch.nn.functional.kl_div(
+                                    input=torch.log_softmax(model_output_fgsm,dim=1).gather(1,label_cat.view(-1,1)),
+                                    target=torch.softmax(model_output_ref,dim=1).gather(1,label_cat.view(-1,1)),
+                                    reduction='sum');
+                            else:
+                                residual_fgsm = torch.nn.functional.kl_div(
+                                    input=torch.log_softmax(model_output_fgsm,dim=1),
+                                    target=torch.softmax(model_output_ref,dim=1),
+                                    reduction='sum')/model_output_fgsm.size(dim=1);
+                            sum_residual_fgsm += residual_fgsm;
 
                 ## single domain region                                                                                                                                                          
                 if num_domains == 1:
@@ -566,6 +618,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     'AvgAccDomain': '%.5f' % (total_domain_correct / count_domain if count_domain else 0),
                     'MSE': '%.5f' % (sqr_err / num_cat_examples if num_cat_examples else 0),
                     'AvgMSE': '%.5f' % (sum_sqr_err / count_cat if count_cat else 0),
+                    'FGSM':  '%.5f' % (residual_fgsm / num_fgsm_examples if num_fgsm_examples else 0),
+                    'AvgFGSM': '%.5f' % (sum_residual_fgsm / count_fgsm if count_fgsm else 0)
                 })
                     
                 if tb_helper:
@@ -586,6 +640,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     _logger.info('Eval AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Eval AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
     _logger.info('Eval AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
+    _logger.info('Eval AvgFGSM FGSM: %.5f'%(sum_residual_fgsm / count_fgsm if count_fgsm else 0))    
     _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
 
@@ -599,6 +654,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ("AccCat/%s (epoch)"%(tb_mode), total_cat_correct / count_cat if count_cat else 0, epoch),
             ("AccDomain/%s (epoch)"%(tb_mode), total_domain_correct / count_domain if count_domain else 0, epoch),
             ("MSE/%s (epoch)"%(tb_mode), sum_sqr_err / count_cat if count_cat else 0, epoch),
+            ("FGSM/train FGSM (epoch)", sum_residual_fgsm / count_fgsm if count_fgsm else 0, epoch),            
             ])
         if tb_helper.custom_fn:
             with torch.no_grad():
@@ -608,6 +664,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     scores_cat = np.concatenate(scores_cat).squeeze()
     scores_reg = np.concatenate(scores_reg).squeeze()
     scores_domain = {k: _concat(v) for k, v in scores_domain.items()}
+    if eval_fgsm:
+        scores_fgsm = np.concatenate(scores_fgsm).squeeze()
     if not for_training:
         indexes_cat = np.concatenate(indexes_cat).squeeze()
         indexes_domain = {k: _concat(v) for k, v in indexes_domain.items()}
@@ -662,7 +720,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         scores_domain = scores_domain.reshape(len(scores_domain),num_labels_domain);
         scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)
         gc.collect();
-        return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
+        if eval_fgsm:
+            return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers, scores_fgsm
+        else:
+            return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
 
 def evaluate_onnx_classreg(model_path, test_loader,
