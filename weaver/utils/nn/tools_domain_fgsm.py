@@ -189,10 +189,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             
                 if use_fgsm:
                     model.eval();
-                    loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
-                    loss.backward(retain_graph=True);
-                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                    inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    with torch.no_grad():
+                        torch.set_grad_enabled(True) ;
+                        loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
+                        loss.backward(retain_graph=True);
+                        inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        torch.set_grad_enabled(False);
+                        inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    model.train();
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None);
@@ -201,7 +205,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     model_output_ref = model_output_ref[:,:num_labels];
                     model_output_ref = _flatten_preds(model_output_ref,None);
                     model_output_ref = model_output_ref[index_cat].squeeze().float();
-                    model.train();
                     ### evaluate loss function
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_ref);
                 else:
