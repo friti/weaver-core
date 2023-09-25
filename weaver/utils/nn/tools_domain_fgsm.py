@@ -81,7 +81,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     else:
         ldomain = [len(data_config.label_domain_value)];
     ### label domain counter
-    label_domain_counter = [];e
+    label_domain_counter = [];
     for idx, names in enumerate(data_config.label_domain_names):
         label_domain_counter.append(Counter())
     
