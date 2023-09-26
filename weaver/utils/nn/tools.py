@@ -785,7 +785,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     num_labels  = len(data_config.label_value);
     num_targets = len(data_config.target_value);
 
-    network_options = {k: ast.literal_eval(v) for k, v in network_option}
+    if network_option:
+        network_options = {k: ast.literal_eval(v) for k, v in network_option}
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
@@ -824,14 +825,17 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### evaluate model
                 num_fgsm_examples = 0;
                 if eval_fgsm and not for_training:
-                    torch.set_grad_enabled(True) ;
+                    num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);                    
+                    torch.set_grad_enabled(True);
                     for idx,element in enumerate(inputs):        
                         element.requires_grad = True;
-                    num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);                    
-                    model_output  = model(*inputs)
+                    model.save_grad_inputs = True;
                 else:
-                    model_output = model(*inputs)
+                    model.save_grad_inputs = False;
 
+                model.zero_grad(set_to_none=True);
+                model_output  = model(*inputs)
+                    
                 ### build classification and regression outputs
                 model_output_cat = model_output[:,:num_labels];
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
@@ -854,17 +858,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ## create adversarial testing fgsm features and evaluate the model
                 if eval_fgsm and not for_training:
                     loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target);
-                    model.zero_grad();
                     loss.backward();
                     inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     torch.set_grad_enabled(False);
                     inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    model.zero_grad(set_to_none=True)
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None).squeeze().float();
-                    model_output_ref = model(*inputs);
-                    model_output_ref = model_output_ref[:,:num_labels];
-                    model_output_ref = _flatten_preds(model_output_ref,None).squeeze().float();
                     scores_fgsm.append(torch.softmax(model_output_fgsm,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
                     
                 ### evaluate loss function
@@ -904,19 +905,19 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if eval_fgsm and not for_training:
                     num_batches_fgsm += 1;
                     model_output_fgsm = model_output_fgsm.detach();
-                    if (torch.is_tensor(label) and torch.is_tensor(model_output_ref) and torch.is_tensor(model_output_fgsm) and 
-                        np.iterable(label) and np.iterable(model_output_fgsm) and np.iterable(model_output_ref)):
-                        if model_output_ref.shape == model_output_fgsm.shape:
+                    if (torch.is_tensor(label) and torch.is_tensor(model_output_cat) and torch.is_tensor(model_output_fgsm) and 
+                        np.iterable(label) and np.iterable(model_output_fgsm) and np.iterable(model_output_cat)):
+                        if model_output_cat.shape == model_output_fgsm.shape:
                             count_fgsm += num_fgsm_examples;
                             if network_options.get('select_label',True):
                                 residual_fgsm = torch.nn.functional.kl_div(
                                     input=torch.log_softmax(model_output_fgsm,dim=1).gather(1,label.view(-1,1)),
-                                    target=torch.softmax(model_output_ref,dim=1).gather(1,label.view(-1,1)),
+                                    target=torch.softmax(model_output_cat,dim=1).gather(1,label.view(-1,1)),
                                     reduction='sum');
                             else:
                                 residual_fgsm = torch.nn.functional.kl_div(
                                     input=torch.log_softmax(model_output_fgsm,dim=1),
-                                    target=torch.softmax(model_output_ref,dim=1),
+                                    target=torch.softmax(model_output_cat,dim=1),
                                     reduction='sum')/model_output_fgsm.size(dim=1);
                             sum_residual_fgsm += residual_fgsm;
     
