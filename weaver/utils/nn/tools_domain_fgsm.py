@@ -184,6 +184,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 
                 ## infere the model
                 model.zero_grad(set_to_none=True)
+                label_cat = label_cat.squeeze();
+                label_domain = label_domain.squeeze();
+                label_domain_check = label_domain_check.squeeze();
+                target = target.squeeze();
                 model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
@@ -192,10 +196,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 model_output_cat = model_output_cat[index_cat].squeeze().float();
                 model_output_reg = model_output_reg[index_cat].squeeze().float();
                 model_output_domain = model_output_domain[index_domain_all].squeeze().float();
-                label_cat = label_cat.squeeze();
-                label_domain = label_domain.squeeze();
-                label_domain_check = label_domain_check.squeeze();
-                target = target.squeeze();
 
                 ## compute the fgsm inputs
                 if use_fgsm:
@@ -207,6 +207,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     ## don't store gradients anymore
                     model.save_grad_inputs = False;
                     for idx,element in enumerate(inputs):        
+                        element.requires_grad = False
+                    for idx,element in enumerate(inputs_fgsm):        
                         element.requires_grad = False
                     model.zero_grad(set_to_none=True)
                     model_output_fgsm = model(*inputs_fgsm)
