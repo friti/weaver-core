@@ -203,7 +203,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     loss.backward(retain_graph=True);
                     with torch.no_grad():
                         inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element.clone(),inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     ## don't store gradients anymore
                     loss = loss.detach().item();
                     model.save_grad_inputs = False;
@@ -212,8 +212,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     for idx,element in enumerate(inputs_fgsm):        
                         element.requires_grad = False
                     model.zero_grad(set_to_none=True)
+                    model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_cat;
-                    #model_output_fgsm = model(*inputs_fgsm)
                     #model_output_fgsm = model_output_fgsm[:,:num_labels];
                     #model_output_fgsm = _flatten_preds(model_output_fgsm,None);
                     #model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
