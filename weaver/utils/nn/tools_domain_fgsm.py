@@ -197,27 +197,27 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 model_output_reg = model_output_reg[index_cat].squeeze().float();
                 model_output_domain = model_output_domain[index_domain_all].squeeze().float();
 
-                ## compute the fgsm inputs
+                ## FGSM part
                 if use_fgsm:
-                    loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
-                    loss.backward(retain_graph=True);
+                    ## swtich to torch no gradient
                     with torch.no_grad():
+                        ## compute the loss function in order to obtain the gradient
+                        loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
+                        loss.backward(retain_graph=True);
+                        ## produce gradient signs and features
                         inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element.clone(),inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                    ## don't store gradients anymore
-                    loss = loss.detach().item();
-                    model.save_grad_inputs = False;
-                    for idx,element in enumerate(inputs):        
-                        element.requires_grad = False
-                    for idx,element in enumerate(inputs_fgsm):        
-                        element.requires_grad = False
-                    model.zero_grad(set_to_none=True)
-                    model_output_fgsm = model(*inputs_fgsm)
-                    model_output_fgsm = model_output_cat;
-                    #model_output_fgsm = model_output_fgsm[:,:num_labels];
-                    #model_output_fgsm = _flatten_preds(model_output_fgsm,None);
-                    #model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
-                    ### evaluate loss function
+                        inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        model.save_grad_inputs = False;
+                        for idx,element in enumerate(inputs):        
+                            element.requires_grad = False
+                        for idx,element in enumerate(inputs_fgsm):        
+                            element.requires_grad = False
+                        ## infere the model to get the output on FGSM inputs
+                        model_output_fgsm = model(*inputs_fgsm)
+                        model_output_fgsm = model_output_fgsm[:,:num_labels];
+                        model_output_fgsm = _flatten_preds(model_output_fgsm,None);
+                        model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
+                    ## compute the full loss
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
                 else:
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
