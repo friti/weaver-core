@@ -204,7 +204,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     with torch.no_grad():
                         inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    ## don't store gradients anymore
                     model.save_grad_inputs = False;
+                    for idx,element in enumerate(inputs):        
+                        element.requires_grad = False
                     model.zero_grad(set_to_none=True)
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
