@@ -323,7 +323,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             ### monitor metrics
             postfix = {
                 'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
-                'Loss': '%.3f' % loss,
                 'AvgLoss': '%.3f' % (total_loss / num_batches if num_batches else 0),
                 'AvgLossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
                 'AvgLossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
@@ -708,7 +707,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                                     
                 ### monitor results
                 postfix = {
-                    'Loss': '%.3f' % loss,
                     'AvgLoss': '%.3f' % (total_loss / num_batches if num_batches else 0),
                     'AvgLossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
                     'AvgLossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
