@@ -213,8 +213,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                             element.requires_grad = False
                         for idx,element in enumerate(inputs_fgsm):        
                             element.requires_grad = False
-                    gc.collect()
-                    torch.cuda.empty_cache()
                     ## infere the model to get the output on FGSM inputs
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
