@@ -205,6 +205,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     ## don't store gradients anymore
+                    loss = loss.detach().item();
                     model.save_grad_inputs = False;
                     for idx,element in enumerate(inputs):        
                         element.requires_grad = False
@@ -256,7 +257,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             model_output_cat = model_output_cat.detach()
             model_output_reg = model_output_reg.detach()
             model_output_domain = model_output_domain.detach()
-            model_output_fgsm = model_output_fgsm.detach()
 
             correct_cat = 0;
             sqr_err = 0;
