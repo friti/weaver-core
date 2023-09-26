@@ -211,12 +211,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     for idx,element in enumerate(inputs_fgsm):        
                         element.requires_grad = False
                     model.zero_grad(set_to_none=True)
+                    '''
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None);
                     model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
                     ### evaluate loss function
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
+                    '''
+                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
                 else:
                     loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
 
@@ -245,6 +248,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             if loss_domain:
                 loss_domain = loss_domain.detach().item()
                 total_domain_loss += loss_domain;
+
             ## take the classification prediction and compare with the true labels            
             label_cat = label_cat.detach()
             label_domain = label_domain.detach()
@@ -252,6 +256,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             model_output_cat = model_output_cat.detach()
             model_output_reg = model_output_reg.detach()
             model_output_domain = model_output_domain.detach()
+            model_output_fgsm = model_output_fgsm.detach()
 
             correct_cat = 0;
             sqr_err = 0;
