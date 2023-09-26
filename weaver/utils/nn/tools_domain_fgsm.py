@@ -212,6 +212,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     for idx,element in enumerate(inputs_fgsm):        
                         element.requires_grad = False
                     model.zero_grad(set_to_none=True)
+                    model_output_fgsm = model_output_cat;
                     '''
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
@@ -277,7 +278,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 num_batches_fgsm += 1;
                 if loss_fgsm:
                     loss_fgsm = loss_fgsm.detach().item()
-                    total_fgsm_loss += loss_fgsm;
+                    total_fgsm_loss += loss_fgsm;                
                 model_output_fgsm = model_output_fgsm.detach();
                 if (torch.is_tensor(label_cat) and torch.is_tensor(model_output_cat) and torch.is_tensor(model_output_fgsm) and 
                     np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_cat)):
