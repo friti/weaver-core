@@ -119,11 +119,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 else:
                     target = torch.column_stack((target,v.float()))
 
-            ### if conditions are respected enables fgsm and reduces the batch size for nominal samples
+            ### if conditions are respected enables fgsm and reduces the batch size for nominal samples            
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and frac_batch_fgsm and rand_val < frac_fgsm and epoch >= epoch_start_fgsm:
                 model.save_grad_inputs = True;
-                use_fgsm = True;
+                #use_fgsm = True;
+                '''
                 nrows_selected = int(label_cat.size(dim=0)*frac_batch_fgsm);
                 ## selection on the rows to reduce the GPU memory consumption
                 label_cat = label_cat[0:nrows_selected]
@@ -134,6 +135,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 inputs = [X[k][0:nrows_selected].to(dev,non_blocking=True) for k in data_config.input_names]
                 for idx,element in enumerate(inputs):
                     element.requires_grad = True;
+                '''
             else:
                  inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 
@@ -208,7 +210,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 model_output_domain = model_output_domain[index_domain_all].squeeze().float();
 
                 ## FGSM part
-                if use_fgsm:
+                if use_fgsm:                    
                     num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                     ## compute the loss function in order to obtain the gradient
                     loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
