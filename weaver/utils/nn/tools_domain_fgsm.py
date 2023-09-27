@@ -95,59 +95,45 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
             ## decide if this batch goes to FGSM
             use_fgsm = False;
-            label_cat = y_cat[data_config.label_names[0]].long()
-            cat_check = y_cat_check[data_config.labelcheck_names[0]].long()
-            
-            ### build domain true labels (numpy argmax)
-            for idx, (k, v) in enumerate(y_domain.items()):
-                if idx == 0:
-                    label_domain = v.long();
-                else:
-                    label_domain = torch.column_stack((label_domain,v.long()))
-                
-            ### store indexes to separate classification+regression events from DA
-            for idx, (k, v) in enumerate(y_domain_check.items()):
-                if idx == 0:
-                    label_domain_check = v.long();
-                else:
-                    label_domain_check = torch.column_stack((label_domain_check,v.long()))
-
-            ### build regression targets
-            for idx, (k, v) in enumerate(y_reg.items()):
-                if idx == 0:
-                    target = v.float();
-                else:
-                    target = torch.column_stack((target,v.float()))
-
-            ### if conditions are respected enables fgsm and reduces the batch size for nominal samples            
             rand_val = np.random.uniform(low=0,high=1);
             if eps_fgsm and frac_fgsm and frac_batch_fgsm and rand_val < frac_fgsm and epoch >= epoch_start_fgsm:
                 model.save_grad_inputs = True;
                 use_fgsm = True;
-                nrows_selected = int(label_cat.size(dim=0)*frac_batch_fgsm);
-                ## selection on the rows to reduce the GPU memory consumption
-                label_cat = label_cat[0:nrows_selected]
-                cat_check = cat_check[0:nrows_selected]
-                label_domain = label_domain[0:nrows_selected]
-                label_domain_check = label_domain_check[0:nrows_selected]
-                target = target[0:nrows_selected]
-                inputs = [X[k][0:nrows_selected].to(dev,non_blocking=True) for k in data_config.input_names]
-                for idx,element in enumerate(inputs):
-                    element.requires_grad = True;
+                nrows_selected = int(y_cat[data_config.label_names[0]].size(dim=0)*frac_batch_fgsm);
             else:
-                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
+                nrows_selected = y_cat[data_config.label_names[0]].size(dim=0);
                 
+            inputs = [X[k][0:nrows_selected].to(dev,non_blocking=True) for k in data_config.input_names]
+            label_cat = y_cat[data_config.label_names[0]][0:nrows_selected].long()
+            cat_check = y_cat_check[data_config.labelcheck_names[0]][0:nrows_selected].long()
             index_cat = cat_check.nonzero();
             label_cat = label_cat[index_cat];
             label_cat = _flatten_label(label_cat,None)
+
+            ### build regression targets
+            for idx, (k, v) in enumerate(y_reg.items()):
+                if idx == 0:
+                    target = v[0:nrows_selected].float();
+                else:
+                    target = torch.column_stack((target,v[0:nrows_selected].float()))
             target = target[index_cat];
 
-            for idx, v in enumerate(label_domain_check):
+            ### build domain true labels (numpy argmax)
+            for idx, (k, v) in enumerate(y_domain.items()):
                 if idx == 0:
-                    index_domain_all = v.long().nonzero();
+                    label_domain = v[0:nrows_selected].long();
                 else:
-                    index_domain_all = torch.cat((index_domain_all,v.long().nonzero()),0)
-
+                    label_domain = torch.column_stack((label_domain,v[0:nrows_selected].long()))
+                
+            ### store indexes to separate classification+regression events from DA
+            for idx, (k, v) in enumerate(y_domain_check.items()):
+                if idx == 0:
+                    label_domain_check = v[0:nrows_selected].long();
+                    index_domain_all = v[0:nrows_selected].long().nonzero();
+                else:
+                    label_domain_check = torch.column_stack((label_domain_check,v[0:nrows_selected].long()))
+                    index_domain_all = torch.cat((index_domain_all,v[0:nrows_selected].long().nonzero()),0)
+            
             label_domain = label_domain[index_domain_all];
             label_domain_check = label_domain_check[index_domain_all];
             label_domain = label_domain.squeeze()
@@ -180,7 +166,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         label_domain_counter[idx].update(label_domain_np)
                     else:
                         _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
-
+                        
             ## send to device
             label_cat = label_cat.to(dev,non_blocking=True)
             label_domain = label_domain.to(dev,non_blocking=True)
