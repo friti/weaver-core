@@ -824,7 +824,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                             
                 ### evaluate model
                 num_fgsm_examples = 0;
-                if eval_fgsm and not for_training:
+                if eval_fgsm:
                     num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);                    
                     torch.set_grad_enabled(True);
                     for idx,element in enumerate(inputs):        
@@ -856,7 +856,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         scores_reg.append(torch.zeros(num_examples).cpu().numpy().astype(dtype=np.float32));                        
 
                 ## create adversarial testing fgsm features and evaluate the model
-                if eval_fgsm and not for_training:
+                if eval_fgsm:
                     loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target);
                     loss.backward();
                     inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
@@ -902,7 +902,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     
                 ## fast gradient attack loss residual w.r.t. nominal
                 residual_fgsm = 0;
-                if eval_fgsm and not for_training:
+                if eval_fgsm:
                     num_batches_fgsm += 1;
                     model_output_fgsm = model_output_fgsm.detach();
                     if (torch.is_tensor(label) and torch.is_tensor(model_output_cat) and torch.is_tensor(model_output_fgsm) and 

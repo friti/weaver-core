@@ -159,6 +159,8 @@ parser.add_argument('--eps-fgsm', type=float, default=None,
                     help='value of the epsilon parameter in FGSM')
 parser.add_argument('--frac-fgsm', type=float, default=None,                    
                     help='fraction of batches for FGSM')
+parser.add_argument('--frac-batch-fgsm', type=float, default=0.5,                    
+                    help='when FGSM is enabled (via frac-fgsm), fraction of batch events dedidcate to it')
 parser.add_argument('--epoch-start-fgsm', type=int, default=0,                    
                     help='Epoch from which start the FGSM attack')
 parser.add_argument('--eval-fgsm', action='store_true', default=False,
@@ -952,7 +954,7 @@ def _main(args):
 
             if "fgsm" in args.weaver_mode:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb,
-                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm, frac_fgsm=args.frac_fgsm, network_option=args.network_option);
+                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm, frac_fgsm=args.frac_fgsm, frac_batch_fgsm=args.frac_batch_fgsm, network_option=args.network_option);
             else:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
                 
