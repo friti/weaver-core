@@ -265,6 +265,7 @@ class PairEmbed(nn.Module):
         self.for_onnx = for_onnx
         self.pairwise_lv_fts = partial(pairwise_lv_fts, num_outputs=pairwise_lv_dim, eps=eps, for_onnx=for_onnx)
         self.out_dim = dims[-1]
+        self.save_grad_inputs = False;
 
         if self.mode == 'concat':
             input_dim = pairwise_lv_dim + pairwise_input_dim
@@ -273,7 +274,7 @@ class PairEmbed(nn.Module):
                 module_list.extend([
                     nn.Conv1d(input_dim, dim, 1),
                     nn.BatchNorm1d(dim),
-                    nn.GELU() if activation == 'gelu' else nn.ReLU(),
+                    nn.GELU(s) if activation == 'gelu' else nn.ReLU(),
                 ])
                 input_dim = dim
             if use_pre_activation_pair:
@@ -314,7 +315,7 @@ class PairEmbed(nn.Module):
         # x: (batch, v_dim, seq_len)
         # uu: (batch, v_dim, seq_len, seq_len)
         assert (x is not None or uu is not None)
-        with torch.no_grad():
+        with torch.set_grad_enabled(self.save_grad_inputs):
             if x is not None:
                 batch_size, _, seq_len = x.size()
             else:
@@ -378,7 +379,7 @@ class Block(nn.Module):
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
         self.ffn_dim = embed_dim * ffn_ratio
-
+        
         self.pre_attn_norm = nn.LayerNorm(embed_dim)
         self.attn = nn.MultiheadAttention(
             embed_dim,
@@ -502,7 +503,8 @@ class ParticleTransformer(nn.Module):
                  for_inference=False,
                  use_amp=False,
                  split_domain_outputs=False,
-                 alpha_grad=1,                 
+                 split_reg_outputs=False,
+                 alpha_grad=1,
                  **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -515,7 +517,9 @@ class ParticleTransformer(nn.Module):
         self.alpha_grad = alpha_grad;
         self.fc_domain = None;
         self.split_domain_outputs = split_domain_outputs;
-
+        self.split_reg_outputs = split_reg_outputs;
+        self.save_grad_inputs = False;
+        
         embed_dim = embed_dims[-1] if len(embed_dims) > 0 else input_dim
         default_cfg = dict(embed_dim=embed_dim, num_heads=num_heads, ffn_ratio=4,
                            dropout=0.1, attn_dropout=0.1, activation_dropout=0.1,
@@ -543,6 +547,7 @@ class ParticleTransformer(nn.Module):
 
         if fc_params is not None:
             fcs = []
+            fcs_reg = []
             in_dim = embed_dim
             for out_dim, drop_rate in fc_params:
                 fcs.append(nn.Sequential(nn.Linear(in_dim, out_dim),
@@ -550,11 +555,25 @@ class ParticleTransformer(nn.Module):
                                          nn.GELU() if activation == 'gelu' else nn.ReLU(),
                                          nn.Dropout(drop_rate))
                 )
+                if self.split_reg_outputs:
+                    fcs_reg.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                                 nn.BatchNorm1d(out_dim),
+                                                 nn.GELU() if activation == 'gelu' else nn.ReLU(),
+                                                 nn.Dropout(drop_rate))
+                    )
+                    
                 in_dim = out_dim
-            fcs.append(nn.Linear(in_dim, num_classes+num_targets))
-            self.fc = nn.Sequential(*fcs)
+            if self.split_reg_outputs:
+                fcs.append(nn.Linear(in_dim, num_classes))
+                fcs_reg.append(nn.Linear(in_dim, num_targets))
+                self.fc = nn.Sequential(*fcs)
+                self.fc_reg = nn.Sequential(*fcs_reg)
+            else:
+                fcs.append(nn.Linear(in_dim, num_classes+num_targets))
+                self.fc = nn.Sequential(*fcs)
         else:
             self.fc = None
+            self.fc_reg = None
 
         if not for_inference and self.num_domains:
             if not self.split_domain_outputs:
@@ -615,8 +634,7 @@ class ParticleTransformer(nn.Module):
         # mask: (N, 1, P) -- real particle = 1, padded = 0
         # for pytorch: uu (N, C', num_pairs), uu_idx (N, 2, num_pairs)
         # for onnx: uu (N, C', P, P), uu_idx=None
-
-        with torch.no_grad():
+        with torch.set_grad_enabled(self.save_grad_inputs):
             if not self.for_inference:
                 if uu_idx is not None:
                     uu = build_sparse_tensor(uu, uu_idx, x.size(-1))
@@ -629,6 +647,7 @@ class ParticleTransformer(nn.Module):
             x = self.embed(x).masked_fill(~mask.permute(2, 0, 1), 0)  # (P, N, C)
             attn_mask = None
             if (v is not None or uu is not None) and self.pair_embed is not None:
+                self.pair_embed.save_grad_inputs = self.save_grad_inputs;
                 attn_mask = self.pair_embed(v, uu).view(-1, v.size(-1), v.size(-1))  # (N*num_heads, P, P)
 
             # transform
@@ -645,21 +664,34 @@ class ParticleTransformer(nn.Module):
             # fc
             if self.fc is None:
                 return x_cls
-            
-            output = self.fc(x_cls)
-            
+
+            if self.split_reg_outputs:
+                output = self.fc(x_cls)
+                output_reg = self.fc_reg(x_cls)
+            else:
+                output = self.fc(x_cls)
+                
             if self.for_inference:
                 if self.num_classes and not self.num_targets:
                     output = torch.softmax(output, dim=1)                    
                 elif self.num_classes and self.num_targets:
-                    output_class = torch.softmax(output[:,:self.num_classes],dim=1);
-                    output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
-                    output = torch.cat((output_class,output_reg),dim=1);
+                    if self.split_reg_outputs:
+                        output_class = torch.softmax(output,dim=1);
+                        output = torch.cat((output_class,output_reg),dim=1);
+                    else:
+                        output_class = torch.softmax(output[:,:self.num_classes],dim=1);
+                        output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
+                        output = torch.cat((output_class,output_reg),dim=1);
             elif self.num_domains and self.fc_domain:
                 if not self.split_domain_outputs:
                     output_domain = self.fc_domain(x_cls)
-                    output = torch.cat((output,output_domain),dim=1);
+                    if self.split_reg_outputs:
+                        output = torch.cat((output,output_reg,output_domain),dim=1);
+                    else:
+                        output = torch.cat((output,output_domain),dim=1);
                 else:
+                    if self.split_reg_outputs:
+                        output = torch.cat((output,output_reg),dim=1);
                     for i,fc in enumerate(self.fc_domain):
                         output_domain = fc(x_cls);
                         output = torch.cat((output,output_domain),dim=1);
@@ -678,7 +710,6 @@ class ParticleTransformerTagger(nn.Module):
                  num_targets=None,
                  num_domains=[],                 
                  # network configurations
-                 save_grad_inputs=False,
                  pair_input_dim=4,
                  pair_extra_dim=0,
                  remove_self_pair=False,
@@ -702,6 +733,8 @@ class ParticleTransformerTagger(nn.Module):
                  for_inference=False,
                  use_amp=False,
                  split_domain_outputs=False,
+                 split_reg_outputs=False,
+                 save_grad_inputs=False,
                  alpha_grad=1,
                  **kwargs) -> None:
 
@@ -739,8 +772,9 @@ class ParticleTransformerTagger(nn.Module):
                                         # misc
                                         trim=False,
                                         for_inference=for_inference,
-                                        use_amp=use_amp,
+                                        use_amp=self.use_amp,
                                         split_domain_outputs=split_domain_outputs,
+                                        split_reg_outputs=split_reg_outputs,
                                         alpha_grad=alpha_grad
         )
 
@@ -764,111 +798,7 @@ class ParticleTransformerTagger(nn.Module):
             sv_x = self.sv_embed(sv_x)
             lt_x = self.lt_embed(lt_x)
             x = torch.cat([pf_x, sv_x, lt_x], dim=0)
-            
+            self.part.save_grad_inputs = self.save_grad_inputs
             return self.part(x, v, mask)
 
 
-class ParticleTransformerTaggerWithExtraPairFeatures(nn.Module):
-
-    def __init__(self,
-                 pf_input_dim,
-                 sv_input_dim,
-                 lt_input_dim,
-                 num_classes=None,
-                 num_targets=None,
-                 num_domains=[],
-                 # network configurations
-                 save_grad_inputs=False,
-                 pair_input_dim=4,
-                 pair_extra_dim=0,
-                 remove_self_pair=False,
-                 use_pre_activation_pair=True,
-                 embed_dims=[128, 512, 128],
-                 pair_embed_dims=[64, 64, 64],
-                 num_heads=8,
-                 num_layers=8,
-                 num_cls_layers=2,
-                 block_params=None,
-                 cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
-                 fc_params=[],
-                 fc_domain_params=[],
-                 activation='gelu',
-                 # misc
-                 trim=True,
-                 for_inference=False,
-                 use_amp=False,
-                 split_domain_outputs=False,
-                 alpha_grad=1,
-                 **kwargs) -> None:
-        
-        super().__init__(**kwargs)
-
-        self.use_amp = use_amp
-        self.for_inference = for_inference
-        self.save_grad_inputs = False if self.for_inference else save_grad_inputs;
-        
-        self.pf_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.lt_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-
-        self.pf_embed = Embed(pf_input_dim, embed_dims, activation=activation)
-        self.sv_embed = Embed(sv_input_dim, embed_dims, activation=activation)
-        self.lt_embed = Embed(lt_input_dim, embed_dims, activation=activation)
-
-        self.part = ParticleTransformer(input_dim=embed_dims[-1],
-                                        num_classes=num_classes,
-                                        num_targets=num_targets,
-                                        num_domains=num_domains,                                        
-                                        # network configurations
-                                        pair_input_dim=pair_input_dim,
-                                        pair_extra_dim=pair_extra_dim,
-                                        remove_self_pair=remove_self_pair,
-                                        use_pre_activation_pair=use_pre_activation_pair,
-                                        embed_dims=[],
-                                        pair_embed_dims=pair_embed_dims,
-                                        num_heads=num_heads,
-                                        num_layers=num_layers,
-                                        num_cls_layers=num_cls_layers,
-                                        block_params=block_params,
-                                        cls_block_params=cls_block_params,
-                                        fc_params=fc_params,
-                                        fc_domain_params=fc_domain_params,                                        
-                                        activation=activation,
-                                        # misc
-                                        trim=False,
-                                        for_inference=for_inference,
-                                        use_amp=use_amp,
-                                        split_domain_outputs=split_domain_outputs,
-                                        alpha_grad=alpha_grad
-                                        
-        )
-
-    @torch.jit.ignore
-    def no_weight_decay(self):
-        return {'part.cls_token', }
-
-    def forward(self, pf_x, pf_v=None, pf_mask=None, sv_x=None, sv_v=None, sv_mask=None, lt_x=None, lt_v=None, lt_mask=None, pf_uu=None, pf_uu_idx=None):
-        # x: (N, C, P)
-        # v: (N, 4, P) [px,py,pz,energy]
-        # mask: (N, 1, P) -- real particle = 1, padded = 0
-
-        with torch.set_grad_enabled(not self.save_grad_inputs):
-            if not self.for_inference:
-                if pf_uu_idx is not None:
-                    pf_uu = build_sparse_tensor(pf_uu, pf_uu_idx, pf_x.size(-1))
-
-            pf_x, pf_v, pf_mask, pf_uu = self.pf_trimmer(pf_x, pf_v, pf_mask, pf_uu)
-            sv_x, sv_v, sv_mask, _ = self.sv_trimmer(sv_x, sv_v, sv_mask)
-            lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)
-            v = torch.cat([pf_v, sv_v, lt_v], dim=2)
-            mask = torch.cat([pf_mask, sv_mask, lt_mask], dim=2)
-            uu = torch.zeros(v.size(0), pf_uu.size(1), v.size(2), v.size(2), dtype=v.dtype, device=v.device)
-            uu[:, :, :pf_x.size(2), :pf_x.size(2)] = pf_uu
-
-        with torch.cuda.amp.autocast(enabled=self.use_amp):
-            pf_x = self.pf_embed(pf_x)  # after embed: (seq_len, batch, embed_dim)
-            sv_x = self.sv_embed(sv_x)
-            lt_x = self.lt_embed(lt_x)
-            x = torch.cat([pf_x, sv_x, lt_x], dim=0)
-
-            return self.part(x, v, mask, uu)

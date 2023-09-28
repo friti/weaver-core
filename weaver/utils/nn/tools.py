@@ -10,24 +10,7 @@ from collections import defaultdict, Counter
 from .metrics import evaluate_metrics
 from ..data.tools import _concat
 from ..logger import _logger
-
-
-def _flatten_label(label, mask=None):
-    if label.ndim > 1:
-        label = label.view(-1)
-        if mask is not None:
-            label = label[mask.view(-1)]
-    return label
-
-
-def _flatten_preds(preds, mask=None, label_axis=1):
-    if preds.ndim > 2:
-        # assuming axis=1 corresponds to the classes
-        preds = preds.transpose(label_axis, -1).contiguous()
-        preds = preds.view((-1, preds.shape[-1]))
-        if mask is not None:
-            preds = preds[mask.view(-1)]
-    return preds
+from .utils import _flatten_label, _flatten_preds, fgsm_attack
 
 
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy

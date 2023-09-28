@@ -11,35 +11,7 @@ from collections.abc import Iterable
 from .metrics import evaluate_metrics
 from ..data.tools import _concat
 from ..logger import _logger
-
-
-def _flatten_label(label, mask=None):
-    if label.ndim > 1:
-        label = label.view(-1)
-        if mask is not None:
-            label = label[mask.view(-1)]
-    return label
-
-def _flatten_preds(preds, mask=None, label_axis=1):
-    if preds.ndim > 2:
-        # assuming axis=1 corresponds to the classes
-        preds = preds.transpose(label_axis, -1).contiguous()
-        preds = preds.view((-1, preds.shape[-1]))
-        if mask is not None:
-            preds = preds[mask.view(-1)]
-    return preds
-
-@torch.jit.script
-def fgsm_attack(data: torch.Tensor,
-                data_grad: torch.Tensor,
-                eps_fgsm: float):
-    maxd, _ = torch.max(data,dim=0);
-    mind, _ = torch.min(data,dim=0);
-    max_mult = maxd.repeat(data.size(dim=0),1,1);
-    min_mult = mind.repeat(data.size(dim=0),1,1);
-    output = data_grad*torch.clip(1+torch.randn_like(data),min=0,max=1)*eps_fgsm;
-    data = torch.clip(data+output*(max_mult-min_mult),min=mind,max=maxd);
-    return data
+from .utils import _flatten_label, _flatten_preds, fgsm_attack
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
 def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
@@ -94,8 +66,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
 
             ## decide if this batch goes to FGSM
+            model.save_grad_inputs = False;
+            inputs_fgsm = None;
             use_fgsm = False;
             rand_val = np.random.uniform(low=0,high=1);
+            
             if eps_fgsm and frac_fgsm and frac_batch_fgsm and rand_val < frac_fgsm and epoch >= epoch_start_fgsm:
                 model.save_grad_inputs = True;
                 use_fgsm = True;
@@ -104,6 +79,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 nrows_selected = y_cat[data_config.label_names[0]].size(dim=0);
                 
             inputs = [X[k][0:nrows_selected].to(dev,non_blocking=True) for k in data_config.input_names]
+            if use_fgsm:
+                for idx,element in enumerate(inputs):        
+                    element.requires_grad = True
+                    
             label_cat = y_cat[data_config.label_names[0]][0:nrows_selected].long()
             cat_check = y_cat_check[data_config.labelcheck_names[0]][0:nrows_selected].long()
             index_cat = cat_check.nonzero();
@@ -175,8 +154,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             
             ### loss minimization
             model.zero_grad(set_to_none=True);
-            with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
-                
+            with torch.cuda.amp.autocast(enabled=grad_scaler is not None):                
                 ## prepare the tensor
                 model.zero_grad(set_to_none=True)
                 label_cat = label_cat.squeeze();
@@ -199,12 +177,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     ## compute the loss function in order to obtain the gradient
                     loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
                     loss.backward(retain_graph=True);
-                    ## turn-off gradient evaluation
-                    with torch.no_grad():
-                        ## produce gradient signs and features
-                        inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else
-                                       fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    ## produce gradient signs and features
+                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else 
+                                   fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     ## infere the model to get the output on FGSM inputs
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
@@ -226,13 +202,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
             if scheduler and getattr(scheduler, '_update_per_step', True):
                 scheduler.step()
-
-            ## disable the gradients
-            if use_fgsm:
-                model.save_grad_inputs = False;
-                for idx,element in enumerate(inputs):        
-                    element.requires_grad = False
-                    inputs_fgsm[idx].requires_grad = False
 
             ### evaluate loss function and counters
             num_batches += 1
@@ -447,6 +416,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check in tq:
+
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
 
@@ -551,15 +521,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ### evaluate model enabling gradient
                 num_fgsm_examples = 0;
+                model.save_grad_inputs = False;
+                inputs_fgsm = None;
                 if eval_fgsm:
                     num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);                    
                     torch.set_grad_enabled(True);
                     model.save_grad_inputs = True;
                     for idx,element in enumerate(inputs):        
                         element.requires_grad = True;
-                else:
-                    model.save_grad_inputs = False;
-
+                    
                 model.zero_grad(set_to_none=True);
                 model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]

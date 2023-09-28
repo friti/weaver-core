@@ -11,23 +11,7 @@ from collections.abc import Iterable
 from .metrics import evaluate_metrics
 from ..data.tools import _concat
 from ..logger import _logger
-
-
-def _flatten_label(label, mask=None):
-    if label.ndim > 1:
-        label = label.view(-1)
-        if mask is not None:
-            label = label[mask.view(-1)]
-    return label
-
-def _flatten_preds(preds, mask=None, label_axis=1):
-    if preds.ndim > 2:
-        # assuming axis=1 corresponds to the classes
-        preds = preds.transpose(label_axis, -1).contiguous()
-        preds = preds.view((-1, preds.shape[-1]))
-        if mask is not None:
-            preds = preds[mask.view(-1)]
-    return preds
+from .utils import _flatten_label, _flatten_preds, fgsm_attack
 
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
@@ -468,7 +452,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         element.requires_grad = True;
                 else:
                     model.save_grad_inputs = False;
-
+                    
                 model.zero_grad(set_to_none=True);
                 model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
