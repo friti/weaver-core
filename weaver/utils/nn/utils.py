@@ -38,7 +38,5 @@ def fgsm_attack(data: torch.Tensor,
     maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
     mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
     mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
-    smearing = torch.normal(mean=mean,std=eps_fgsm,size=data.shape);
-    output = data_grad*smearing*torch.full(data.shape,eps_fgsm)*(maxd-mind);
-    output = data+output;
+    output = data+data_grad*torch.normal(mean=mean,std=eps_fgsm,size=data.shape)*torch.full(data.shape,eps_fgsm)*(maxd-mind);
     return output
