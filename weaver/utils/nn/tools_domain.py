@@ -336,6 +336,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if network_option:
         network_options = {k: ast.literal_eval(v) for k, v in network_option}
 
+    ### epsilons for FGSM                                                                                                                                                                        
+    input_eps_min = [];
+    input_eps_max = [];
+    for keys, vars in data_config.input_dicts.items():
+        input_eps_min.append(torch.Tensor([data_config.preprocess_params[var]['eps_min'] if data_config.preprocess_params[var]['center'] is not None else float("Inf") for var in vars]));
+        input_eps_max.append(torch.Tensor([data_config.preprocess_params[var]['eps_max'] if data_config.preprocess_params[var]['center'] is not None else float("Inf") for var in vars]));
+ 
     start_time = time.time()
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
@@ -506,7 +513,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     loss.backward();
                     inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     torch.set_grad_enabled(False);
-                    inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None);

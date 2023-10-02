@@ -86,7 +86,9 @@ class DataConfig(object):
 
                     params = {'length': o['length'], 'pad_mode': o.get('pad_mode', 'constant').lower(),
                               'center': _get(1, 'auto' if self._auto_standardization else None),
-                              'scale': _get(2, 1), 'min': _get(3, -5), 'max': _get(4, 5), 'pad_value': _get(5, 0)}
+                              'scale': _get(2, 1), 'min': _get(3, -5), 'max': _get(4, 5), 'pad_value': _get(5, 0),
+                              'eps_min': _get(6,-5), 'eps_max': _get(7,5)
+                    }
                     if v[0] in self.preprocess_params and params != self.preprocess_params[v[0]]:
                         raise RuntimeError(
                             'Incompatible info for variable %s, had: \n  %s\nnow got:\n  %s' %

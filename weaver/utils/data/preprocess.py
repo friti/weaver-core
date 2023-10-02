@@ -310,3 +310,6 @@ class WeightMaker(object):
             _logger.info('Writing YAML file w/ reweighting info to %s' % output)
             self._data_config.dump(output)
         return self._data_config
+
+
+
