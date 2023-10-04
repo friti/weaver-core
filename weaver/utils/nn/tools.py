@@ -900,8 +900,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         if model_output_cat.shape == model_output_fgsm.shape:
                             count_fgsm += num_fgsm_examples;
                             if network_options.get('select_label',True):
-                                residual_fgsm = torch.nn.functional.kl_div(
-                                    input=torch.log_softmax(model_output_fgsm,dim=1).gather(1,label.view(-1,1)),
+                                residual_fgsm = torch.nn.functional.mse_loss(
+                                    input=torch.softmax(model_output_fgsm,dim=1).gather(1,label.view(-1,1)),
                                     target=torch.softmax(model_output_cat,dim=1).gather(1,label.view(-1,1)),
                                     reduction='sum');
                             else:
