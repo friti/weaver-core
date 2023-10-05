@@ -28,8 +28,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     inputs, target, label_cat, label_domain, model_output, model_output_cat, model_output_reg, model_output_domain = None, None, None, None, None, None, None, None;
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
-    loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;    
-    inputs_grad_sign, inputs_fgsm, model_output_fgsm = None, None, None;
+    loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
+    loss_contrastive, model_output_contrastive = None, None;
+    inputs_grad_sign, inputs_fgsm, model_output_fgsm, loss_fgsm = None, None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
     use_fgsm = False;
     
@@ -169,7 +170,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
                 ## evaluate the model
-                model_output  = model(*inputs)
+                if network_options.get('contrastive',False):                    
+                    model_output, model_output_contrastive = model(*inputs)
+                    model_output_contrastive = model_output_contrastive[index_cat].squeeze().float();
+                else:
+                    model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
@@ -182,21 +187,35 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 if use_fgsm:                    
                     num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                     ## compute the loss function in order to obtain the gradient
-                    loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
+                    if network_options.get('contrastive',True):
+                        loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                    else:
+                        loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                        
                     loss.backward(retain_graph=True);
                     ## produce gradient signs and features
                     inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     ## infere the model to get the output on FGSM inputs
-                    model_output_fgsm = model(*inputs_fgsm)
+                    if network_options.get('contrastive',False):
+                        model_output_fgsm, _ = model(*inputs_fgsm)
+                    else:
+                        model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None);
                     model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
                     ## compute the full loss
-                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
+                    if network_options.get('contrastive',False):
+                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat,model_output_contrastive);
+                    else:
+                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
+                        
                 else:
-                    loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
-
+                    if network_options.get('contrastive',False):
+                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,input_contrastive=model_output_contrastive);
+                    else:
+                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                        
             ### back propagation
             if grad_scaler is None:
                 loss.backward();
@@ -256,7 +275,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_cat)):
                     if model_output_cat.shape == model_output_fgsm.shape:
                         count_fgsm += num_fgsm_examples;
-                        if network_options.get('select_label',True):
+                        if network_options.get('select_label',False):
                             residual_fgsm = torch.nn.functional.mse_loss(
                                 input=torch.softmax(model_output_fgsm,dim=1).gather(1,label_cat.view(-1,1)),
                                 target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
@@ -544,7 +563,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         element.requires_grad = True;
                     
                 model.zero_grad(set_to_none=True);
-                model_output  = model(*inputs)
+                if network_options.get('contrastive',False):
+                    model_output, _ = model(*inputs)
+                else:
+                    model_output = model(*inputs)
+                    
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
@@ -612,7 +635,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     if eval_fgsm:
                         loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
                     else:
-                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());           
+                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);           
 
                     if loss: loss = loss.item()
                     if loss_cat: loss_cat = loss_cat.item()
@@ -650,9 +673,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_cat)):
                         if model_output_cat.shape == model_output_fgsm.shape:
                             count_fgsm += num_fgsm_examples;
-                            if network_options.get('select_label',True):
-                                residual_fgsm = torch.nn.functional.kl_div(
-                                    input=torch.log_softmax(model_output_fgsm,dim=1).gather(1,label_cat.view(-1,1)),
+                            if network_options.get('select_label',False):
+                                residual_fgsm = torch.nn.functional.mse_loss(
+                                    input=torch.softmax(model_output_fgsm,dim=1).gather(1,label_cat.view(-1,1)),
                                     target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
                                     reduction='sum');
                             else:
