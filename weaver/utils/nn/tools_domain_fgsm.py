@@ -29,7 +29,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
-    loss_contrastive, model_output_contrastive = None, None;
+    loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, None;
     inputs_grad_sign, inputs_fgsm, model_output_fgsm, loss_fgsm = None, None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
     use_fgsm = False;
@@ -187,7 +187,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 if use_fgsm:                    
                     num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                     ## compute the loss function in order to obtain the gradient
-                    if network_options.get('contrastive',True):
+                    if network_options.get('contrastive',False):
                         loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                     else:
                         loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
@@ -241,7 +241,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             if loss_domain:
                 loss_domain = loss_domain.detach().item()
                 total_domain_loss += loss_domain;
-
+            if loss_contrastive:
+                loss_contrastive = loss_contrastive.detach().item()
+                total_contrastive_loss += loss_contrastive;
+                
             ## take the classification prediction and compare with the true labels            
             label_cat = label_cat.detach()
             label_domain = label_domain.detach()
@@ -310,18 +313,34 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 count_domain += num_domain_examples;
 
             ### monitor metrics
-            postfix = {
-                'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
-                'AvgLoss': '%.3f' % (total_loss / num_batches if num_batches else 0),
-                'AvgLossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
-                'AvgLossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
-                'AvgLossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
-                'AvgLossFGSM': '%.3f' % (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0),
-                'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
-                'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
-                'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
-                'AvgFGSM': '%.3f' % (sum_residual_fgsm / count_fgsm if count_fgsm else 0)
-            }
+            if network_options.get('contrastive',False):
+                postfix = {
+                    'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
+                    'AvgLoss': '%.3f' % (total_loss / num_batches if num_batches else 0),
+                    'AvgLossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
+                    'AvgLossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
+                    'AvgLossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
+                    'AvgLossFGSM': '%.3f' % (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0),
+                    'AvgLossCont': '%.3f' % (total_contrastive_loss / num_batches num_batches else 0),
+                    'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
+                    'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
+                    'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
+                    'AvgFGSM': '%.3f' % (sum_residual_fgsm / count_fgsm if count_fgsm else 0)
+                }
+            else:
+                postfix = {
+                    'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
+                    'AvgLoss': '%.3f' % (total_loss / num_batches if num_batches else 0),
+                    'AvgLossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
+                    'AvgLossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
+                    'AvgLossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
+                    'AvgLossFGSM': '%.3f' % (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0),
+                    'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
+                    'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
+                    'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
+                    'AvgFGSM': '%.3f' % (sum_residual_fgsm / count_fgsm if count_fgsm else 0)
+                }
+                
                             
             tq.set_postfix(postfix);
                 
@@ -351,8 +370,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     _logger.info('Train AvgLoss Domain: %.5f'% (total_domain_loss / num_batches))
     _logger.info('Train AvgLoss Reg: %.5f'% (total_reg_loss / num_batches))
     _logger.info('Train AvgLoss FGSM: %.5f'% (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0))
+    if network_options.get('contrastive',False):
+        _logger.info('Train AvgLoss Contrastive: %.5f'%(total_contrastive_loss / (num_batches) if num_batches else 0))
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
-    _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
+    _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))        
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
     _logger.info('Train AvgFGSM FGSM: %.5f'%(sum_residual_fgsm / count_fgsm if count_fgsm else 0))    
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
