@@ -29,7 +29,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
-    loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, None;
+    loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, 0;
     inputs_grad_sign, inputs_fgsm, model_output_fgsm, loss_fgsm = None, None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
     use_fgsm = False;
@@ -316,12 +316,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             if network_options.get('contrastive',False):
                 postfix = {
                     'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
-                    'AvgLoss': '%.3f' % (total_loss / num_batches if num_batches else 0),
-                    'AvgLossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
-                    'AvgLossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
-                    'AvgLossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
-                    'AvgLossFGSM': '%.3f' % (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0),
-                    'AvgLossCont': '%.3f' % (total_contrastive_loss / num_batches num_batches else 0),
+                    'Loss': '%.3f' % (total_loss / num_batches if num_batches else 0),
+                    'LossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
+                    'LossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
+                    'LossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
+                    'LossFGSM': '%.3f' % (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0),
+                    'LossCont': '%.3f' % (total_contrastive_loss / num_batches if num_batches else 0),
                     'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
                     'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
                     'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
