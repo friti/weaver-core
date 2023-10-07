@@ -550,7 +550,7 @@ class ParticleTransformer(nn.Module):
         self.norm = nn.LayerNorm(embed_dim)
                                                 
         ## fully connected layers
-        if fc_params is not None:
+        if fc_params:
             fcs = []
             fcs_reg = []
             in_dim = embed_dim
@@ -582,7 +582,7 @@ class ParticleTransformer(nn.Module):
             self.fc_reg = None
 
         ## contrastive projection
-        if fc_contrastive_params is not None:
+        if fc_contrastive_params :
             in_dim = embed_dim
             fcs_contrastive = []
             for out_dim, drop_rate in fc_contrastive_params:
