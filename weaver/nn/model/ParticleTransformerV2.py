@@ -1,6 +1,6 @@
 ''' Particle Transformer (ParT)
 Paper: "Particle Transformer for Jet Tagging" - https://arxiv.org/abs/2202.03772
-'''
+1;95;0c'''
 import math
 import random
 import warnings
@@ -46,9 +46,8 @@ def to_ptrapphim(x, return_mass=True, eps=1e-8, for_onnx=False):
     # x: (N, 4, ...), dim1 : (px, py, pz, E)
     px, py, pz, energy = x.split((1, 1, 1, 1), dim=1)
     pt = torch.sqrt(to_pt2(x, eps=eps))
-    # rapidity = 0.5 * torch.log((energy + pz) / (energy - pz))
-    rapidity = 0.5 * torch.log(1 + (2 * pz) / (energy - pz).clamp(min=1e-20))
     phi = (atan2 if for_onnx else torch.atan2)(py, px)
+    rapidity = 0.5 * torch.log(((energy+pz) / (energy-pz)).clamp(min=1e-20))
     if not return_mass:
         return torch.cat((pt, rapidity, phi), dim=1)
     else:
@@ -87,7 +86,6 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
         lnkt = torch.log((ptmin * delta).clamp(min=eps))
         lnz = torch.log((ptmin / (pti + ptj).clamp(min=eps)).clamp(min=eps))
         outputs = [lnkt, lnz, lndelta]
-
     if num_outputs > 3:
         xij = xi + xj
         lnm2 = torch.log(to_m2(xij, eps=eps))
