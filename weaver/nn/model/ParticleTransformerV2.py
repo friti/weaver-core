@@ -498,6 +498,7 @@ class ParticleTransformer(nn.Module):
                  cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
                  fc_params=[],
                  fc_domain_params=[],
+                 fc_contrastive_params=[],
                  activation='gelu',
                  trim=True,
                  for_inference=False,
@@ -505,7 +506,6 @@ class ParticleTransformer(nn.Module):
                  split_domain_outputs=False,
                  split_reg_outputs=False,
                  alpha_grad=1,
-                 contrastive=False,
                  **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -521,7 +521,6 @@ class ParticleTransformer(nn.Module):
         self.split_domain_outputs = split_domain_outputs;
         self.split_reg_outputs = split_reg_outputs;
         self.save_grad_inputs = False;
-        self.contrastive = contrastive;
         
         embed_dim = embed_dims[-1] if len(embed_dims) > 0 else input_dim
         default_cfg = dict(embed_dim=embed_dim, num_heads=num_heads, ffn_ratio=4,
@@ -551,13 +550,6 @@ class ParticleTransformer(nn.Module):
         self.cls_blocks = nn.ModuleList([Block(**cfg_cls_block) for _ in range(num_cls_layers)])
         ## normalization
         self.norm = nn.LayerNorm(embed_dim)
-        ## contrastive projection
-        if self.contrastive:
-            self.fc_contrastive = nn.Sequential(
-                nn.Linear(embed_dim,embed_dim),
-                nn.BatchNorm1d(embed_dim),
-                nn.GELU() if activation == 'gelu' else nn.ReLU()
-            )
                                                 
         ## fully connected layers
         if fc_params is not None:
@@ -591,6 +583,23 @@ class ParticleTransformer(nn.Module):
             self.fc = None
             self.fc_reg = None
 
+        ## contrastive projection
+        if fc_contrastive_params is not None:
+            in_dim = embed_dim
+            fcs_contrastive = []
+            for out_dim, drop_rate in fc_contrastive_params:
+                 fcs_contrastive.append(nn.Sequential(
+                     nn.Linear(in_dim, out_dim),
+                     nn.BatchNorm1d(out_dim),
+                     nn.GELU() if activation == 'gelu' else nn.ReLU(),
+                     nn.Dropout(drop_rate))
+                 )
+                 in_dim = out_dim
+            fcs_contrastive.append(nn.Linear(in_dim,in_dim));
+            self.fc_contrastive = nn.Sequential(*fcs_contrastive);
+        else:
+            self.fc_contrastive = None;
+            
         ## domain layers
         if not for_inference and self.num_domains:
             if not self.split_domain_outputs:
@@ -678,19 +687,18 @@ class ParticleTransformer(nn.Module):
 
             x_cls = self.norm(cls_tokens).squeeze(0)
             
-            # fc
+            ### if there are no fully connected output resturns x_cls
             if self.fc is None:
                 return x_cls
 
-            if self.contrastive:
-                output_contr = self.fc_contrastive(x_cls);
-
+            ### classification and regression output
             if self.split_reg_outputs:
                 output = self.fc(x_cls)
                 output_reg = self.fc_reg(x_cls)
             else:
                 output = self.fc(x_cls)
-                
+
+            ### buld the final output to be returned to the main function
             if self.for_inference:
                 if self.num_classes and not self.num_targets:
                     output = torch.softmax(output, dim=1)                    
@@ -716,7 +724,9 @@ class ParticleTransformer(nn.Module):
                         output_domain = fc(x_cls);
                         output = torch.cat((output,output_domain),dim=1);
 
-            if self.contrastive:
+            ### contrastive output
+            if self.fc_contrastive is not None:
+                output_contr = self.fc_contrastive(x_cls);
                 return output, output_contr;
             else:
                 return output
@@ -750,6 +760,7 @@ class ParticleTransformerTagger(nn.Module):
                  # final fully connected layers
                  fc_params=[],
                  fc_domain_params=[],
+                 fc_contrastive_params=[],
                  activation='gelu',
                  # misc
                  trim=True,
@@ -760,8 +771,6 @@ class ParticleTransformerTagger(nn.Module):
                  split_reg_outputs=False,
                  # save gradiantes for fgsm
                  save_grad_inputs=False,
-                 # return projection for contrastive learning
-                 contrastive=False,
                  alpha_grad=1,
                  **kwargs) -> None:
 
@@ -795,6 +804,7 @@ class ParticleTransformerTagger(nn.Module):
                                         cls_block_params=cls_block_params,
                                         fc_params=fc_params,
                                         fc_domain_params=fc_domain_params,
+                                        fc_contrastive_params=fc_contrastive_params,
                                         activation=activation,
                                         # misc
                                         trim=False,
@@ -802,8 +812,7 @@ class ParticleTransformerTagger(nn.Module):
                                         use_amp=self.use_amp,
                                         split_domain_outputs=split_domain_outputs,
                                         split_reg_outputs=split_reg_outputs,
-                                        alpha_grad=alpha_grad,
-                                        contrastive=contrastive
+                                        alpha_grad=alpha_grad
         )
 
     @torch.jit.ignore
