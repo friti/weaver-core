@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from .metrics import evaluate_metrics
 from ..data.tools import _concat
 from ..logger import _logger
-from .utils import _flatten_label, _flatten_preds, fgsm_attack
+from .utils import _flatten_label, _flatten_preds, fgsm_attack, fngm_attack
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
 def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
@@ -30,7 +30,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
     loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, 0;
-    inputs_grad_sign, inputs_fgsm, model_output_fgsm, loss_fgsm = None, None, None, None;
+    inputs_grad, inputs_fgsm, model_output_fgsm, loss_fgsm = None, None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
     use_fgsm = False;
     
@@ -194,8 +194,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         
                     loss.backward(retain_graph=True);
                     ## produce gradient signs and features
-                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                    inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    if network_options.get('use_norm_gradient',False):
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    else:
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     ## infere the model to get the output on FGSM inputs
                     if network_options.get('contrastive',False):
                         model_output_fgsm, _ = model(*inputs_fgsm)
@@ -420,7 +424,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
     sum_sqr_err, count_cat, count_domain = 0, 0, 0;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
-    inputs_grad_sign, inputs_fgsm, model_output_fgsm = None, None, None;
+    inputs_grad, inputs_fgsm, model_output_fgsm = None, None, None;
     pred_cat, pred_domain, pred_reg, correct_cat, correct_domain = None, None, None, None, None;
     loss, loss_cat, loss_domain, loss_reg, loss_fgsm = None, None, None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
@@ -637,9 +641,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if eval_fgsm:
                     loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
                     loss.backward();
-                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                    torch.set_grad_enabled(False);
-                    inputs_fgsm = [element.to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    if network_options.get('use_norm_gradient',False):
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        torch.set_grad_enabled(False);
+                        inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    else:
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        torch.set_grad_enabled(False);
+                        inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     model.zero_grad(set_to_none=True)
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];

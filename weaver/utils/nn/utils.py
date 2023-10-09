@@ -53,3 +53,40 @@ def fgsm_attack(data: torch.Tensor,
     mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
     output = data+data_grad*torch.normal(mean=mean,std=eps_fgsm,size=data.shape).to(data.device)*torch.full(data.shape,eps_fgsm).to(data.device)*(maxd-mind);
     return output
+
+
+@torch.jit.script
+def fngm_attack(data: torch.Tensor,
+                data_grad: torch.Tensor,
+                eps_fgsm: float,
+                eps_min: torch.Tensor,
+                eps_max: torch.Tensor,
+                power: float = 2):
+
+    maxd = eps_max;
+    mind = eps_min;
+    ## if there are infinite values, take max and min from data batch
+    index_inf_min = (eps_min == float("Inf")).nonzero().squeeze();
+    index_inf_max = (eps_max == float("Inf")).nonzero().squeeze();
+    if index_inf_min.count_nonzero() and index_inf_max.count_nonzero():
+        maxtmp, _ = torch.max(data,dim=2);
+        mintmp, _ = torch.min(data,dim=2);
+        maxtmp, _ = torch.max(maxtmp,dim=0);
+        mintmp, _ = torch.max(mintmp,dim=0);
+        maxd[index_inf_max] = maxtmp;
+        mind[index_inf_min] = mintmp;
+
+    ## build the final fgsm inputs
+    maxd = maxd.unsqueeze(0).unsqueeze(2)
+    mind = mind.unsqueeze(0).unsqueeze(2)
+    maxd = torch.repeat_interleave(maxd,data.size(dim=0),dim=0);
+    maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
+    mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
+    mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
+    ## power is degree for normalization, take absolute val, collapse particle dimension
+    data_grad = data_grad.nan_to_num();
+    norm = data_grad.abs().pow(power).view(data_grad.size(0),-1).sum(dim=1).pow(1./power);
+    ## avoid divisions per zero
+    norm = torch.max(norm, torch.ones_like(norm) * 1e-12).view(-1,1,1);
+    output = data+data_grad*(1./norm)*torch.full(data.shape,eps_fgsm).to(data.device)*(maxd-mind);
+    return output

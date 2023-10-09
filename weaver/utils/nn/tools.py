@@ -10,7 +10,7 @@ from collections import defaultdict, Counter
 from .metrics import evaluate_metrics
 from ..data.tools import _concat
 from ..logger import _logger
-from .utils import _flatten_label, _flatten_preds, fgsm_attack
+from .utils import _flatten_label, _flatten_preds, fgsm_attack, fngm_attack
 
 
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
@@ -849,9 +849,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if eval_fgsm:
                     loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target);
                     loss.backward();
-                    inputs_grad_sign = [None if element.grad is None else element.grad.data.sign().detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                    torch.set_grad_enabled(False);
-                    inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad_sign[idx] is None else fgsm_attack(element,inputs_grad_sign[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    ## produce gradient signs and features                                                                                                                                                      
+                    if network_options.get('use_norm_gradient',False):
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        torch.set_grad_enabled(False);
+			inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    else:
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        torch.set_grad_enabled(False);
+                        inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     model.zero_grad(set_to_none=True)
                     model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
