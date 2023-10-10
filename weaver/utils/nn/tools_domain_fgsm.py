@@ -639,7 +639,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## create adversarial testing fgsm features and evaluate the model
                 if eval_fgsm:
-                    loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,torch.Tensor(),torch.Tensor());
+                    if network_options.get('contrastive',False):
+                        loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                    else:
+                        loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);                        
                     loss.backward();
                     if network_options.get('use_norm_gradient',False):
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
@@ -663,10 +666,17 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 if loss_func != None:
                     if eval_fgsm:
-                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
+                        if network_options.get('contrastive',False):
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
+                        else:
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
+                            
                     else:
-                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);           
-
+                        if network_options.get('contrastive',False):
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);           
+                        else:
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);           
+                            
                     if loss: loss = loss.item()
                     if loss_cat: loss_cat = loss_cat.item()
                     if loss_reg: loss_reg = loss_reg.item()
