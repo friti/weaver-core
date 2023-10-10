@@ -72,7 +72,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
-
             ## decide if this batch goes to FGSM
             model.save_grad_inputs = False;
             inputs_fgsm = None;
