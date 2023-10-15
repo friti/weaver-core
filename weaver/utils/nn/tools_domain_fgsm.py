@@ -32,7 +32,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, 0;
     inputs_grad, inputs_fgsm, model_output_fgsm, loss_fgsm = None, None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
-    use_fgsm = False;
+    use_fgsm, network_options = False, None;
     
     ### number of classification labels
     num_labels = len(data_config.label_value);
@@ -431,7 +431,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     scores_domain  = defaultdict(list); 
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
     indexes_domain = defaultdict(list); 
-    index_offset = 0;
+    index_offset, network_options = 0, None;
 
     ### number of classification labels
     num_labels = len(data_config.label_value);
@@ -672,9 +672,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                             
                     else:
                         if network_options and network_options.get('contrastive',False):
-                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);           
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                         else:
-                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);           
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);      
                             
                     if loss: loss = loss.item()
                     if loss_cat: loss_cat = loss_cat.item()

@@ -306,7 +306,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     scores_domain  = defaultdict(list); 
     labels_cat, labels_domain, targets, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
     indexes_domain = defaultdict(list); 
-    index_offset = 0;
+    index_offset, network_options = 0, None;
 
     ### number of classification labels
     num_labels = len(data_config.label_value);
