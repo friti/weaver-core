@@ -512,7 +512,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                     loss.backward();
                     ## produce gradient signs and features                                                                                                                                                      
-                    if network_options.get('use_norm_gradient',False):
+                    if network_options and network_options.get('use_norm_gradient',False):
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         torch.set_grad_enabled(False);
 			inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
@@ -568,7 +568,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         np.iterable(label_cat) and np.iterable(model_output_fgsm) and np.iterable(model_output_cat)):
                         if model_output_cat.shape == model_output_fgsm.shape:
                             count_fgsm += num_fgsm_examples;
-                            if network_options.get('select_label',False):
+                            if network_options and network_options.get('select_label',False):
                                 residual_fgsm = torch.nn.functional.mse_loss(
                                     input=torch.softmax(model_output_fgsm,dim=1).gather(1,label_cat.view(-1,1)),
                                     target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
