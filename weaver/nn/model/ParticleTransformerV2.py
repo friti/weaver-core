@@ -494,15 +494,18 @@ class ParticleTransformer(nn.Module):
                  num_cls_layers=2,
                  block_params=None,
                  cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
+                 # dense layers
                  fc_params=[],
                  fc_domain_params=[],
                  fc_contrastive_params=[],
                  activation='gelu',
+                 # misc
                  trim=True,
                  for_inference=False,
                  use_amp=False,
                  split_domain_outputs=False,
                  split_reg_outputs=False,
+                 use_contrastive_domain=False,
                  alpha_grad=1,
                  **kwargs) -> None:
         super().__init__(**kwargs)
@@ -516,9 +519,11 @@ class ParticleTransformer(nn.Module):
         self.alpha_grad = alpha_grad;
         self.fc_domain = None;
         self.fc_contrastive = None;
+        self.fc_contrastive_da = None;
         self.split_domain_outputs = split_domain_outputs;
         self.split_reg_outputs = split_reg_outputs;
         self.save_grad_inputs = False;
+        self.use_contrastive_domain = use_contrastive_domain;
         
         embed_dim = embed_dims[-1] if len(embed_dims) > 0 else input_dim
         default_cfg = dict(embed_dim=embed_dim, num_heads=num_heads, ffn_ratio=4,
@@ -550,9 +555,9 @@ class ParticleTransformer(nn.Module):
         self.norm = nn.LayerNorm(embed_dim)
                                                 
         ## fully connected layers
+        fcs = []
+        fcs_reg = []
         if fc_params:
-            fcs = []
-            fcs_reg = []
             in_dim = embed_dim
             for out_dim, drop_rate in fc_params:
                 fcs.append(nn.Sequential(
@@ -575,7 +580,7 @@ class ParticleTransformer(nn.Module):
                 self.fc = nn.Sequential(*fcs)
                 self.fc_reg = nn.Sequential(*fcs_reg)
             else:
-                fcs.append(nn.Linear(in_dim, num_classes+num_targets))
+                fcs.append(nn.Linear(in_dim,num_classes+num_targets))
                 self.fc = nn.Sequential(*fcs)
         else:
             self.fc = None
@@ -600,6 +605,24 @@ class ParticleTransformer(nn.Module):
             
         ## domain layers
         if not for_inference and self.num_domains:
+            ## contrastive da projection
+            fcs_contrastive_da = []
+            if fc_contrastive_params and  use_contrastive_domain:
+                in_dim = embed_dim
+                fcs_contrastive_da.append(GradientReverse(self.alpha_grad));
+                for out_dim, drop_rate in fc_contrastive_params:
+                    fcs_contrastive_da.append(nn.Sequential(
+                        nn.Linear(in_dim, out_dim),
+                        nn.BatchNorm1d(out_dim),
+                        nn.GELU() if activation == 'gelu' else nn.ReLU(),
+                        nn.Dropout(drop_rate))
+                    )
+                    in_dim = out_dim
+                fcs_contrastive_da.append(nn.Linear(in_dim,in_dim));
+                self.fc_contrastive_da = nn.Sequential(*fcs_contrastive);
+            else:
+                self.fc_contrastive_da = None;
+            ## standard domain layers
             if not self.split_domain_outputs:
                 num_domain = sum(element for element in self.num_domains);
                 fcs_domain = []
@@ -610,7 +633,6 @@ class ParticleTransformer(nn.Module):
                         in_chn = embed_dim
                     else:
                         in_chn = fc_domain_params[idx - 1][0]
-
                     fcs_domain.append(
                         nn.Sequential(
                             nn.Linear(in_chn, channels),
@@ -636,7 +658,8 @@ class ParticleTransformer(nn.Module):
                             nn.Linear(in_chn, channels),
                             nn.BatchNorm1d(channels),
                             nn.GELU() if activation == 'gelu' else nn.ReLU(),
-                            nn.Dropout(drop_rate)))
+                            nn.Dropout(drop_rate))
+                        )
 
                     fcs_domain.append(nn.Linear(fc_domain_params[-1][0],dom))
                     if self.fc_domain is None:
@@ -723,9 +746,13 @@ class ParticleTransformer(nn.Module):
                         output = torch.cat((output,output_domain),dim=1);
 
             ### contrastive output
-            if self.fc_contrastive is not None:
-                output_contr = self.fc_contrastive(x_cls);
-                return output, output_contr;
+            if self.fc_contrastive is not None and self.fc_contrastive_da is not None:
+                output_cont = self.fc_contrastive(x_cls);
+                output_cont_da = self.fc_contrastive_da(x_cls);
+                return output, output_cont, output_cont_da;
+            elif self.fc_contrastive is not None:
+                output_cont = self.fc_contrastive(x_cls);
+                return output, output_cont;
             else:
                 return output
 
@@ -767,6 +794,7 @@ class ParticleTransformerTagger(nn.Module):
                  # options for splitting domain and regression outputs
                  split_domain_outputs=False,
                  split_reg_outputs=False,
+                 use_contrastive_domain=False,
                  # save gradiantes for fgsm
                  save_grad_inputs=False,
                  alpha_grad=1,
@@ -784,33 +812,38 @@ class ParticleTransformerTagger(nn.Module):
         self.sv_embed = Embed(sv_input_dim, embed_dims, activation=activation)
         self.lt_embed = Embed(lt_input_dim, embed_dims, activation=activation)
         
-        self.part = ParticleTransformer(input_dim=embed_dims[-1],
-                                        num_classes=num_classes,
-                                        num_targets=num_targets,
-                                        num_domains=num_domains,
-                                        # network configurations
-                                        pair_input_dim=pair_input_dim,
-                                        pair_extra_dim=pair_extra_dim,
-                                        remove_self_pair=remove_self_pair,
-                                        use_pre_activation_pair=use_pre_activation_pair,
-                                        embed_dims=[],
-                                        pair_embed_dims=pair_embed_dims,
-                                        num_heads=num_heads,
-                                        num_layers=num_layers,
-                                        num_cls_layers=num_cls_layers,
-                                        block_params=block_params,
-                                        cls_block_params=cls_block_params,
-                                        fc_params=fc_params,
-                                        fc_domain_params=fc_domain_params,
-                                        fc_contrastive_params=fc_contrastive_params,
-                                        activation=activation,
-                                        # misc
-                                        trim=False,
-                                        for_inference=for_inference,
-                                        use_amp=self.use_amp,
-                                        split_domain_outputs=split_domain_outputs,
-                                        split_reg_outputs=split_reg_outputs,
-                                        alpha_grad=alpha_grad
+        self.part = ParticleTransformer(
+            input_dim=embed_dims[-1],
+            num_classes=num_classes,
+            num_targets=num_targets,
+            num_domains=num_domains,
+            ## network configurations
+            pair_input_dim=pair_input_dim,
+            pair_extra_dim=pair_extra_dim,
+            remove_self_pair=remove_self_pair,
+            use_pre_activation_pair=use_pre_activation_pair,
+            ## transformer blocks
+            embed_dims=[],
+            pair_embed_dims=pair_embed_dims,
+            num_heads=num_heads,
+            num_layers=num_layers,
+            num_cls_layers=num_cls_layers,
+            block_params=block_params,
+            cls_block_params=cls_block_params,
+            ## dense layers
+            fc_params=fc_params,
+            fc_domain_params=fc_domain_params,
+            fc_contrastive_params=fc_contrastive_params,
+            activation=activation,
+            ## misc
+            trim=False,
+            for_inference=for_inference,
+            use_amp=self.use_amp,
+            ## domain and contrastive
+            split_domain_outputs=split_domain_outputs,
+            split_reg_outputs=split_reg_outputs,
+            use_contrastive_domain=use_contrastive_domain,
+            alpha_grad=alpha_grad
         )
 
     @torch.jit.ignore

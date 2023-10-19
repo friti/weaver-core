@@ -29,7 +29,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
-    loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, 0;
+    loss_contrastive, model_output_contrastive, model_output_contrastive_da, total_contrastive_loss = None, None, None, 0;
     inputs_grad, inputs_fgsm, model_output_fgsm, loss_fgsm = None, None, None, None;
     num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
     use_fgsm, network_options = False, None;
@@ -72,6 +72,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, y_domain, _, y_cat_check, y_domain_check in tq:
+            if num_batches > 10: break;
             ## decide if this batch goes to FGSM
             model.save_grad_inputs = False;
             inputs_fgsm = None;
@@ -169,9 +170,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
                 ## evaluate the model
-                if network_options and network_options.get('contrastive',False):                    
-                    model_output, model_output_contrastive = model(*inputs)
-                    model_output_contrastive = model_output_contrastive[index_cat].squeeze().float();
+                if network_options and network_options.get('use_contrastive',False):
+                    if  network_options.get('use_contrastive_domain',False):
+                        model_output, model_output_contrastive, model_output_contrastive_da = model(*inputs)
+                        model_output_contrastive = model_output_contrastive[index_cat].squeeze().float();
+                        model_output_contrastive_da = model_output_contrastive_da[index_domain_all].squeeze().float();
+                    else:
+                        model_output, model_output_contrastive = model(*inputs)
+                        model_output_contrastive = model_output_contrastive[index_cat].squeeze().float();
                 else:
                     model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
@@ -186,7 +192,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 if use_fgsm:                    
                     num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);
                     ## compute the loss function in order to obtain the gradient
-                    if network_options and network_options.get('contrastive',False):
+                    if network_options and network_options.get('use_contrastive',False):
                         loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                     else:
                         loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
@@ -200,22 +206,31 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     ## infere the model to get the output on FGSM inputs
-                    if network_options and network_options.get('contrastive',False):
-                        model_output_fgsm, _ = model(*inputs_fgsm)
+                    if network_options and network_options.get('use_contrastive',False):
+                        if network_options.get('use_contrastive_domain',False):
+                            model_output_fgsm, _, _ = model(*inputs_fgsm)
+                        else:
+                            model_output_fgsm, _ = model(*inputs_fgsm)                            
                     else:
                         model_output_fgsm = model(*inputs_fgsm)
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None);
                     model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();
                     ## compute the full loss
-                    if network_options and network_options.get('contrastive',False):
-                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat,model_output_contrastive);
+                    if network_options and network_options.get('use_contrastive',False):
+                        if network_options.get('use_contrastive_da',False):
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat,model_output_contrastive,model_output_contrastive_da);
+                        else:
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat,model_output_contrastive);
                     else:
                         loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
                         
                 else:
-                    if network_options and network_options.get('contrastive',False):
-                        loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,input_contrastive=model_output_contrastive);
+                    if network_options and network_options.get('use_contrastive',False):
+                        if network_options.get('use_contrastive_da',False):
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,input_cont=model_output_contrastive,input_cont_da=model_output_contrastive_da);
+                        else:
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,input_cont=model_output_contrastive);                            
                     else:
                         loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                         
@@ -316,7 +331,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                 count_domain += num_domain_examples;
 
             ### monitor metrics
-            if network_options and network_options.get('contrastive',False):
+            if network_options and network_options.get('use_contrastive',False):
                 postfix = {
                     'lr': '%.2e' % scheduler.get_last_lr()[0] if scheduler else opt.defaults['lr'],
                     'Loss': '%.3f' % (total_loss / num_batches if num_batches else 0),
@@ -373,7 +388,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     _logger.info('Train AvgLoss Domain: %.5f'% (total_domain_loss / num_batches))
     _logger.info('Train AvgLoss Reg: %.5f'% (total_reg_loss / num_batches))
     _logger.info('Train AvgLoss FGSM: %.5f'% (total_fgsm_loss / num_batches_fgsm if num_batches_fgsm else 0))
-    if network_options and network_options.get('contrastive',False):
+    if network_options and network_options.get('use_contrastive',False):
         _logger.info('Train AvgLoss Contrastive: %.5f'%(total_contrastive_loss / (num_batches) if num_batches else 0))
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))        
@@ -472,10 +487,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check in tq:
-
+                if num_batches > 10: break;
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-
                 ### build classification true labels
                 label_cat = y_cat[data_config.label_names[0]].long()
                 cat_check = y_cat_check[data_config.labelcheck_names[0]].long()
@@ -587,8 +601,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         element.requires_grad = True;
                     
                 model.zero_grad(set_to_none=True);
-                if network_options and network_options.get('contrastive',False):
-                    model_output, _ = model(*inputs)
+                if network_options and network_options.get('use_contrastive',False):
+                    if network_options.get('use_contrastive_domain',False):
+                        model_output, _, _ = model(*inputs)
+                    else:
+                        model_output, _ = model(*inputs)
                 else:
                     model_output = model(*inputs)
                     
@@ -638,7 +655,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## create adversarial testing fgsm features and evaluate the model
                 if eval_fgsm:
-                    if network_options and network_options.get('contrastive',False):
+                    if network_options and network_options.get('use_contrastive',False):
                         loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                     else:
                         loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);                        
@@ -665,13 +682,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 if loss_func != None:
                     if eval_fgsm:
-                        if network_options and network_options.get('contrastive',False):
-                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
+                        if network_options and network_options.get('use_contrastive',False):
+                            loss, loss_cat, loss_reg, loss_domain, loss_fgsm, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat,model_output_cat_da);
                         else:
                             loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_fgsm,model_output_cat);
                             
                     else:
-                        if network_options and network_options.get('contrastive',False):
+                        if network_options and network_options.get('use_contrastive',False):
                             loss, loss_cat, loss_reg, loss_domain, loss_fgsm, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                         else:
                             loss, loss_cat, loss_reg, loss_domain, loss_fgsm = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);      
