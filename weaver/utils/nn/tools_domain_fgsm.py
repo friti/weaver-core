@@ -667,7 +667,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         torch.set_grad_enabled(False);
                         inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     model.zero_grad(set_to_none=True)
-                    model_output_fgsm = model(*inputs_fgsm)
+                    if network_options and network_options.get('use_contrastive',False):
+                         if network_options.get('use_contrastive_domain',False):
+                             model_output_fgsm, _, _ = model(*inputs_fgsm);
+                         else:
+                             model_output_fgsm, _ = model(*inputs_fgsm);
+                    else:
+                        model_output_fgsm = model(*inputs_fgsm);
                     model_output_fgsm = model_output_fgsm[:,:num_labels];
                     model_output_fgsm = _flatten_preds(model_output_fgsm,None);
                     model_output_fgsm = model_output_fgsm[index_cat].squeeze().float();

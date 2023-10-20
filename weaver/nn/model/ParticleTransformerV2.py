@@ -619,7 +619,7 @@ class ParticleTransformer(nn.Module):
                     )
                     in_dim = out_dim
                 fcs_contrastive_da.append(nn.Linear(in_dim,in_dim));
-                self.fc_contrastive_da = nn.Sequential(*fcs_contrastive);
+                self.fc_contrastive_da = nn.Sequential(*fcs_contrastive_da);
             else:
                 self.fc_contrastive_da = None;
             ## standard domain layers
