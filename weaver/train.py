@@ -742,7 +742,7 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
             output['score_' + label_name] = scores[:,idx]
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
-    elif args.weaver_mode == "classregdomain":
+    elif args.weaver_mode == "classregdomain" or args.weaver_mode == "classregdomainfgsm":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
             output['score_' + label_name] = scores[:,idx]
