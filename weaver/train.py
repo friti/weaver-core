@@ -729,17 +729,25 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
     from utils.data.fileio import _write_root
     output = {}
 
-    ### save classification nodes
-    if "class" in args.weaver_mode:
+    if args.weaver_mode == "class":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
             output['score_' + label_name] = scores[:,idx]
-    ### save regression nodes
-    if "reg" in args.weaver_mode:
+    elif args.weaver_mode == "reg":
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:,idx]
-    ### save domain nodes
-    if "domain" in args.weaver_mode:
+    elif args.weaver_mode == "classreg":
+        for idx, label_name in enumerate(data_config.label_value):
+            output[label_name] = (labels[data_config.label_names[0]] == idx)
+            output['score_' + label_name] = scores[:,idx]
+        for idx, target_name in enumerate(data_config.target_value):
+            output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
+    elif args.weaver_mode == "classregdomain":
+        for idx, label_name in enumerate(data_config.label_value):
+            output[label_name] = (labels[data_config.label_names[0]] == idx)
+            output['score_' + label_name] = scores[:,idx]
+        for idx, target_name in enumerate(data_config.target_value):
+            output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
         if type(data_config.label_domain_value) == dict:
             for idx, (k,v) in enumerate(data_config.label_domain_value.items()):
                 for idy, label_name in enumerate(v):
@@ -748,7 +756,12 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
         else:
             for idx, label_name in enumerate(data_config.label_domain_value):
                 output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
-                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]
+                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]    
+
+    else:
+        _logger.warning("Weaver mode not recognized when saving output file --> abort")
+        sys.exit(0);
+
     ### save fgsm scores
     if  scores_fgsm.any():
         for idx, label_name in enumerate(data_config.label_value):
