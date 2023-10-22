@@ -601,12 +601,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 model.zero_grad(set_to_none=True);
                 if network_options and network_options.get('use_contrastive',False):
                     if network_options.get('use_contrastive_domain',False):
+                        print("model contrastive DA evaluation")
                         model_output, _, _ = model(*inputs)
                     else:
-                        model_output, _ = model(*inputs)
-                else:
+                        print("model contrastive evaluation")
+                        model_output, _ = model(*inputs)                        
+                else:                    
                     model_output = model(*inputs)
-                print(model_output.shape," ",num_labels)
                 model_output_cat = model_output[:,:num_labels]
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]

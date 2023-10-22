@@ -752,7 +752,8 @@ class ParticleTransformer(nn.Module):
                 return output, output_cont, output_cont_da;
             elif self.fc_contrastive is not None:
                 output_cont = self.fc_contrastive(x_cls);
-                return output, output_cont;
+                print(output.shape," ",output_cont.shape);
+                return output, output_cont;            
             else:
                 return output
 
