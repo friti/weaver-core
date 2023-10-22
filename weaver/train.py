@@ -969,7 +969,7 @@ def _main(args):
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb,
                       eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm, frac_fgsm=args.frac_fgsm, frac_batch_fgsm=args.frac_batch_fgsm, network_option=args.network_option);
             else:
-                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
+                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option);
                 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -985,7 +985,7 @@ def _main(args):
             if "fgsm" in args.weaver_mode:                
                 val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb, network_option=args.network_option)
             else:
-                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb)
+                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb,  network_option=args.network_option)
                 
             is_best_epoch = (val_metric < best_val_metric) if "reg" in args.weaver_mode else (val_metric > best_val_metric)
 
@@ -1040,7 +1040,7 @@ def _main(args):
                         model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, eval_fgsm=args.eval_fgsm, network_option=args.network_option)
                 else:
                     test_metric, scores, labels, targets, labels_domain, observers = evaluate(
-                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb)
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, network_option=args.network_option)
             _logger.info('Test metric %.5f' % test_metric, color='bold')
 
             if args.predict_output and scores.ndim:
