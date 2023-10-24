@@ -496,15 +496,15 @@ class ParticleTransformer(nn.Module):
                  cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
                  # dense layers
                  fc_params=[],
-                 fc_domain_params=[],
+                 fc_da_params=[],
                  fc_contrastive_params=[],
                  activation='gelu',
                  # misc
                  trim=True,
                  for_inference=False,
                  use_amp=False,
-                 split_domain_outputs=False,
-                 split_reg_outputs=False,
+                 split_da=False,
+                 split_reg=False,
                  use_contrastive_domain=False,
                  alpha_grad=1,
                  **kwargs) -> None:
@@ -520,8 +520,8 @@ class ParticleTransformer(nn.Module):
         self.fc_domain = None;
         self.fc_contrastive = None;
         self.fc_contrastive_da = None;
-        self.split_domain_outputs = split_domain_outputs;
-        self.split_reg_outputs = split_reg_outputs;
+        self.split_da = split_da;
+        self.split_reg = split_reg;
         self.save_grad_inputs = False;
         self.use_contrastive_domain = use_contrastive_domain;
         
@@ -566,7 +566,7 @@ class ParticleTransformer(nn.Module):
                     nn.GELU() if activation == 'gelu' else nn.ReLU(),
                     nn.Dropout(drop_rate))
                 )
-                if self.split_reg_outputs:
+                if self.split_reg:
                     fcs_reg.append(nn.Sequential(
                         nn.Linear(in_dim, out_dim),
                         nn.BatchNorm1d(out_dim),
@@ -574,7 +574,7 @@ class ParticleTransformer(nn.Module):
                         nn.Dropout(drop_rate))
                     )                    
                 in_dim = out_dim
-            if self.split_reg_outputs:
+            if self.split_reg:
                 fcs.append(nn.Linear(in_dim, num_classes))
                 fcs_reg.append(nn.Linear(in_dim, num_targets))
                 self.fc = nn.Sequential(*fcs)
@@ -623,16 +623,16 @@ class ParticleTransformer(nn.Module):
             else:
                 self.fc_contrastive_da = None;
             ## standard domain layers
-            if not self.split_domain_outputs:
+            if not self.split_da:
                 num_domain = sum(element for element in self.num_domains);
                 fcs_domain = []
                 fcs_domain.append(GradientReverse(self.alpha_grad));
-                for idx, layer_param in enumerate(fc_domain_params):
+                for idx, layer_param in enumerate(fc_da_params):
                     channels, drop_rate = layer_param
                     if idx == 0:
                         in_chn = embed_dim
                     else:
-                        in_chn = fc_domain_params[idx - 1][0]
+                        in_chn = fc_da_params[idx - 1][0]
                     fcs_domain.append(
                         nn.Sequential(
                             nn.Linear(in_chn, channels),
@@ -641,18 +641,18 @@ class ParticleTransformer(nn.Module):
                             nn.Dropout(drop_rate)
                         )
                     )
-                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_domain))
+                fcs_domain.append(nn.Linear(fc_da_params[-1][0], num_domain))
                 self.fc_domain = nn.Sequential(*fcs_domain)
             else:
                 for idd,dom in enumerate(self.num_domains):
                     fcs_domain = [];
                     fcs_domain.append(GradientReverse(self.alpha_grad));
-                    for idx, layer_param in enumerate(fc_domain_params):
+                    for idx, layer_param in enumerate(fc_da_params):
                         channels, drop_rate = layer_param
                         if idx == 0:
                             in_chn = embed_dim
                         else:
-                            in_chn = fc_domain_params[idx - 1][0]
+                            in_chn = fc_da_params[idx - 1][0]
                         
                         fcs_domain.append(nn.Sequential(
                             nn.Linear(in_chn, channels),
@@ -661,7 +661,7 @@ class ParticleTransformer(nn.Module):
                             nn.Dropout(drop_rate))
                         )
 
-                    fcs_domain.append(nn.Linear(fc_domain_params[-1][0],dom))
+                    fcs_domain.append(nn.Linear(fc_da_params[-1][0],dom))
                     if self.fc_domain is None:
                         self.fc_domain = nn.ModuleList([nn.Sequential(*fcs_domain)]);
                     else:
@@ -713,7 +713,7 @@ class ParticleTransformer(nn.Module):
                 return x_cls
 
             ### classification and regression output
-            if self.split_reg_outputs:
+            if self.split_reg:
                 output = self.fc(x_cls)
                 output_reg = self.fc_reg(x_cls)
             else:
@@ -724,7 +724,7 @@ class ParticleTransformer(nn.Module):
                 if self.num_classes and not self.num_targets:
                     output = torch.softmax(output, dim=1)                    
                 elif self.num_classes and self.num_targets:
-                    if self.split_reg_outputs:
+                    if self.split_reg:
                         output_class = torch.softmax(output,dim=1);
                         output = torch.cat((output_class,output_reg),dim=1);
                     else:
@@ -732,14 +732,14 @@ class ParticleTransformer(nn.Module):
                         output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
                         output = torch.cat((output_class,output_reg),dim=1);
             elif self.num_domains and self.fc_domain:
-                if not self.split_domain_outputs:
+                if not self.split_da:
                     output_domain = self.fc_domain(x_cls)
-                    if self.split_reg_outputs:
+                    if self.split_reg:
                         output = torch.cat((output,output_reg,output_domain),dim=1);
                     else:
                         output = torch.cat((output,output_domain),dim=1);
                 else:
-                    if self.split_reg_outputs:
+                    if self.split_reg:
                         output = torch.cat((output,output_reg),dim=1);
                     for i,fc in enumerate(self.fc_domain):
                         output_domain = fc(x_cls);
@@ -784,7 +784,7 @@ class ParticleTransformerTagger(nn.Module):
                  cls_block_params={'dropout': 0, 'attn_dropout': 0, 'activation_dropout': 0},
                  # final fully connected layers
                  fc_params=[],
-                 fc_domain_params=[],
+                 fc_da_params=[],
                  fc_contrastive_params=[],
                  activation='gelu',
                  # misc
@@ -792,8 +792,8 @@ class ParticleTransformerTagger(nn.Module):
                  for_inference=False,
                  use_amp=False,
                  # options for splitting domain and regression outputs
-                 split_domain_outputs=False,
-                 split_reg_outputs=False,
+                 split_da=False,
+                 split_reg=False,
                  use_contrastive_domain=False,
                  # save gradiantes for attack
                  save_grad_inputs=False,
@@ -832,7 +832,7 @@ class ParticleTransformerTagger(nn.Module):
             cls_block_params=cls_block_params,
             ## dense layers
             fc_params=fc_params,
-            fc_domain_params=fc_domain_params,
+            fc_da_params=fc_da_params,
             fc_contrastive_params=fc_contrastive_params,
             activation=activation,
             ## misc
@@ -840,8 +840,8 @@ class ParticleTransformerTagger(nn.Module):
             for_inference=for_inference,
             use_amp=self.use_amp,
             ## domain and contrastive
-            split_domain_outputs=split_domain_outputs,
-            split_reg_outputs=split_reg_outputs,
+            split_da=split_da,
+            split_reg=split_reg,
             use_contrastive_domain=use_contrastive_domain,
             alpha_grad=alpha_grad
         )
