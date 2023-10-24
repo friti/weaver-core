@@ -795,7 +795,7 @@ class ParticleTransformerTagger(nn.Module):
                  split_domain_outputs=False,
                  split_reg_outputs=False,
                  use_contrastive_domain=False,
-                 # save gradiantes for fgsm
+                 # save gradiantes for attack
                  save_grad_inputs=False,
                  alpha_grad=1,
                  **kwargs) -> None:

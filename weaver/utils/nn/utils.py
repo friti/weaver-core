@@ -33,18 +33,6 @@ def fgsm_attack(data: torch.Tensor,
 
     maxd = eps_max;
     mind = eps_min;
-    ## if there are infinite values, take max and min from data batch
-    index_inf_min = (eps_min == float("Inf")).nonzero().squeeze();
-    index_inf_max = (eps_max == float("Inf")).nonzero().squeeze();
-    if index_inf_min.count_nonzero() and index_inf_max.count_nonzero():
-        maxtmp, _ = torch.max(data,dim=2);
-        mintmp, _ = torch.min(data,dim=2);
-        maxtmp, _ = torch.max(maxtmp,dim=0);
-        mintmp, _ = torch.max(mintmp,dim=0);
-        maxd[index_inf_max] = maxtmp;
-        mind[index_inf_min] = mintmp;
-
-    ## build the final fgsm inputs
     maxd = maxd.unsqueeze(0).unsqueeze(2)
     mind = mind.unsqueeze(0).unsqueeze(2)
     maxd = torch.repeat_interleave(maxd,data.size(dim=0),dim=0);
@@ -55,7 +43,7 @@ def fgsm_attack(data: torch.Tensor,
     return output
 
 
-@torch.jit.script
+#@torch.jit.script
 def fngm_attack(data: torch.Tensor,
                 data_grad: torch.Tensor,
                 eps_fgsm: float,
@@ -65,18 +53,6 @@ def fngm_attack(data: torch.Tensor,
 
     maxd = eps_max;
     mind = eps_min;
-    ## if there are infinite values, take max and min from data batch
-    index_inf_min = (eps_min == float("Inf")).nonzero().squeeze();
-    index_inf_max = (eps_max == float("Inf")).nonzero().squeeze();
-    if index_inf_min.count_nonzero() and index_inf_max.count_nonzero():
-        maxtmp, _ = torch.max(data,dim=2);
-        mintmp, _ = torch.min(data,dim=2);
-        maxtmp, _ = torch.max(maxtmp,dim=0);
-        mintmp, _ = torch.max(mintmp,dim=0);
-        maxd[index_inf_max] = maxtmp;
-        mind[index_inf_min] = mintmp;
-
-    ## build the final fgsm inputs
     maxd = maxd.unsqueeze(0).unsqueeze(2)
     mind = mind.unsqueeze(0).unsqueeze(2)
     maxd = torch.repeat_interleave(maxd,data.size(dim=0),dim=0);

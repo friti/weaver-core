@@ -15,9 +15,9 @@ from utils.dataset import SimpleIterDataset
 from utils.import_tools import import_module
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classregdomain','preprocess','classregdomainfgsm'],  # TODO: add more  
+parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classregdomain','preprocess','classregdomainattack'],  # TODO: add more  
                     help='class: classification task, reg: regression task, classreg: classification+regression,' 
-                    'classregdomain: classification+regression with domain adversarial, classregdomainfgsm: class+reg+domain+fgsm adversarial,'
+                    'classregdomain: classification+regression with domain adversarial, classregdomainattack: class+reg+domain+attack adversarial,'
                     'preprocess: only run re-weight step and produce the new yaml file'
                 )
 parser.add_argument('-c', '--data-config', type=str, default='',
@@ -155,16 +155,16 @@ parser.add_argument('--max-resample', type=int, default=10,
                     help='re-sampling factor for classification/regression events')
 parser.add_argument('--predict', action='store_true', default=False,                    
                     help='run prediction instead of training')
-parser.add_argument('--eps-fgsm', type=float, default=None,                    
-                    help='value of the epsilon parameter in FGSM')
-parser.add_argument('--frac-fgsm', type=float, default=None,                    
-                    help='fraction of batches for FGSM')
-parser.add_argument('--frac-batch-fgsm', type=float, default=0.5,                    
-                    help='when FGSM is enabled (via frac-fgsm), fraction of batch events dedidcate to it')
-parser.add_argument('--epoch-start-fgsm', type=int, default=0,                    
-                    help='Epoch from which start the FGSM attack')
-parser.add_argument('--eval-fgsm', action='store_true', default=False,
-                    help='Add FGSM varied scores in the output files')
+parser.add_argument('--eps-attack', type=float, default=None,                    
+                    help='value of the epsilon parameter in adv attack')
+parser.add_argument('--frac-attack', type=float, default=None,                    
+                    help='fraction of batches for adv attack')
+parser.add_argument('--frac-batch-attack', type=float, default=0.5,                    
+                    help='when adv attack is enabled, fraction of batch events dedidcate to it')
+parser.add_argument('--epoch-start-attack', type=int, default=0,                    
+                    help='Epoch from which start the adv attack')
+parser.add_argument('--eval-attack', action='store_true', default=False,
+                    help='Add adv attack varied scores in the output files')
 parser.add_argument('--predict-output', type=str,
                     help='path to save the prediction output, support `.root` and `.parquet` format')
 parser.add_argument('--export-onnx', type=str, default=None,
@@ -717,7 +717,7 @@ def iotest(args, data_loader):
         _logger.info('Monitor info written to %s' % monitor_output_path)
 
 
-def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_fgsm=np.array([])):
+def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_attack=np.array([])):
     """
     Saves as .root
     :param data_config:
@@ -742,7 +742,7 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
             output['score_' + label_name] = scores[:,idx]
         for idx, target_name in enumerate(data_config.target_value):
             output['score_' + target_name] = scores[:,len(data_config.label_value)+idx]
-    elif args.weaver_mode == "classregdomain" or args.weaver_mode == "classregdomainfgsm":
+    elif args.weaver_mode == "classregdomain" or args.weaver_mode == "classregdomainattack":
         for idx, label_name in enumerate(data_config.label_value):
             output[label_name] = (labels[data_config.label_names[0]] == idx)
             output['score_' + label_name] = scores[:,idx]
@@ -762,10 +762,10 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
         _logger.warning("Weaver mode not recognized when saving output file --> abort")
         sys.exit(0);
 
-    ### save fgsm scores
-    if  scores_fgsm.any():
+    ### save adv attack scores
+    if  scores_attack.any():
         for idx, label_name in enumerate(data_config.label_value):
-            output['score_' + label_name + "_fgsm"] = scores_fgsm[:,idx]
+            output['score_' + label_name + "_attack"] = scores_attack[:,idx]
 
     ## break if nothing appears in the output
     if not output:
@@ -855,11 +855,11 @@ def _main(args):
         from utils.nn.tools_domain import train_classreg as train
         from utils.nn.tools_domain import evaluate_classreg as evaluate
         from utils.nn.tools_domain import evaluate_onnx_classreg as evaluate_onnx
-    elif args.weaver_mode == "classregdomainfgsm":
-        _logger.info('Running in combined regression + classification mode with domain adaptation and FGSM')
-        from utils.nn.tools_domain_fgsm import train_classreg as train
-        from utils.nn.tools_domain_fgsm import evaluate_classreg as evaluate
-        from utils.nn.tools_domain_fgsm import evaluate_onnx_classreg as evaluate_onnx
+    elif args.weaver_mode == "classregdomainattack":
+        _logger.info('Running in combined regression + classification mode with domain adaptation and attack')
+        from utils.nn.tools_domain_attack import train_classreg as train
+        from utils.nn.tools_domain_attack import evaluate_classreg as evaluate
+        from utils.nn.tools_domain_attack import evaluate_onnx_classreg as evaluate_onnx
 
     # training/testing mode
     training_mode = not args.predict
@@ -965,9 +965,10 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
-            if "fgsm" in args.weaver_mode:
+            if "attack" in args.weaver_mode:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb,
-                      eps_fgsm=args.eps_fgsm, epoch_start_fgsm=args.epoch_start_fgsm, frac_fgsm=args.frac_fgsm, frac_batch_fgsm=args.frac_batch_fgsm, network_option=args.network_option);
+                      network_option=args.network_option,
+                      eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack, frac_batch_attack=args.frac_batch_attack);
             else:
                 train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option);
                 
@@ -982,8 +983,9 @@ def _main(args):
                 
                 _logger.info('Epoch #%d validating' % epoch)
 
-            if "fgsm" in args.weaver_mode:                
-                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb, network_option=args.network_option)
+            if "attack" in args.weaver_mode:                
+                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb,
+                                      network_option=args.network_option, eval_attack=args.eval_attack, eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack)
             else:
                 val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb,  network_option=args.network_option)
                 
@@ -1035,9 +1037,10 @@ def _main(args):
                 test_metric, scores, labels, targets, labels_domain, observers = evaluate_onnx(
                     args.model_prefix, test_loader)
             else:
-                if args.eval_fgsm:
-                    test_metric, scores, labels, targets, labels_domain, observers, scores_fgsm = evaluate(
-                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, eps_fgsm=args.eps_fgsm, eval_fgsm=args.eval_fgsm, network_option=args.network_option)
+                if args.eval_attack:
+                    test_metric, scores, labels, targets, labels_domain, observers, scores_attack = evaluate(
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb,
+                        eps_attack=args.eps_attack, eval_attack=args.eval_attack, network_option=args.network_option)
                 else:
                     test_metric, scores, labels, targets, labels_domain, observers = evaluate(
                         model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, network_option=args.network_option)
@@ -1058,8 +1061,8 @@ def _main(args):
                     output_path = base + '_' + name + ext
 
                 if output_path.endswith('.root'):
-                    if args.eval_fgsm:
-                        save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_fgsm)
+                    if args.eval_attack:
+                        save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_attack)
                     else:
                         save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers)
                 else:

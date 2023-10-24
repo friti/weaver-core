@@ -742,7 +742,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_fgsm=None, eps_fgsm=None, network_option=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_attack=None, eps_attack=None, network_option=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
@@ -759,9 +759,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0;
     inputs, label, target,  model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None;
-    inputs_grad_sign, inputs_fgsm, model_output_fgsm, network_option = None, None, None, None;
-    num_batches_fgsm, total_fgsm_loss, count_fgsm, residual_fgsm, sum_residual_fgsm = 0, 0, 0, 0, 0;
-    scores_cat, scores_reg, scores_fgsm = [], [];
+    inputs_grad_sign, inputs_attack, model_output_attack, network_option = None, None, None, None;
+    num_batches_attack, total_attack_loss, count_attack, residual_attack, sum_residual_attack = 0, 0, 0, 0, 0;
+    scores_cat, scores_reg, scores_attack = [], [];
     labels, targets, labels_domain, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
     start_time = time.time()
 
@@ -771,12 +771,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if network_option:
         network_options = {k: ast.literal_eval(v) for k, v in network_option}
 
-    ### epsilons for FGSM                                                                                                                                                                   
+    ### epsilons for Attack                                                                                                                                                                   
     input_eps_min = [];
     input_eps_max = [];
     for keys, vars in data_config.input_dicts.items():
-        input_eps_min.append(torch.Tensor([data_config.preprocess_params[var]['eps_min'] if data_config.preprocess_params[var]['center'] is not None else float("Inf") for var in vars]));
-        input_eps_max.append(torch.Tensor([data_config.preprocess_params[var]['eps_max'] if data_config.preprocess_params[var]['center'] is not None else float("Inf") for var in vars]));
+        input_eps_min.append(torch.Tensor([data_config.preprocess_params[var]['eps_min'] if data_config.preprocess_params[var]['eps_min'] is not None else float(0.) for var in vars]));
+        input_eps_max.append(torch.Tensor([data_config.preprocess_params[var]['eps_max'] if data_config.preprocess_params[var]['eps_max'] is not None else float(0.) for var in vars]));
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
@@ -813,9 +813,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                             observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
                             
                 ### evaluate model
-                num_fgsm_examples = 0;
-                if eval_fgsm:
-                    num_fgsm_examples = max(label_cat.shape[0],target.shape[0]);                    
+                num_attack_examples = 0;
+                if eval_attack:
+                    num_attack_examples = max(label_cat.shape[0],target.shape[0]);                    
                     torch.set_grad_enabled(True);
                     for idx,element in enumerate(inputs):        
                         element.requires_grad = True;
@@ -845,24 +845,24 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     else:
                         scores_reg.append(torch.zeros(num_examples).cpu().numpy().astype(dtype=np.float32));                        
 
-                ## create adversarial testing fgsm features and evaluate the model
-                if eval_fgsm:
+                ## create adversarial testing attack features and evaluate the model
+                if eval_attack:
                     loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target);
                     loss.backward();
                     ## produce gradient signs and features                                                                                                                                                      
                     if network_options and network_options.get('use_norm_gradient',False):
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         torch.set_grad_enabled(False);
-			inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+			inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     else:
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         torch.set_grad_enabled(False);
-                        inputs_fgsm = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_fgsm,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     model.zero_grad(set_to_none=True)
-                    model_output_fgsm = model(*inputs_fgsm)
-                    model_output_fgsm = model_output_fgsm[:,:num_labels];
-                    model_output_fgsm = _flatten_preds(model_output_fgsm,None).squeeze().float();
-                    scores_fgsm.append(torch.softmax(model_output_fgsm,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
+                    model_output_attack = model(*inputs_attack)
+                    model_output_attack = model_output_attack[:,:num_labels];
+                    model_output_attack = _flatten_preds(model_output_attack,None).squeeze().float();
+                    scores_attack.append(torch.softmax(model_output_attack,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
                     
                 ### evaluate loss function
                 if loss_func != None:
@@ -897,25 +897,25 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     sum_sqr_err += sqr_err
                     
                 ## fast gradient attack loss residual w.r.t. nominal
-                residual_fgsm = 0;
-                if eval_fgsm:
-                    num_batches_fgsm += 1;
-                    model_output_fgsm = model_output_fgsm.detach();
-                    if (torch.is_tensor(label) and torch.is_tensor(model_output_cat) and torch.is_tensor(model_output_fgsm) and 
-                        np.iterable(label) and np.iterable(model_output_fgsm) and np.iterable(model_output_cat)):
-                        if model_output_cat.shape == model_output_fgsm.shape:
-                            count_fgsm += num_fgsm_examples;
+                residual_attack = 0;
+                if eval_attack:
+                    num_batches_attack += 1;
+                    model_output_attack = model_output_attack.detach();
+                    if (torch.is_tensor(label) and torch.is_tensor(model_output_cat) and torch.is_tensor(model_output_attack) and 
+                        np.iterable(label) and np.iterable(model_output_attack) and np.iterable(model_output_cat)):
+                        if model_output_cat.shape == model_output_attack.shape:
+                            count_attack += num_attack_examples;
                             if network_options and network_options.get('select_label',False):
-                                residual_fgsm = torch.nn.functional.mse_loss(
-                                    input=torch.softmax(model_output_fgsm,dim=1).gather(1,label.view(-1,1)),
+                                residual_attack = torch.nn.functional.mse_loss(
+                                    input=torch.softmax(model_output_attack,dim=1).gather(1,label.view(-1,1)),
                                     target=torch.softmax(model_output_cat,dim=1).gather(1,label.view(-1,1)),
                                     reduction='sum');
                             else:
-                                residual_fgsm = torch.nn.functional.kl_div(
-                                    input=torch.log_softmax(model_output_fgsm,dim=1),
+                                residual_attack = torch.nn.functional.kl_div(
+                                    input=torch.log_softmax(model_output_attack,dim=1),
                                     target=torch.softmax(model_output_cat,dim=1),
-                                    reduction='sum')/model_output_fgsm.size(dim=1);
-                            sum_residual_fgsm += residual_fgsm;
+                                    reduction='sum')/model_output_attack.size(dim=1);
+                            sum_residual_attack += residual_attack;
     
                 ### monitor results
                 tq.set_postfix({
@@ -925,8 +925,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     'AvgAcc': '%.5f' % (total_correct / count),
                     'MSE': '%.5f' % (sqr_err / num_examples),
                     'AvgMSE': '%.5f' % (sum_sqr_err / count),
-                    'FGSM':  '%.5f' % (residual_fgsm / num_fgsm_examples if num_fgsm_examples else 0),
-                    'AvgFGSM': '%.5f' % (sum_residual_fgsm / count_fgsm if count_fgsm else 0)
+                    'Attack':  '%.5f' % (residual_attack / num_attack_examples if num_attack_examples else 0),
+                    'AvgAttack': '%.5f' % (sum_residual_attack / count_attack if count_attack else 0)
                 })
 
                 if tb_helper:
@@ -946,7 +946,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     _logger.info('Eval AvgLoss Reg: %.5f'% (total_reg_loss / num_batches))
     _logger.info('Eval AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Eval AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
-    _logger.info('Eval AvgFGSM FGSM: %.5f'%(sum_residual_fgsm / count_fgsm if count_fgsm else 0))    
+    _logger.info('Eval AvgAttack: %.5f'%(sum_residual_attack / count_attack if count_attack else 0))    
     _logger.info('Eval class distribution: \n    %s', str(sorted(label_cat_counter.items())))
 
     if tb_helper:
@@ -957,7 +957,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ("Loss Reg/%s (epoch)"%(tb_mode), total_reg_loss / num_batches, epoch),
             ("AccCat/%s (epoch)"%(tb_mode), total_cat_correct / count_cat if count_cat else 0, epoch),
             ("MSE/%s (epoch)"%(tb_mode), sum_sqr_err / count_cat if count_cat else 0, epoch),
-            ("FGSM/train FGSM (epoch)", sum_residual_fgsm / count_fgsm if count_fgsm else 0, epoch),            
+            ("Attack/train (epoch)", sum_residual_fgsm / count_fgsm if count_fgsm else 0, epoch),            
         ])
         if tb_helper.custom_fn:
             with torch.no_grad():
