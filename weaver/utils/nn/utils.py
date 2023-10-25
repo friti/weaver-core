@@ -43,7 +43,7 @@ def fgsm_attack(data: torch.Tensor,
     return output
 
 
-#@torch.jit.script
+@torch.jit.script
 def fngm_attack(data: torch.Tensor,
                 data_grad: torch.Tensor,
                 eps_fgsm: float,
