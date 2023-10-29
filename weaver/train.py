@@ -20,22 +20,20 @@ parser.add_argument('--weaver-mode', type=str, default='class', choices=['class'
                     'classregdomain: classification+regression with domain adversarial, classregdomainattack: class+reg+domain+attack adversarial,'
                     'preprocess: only run re-weight step and produce the new yaml file'
                 )
-parser.add_argument('-c', '--data-config', type=str, default='',
-                    help='data config YAML file')
+parser.add_argument('--data-config', type=str, default='', help='data config YAML file')
 parser.add_argument('--extra-selection', type=str, default=None,
                     help='Additional selection requirement, will modify `selection` to `(selection) & (extra)` on-the-fly')
 parser.add_argument('--extra-test-selection', type=str, default=None,
                     help='Additional test-time selection requirement, will modify `test_time_selection` to `(test_time_selection) & (extra)` on-the-fly')
-parser.add_argument('-i', '--data-train', nargs='*', default=[],
+parser.add_argument('--data-train', nargs='*', default=[],
                     help='training files; supported syntax:'
                          ' (a) plain list, `--data-train /path/to/a/* /path/to/b/*`;'
                          ' (b) (named) groups [Recommended], `--data-train a:/path/to/a/* b:/path/to/b/*`,'
                          ' the file splitting (for each dataloader worker) will be performed per group,'
                          ' and then mixed together, to ensure a uniform mixing from all groups for each worker.'
                     )
-parser.add_argument('-l', '--data-val', nargs='*', default=[],
-                    help='validation files; when not set, will use training files and split by `--train-val-split`')
-parser.add_argument('-t', '--data-test', nargs='*', default=[],
+parser.add_argument('--data-val', nargs='*', default=[], help='validation files; when not set, will use training files and split by `--train-val-split`')
+parser.add_argument('--data-test', nargs='*', default=[],
                     help='testing files; supported syntax:'
                          ' (a) plain list, `--data-test /path/to/a/* /path/to/b/*`;'
                          ' (b) keyword-based, `--data-test a:/path/to/a/* b:/path/to/b/*`, will produce output_a, output_b;'
@@ -81,11 +79,11 @@ parser.add_argument('--tensorboard', type=str, default=None,
 parser.add_argument('--tensorboard-custom-fn', type=str, default=None,
                     help='the path of the python script containing a user-specified function `get_tensorboard_custom_fn`, '
                          'to display custom information per mini-batch or per epoch, during the training, validation or test.')
-parser.add_argument('-n', '--network-config', type=str, default='',
+parser.add_argument('--network-config', type=str, default='',
                     help='network architecture configuration file; the path must be relative to the current dir')
-parser.add_argument('-o', '--network-option', nargs=2, action='append', default=[],
+parser.add_argument('--network-option', nargs=2, action='append', default=[],
                     help='options to pass to the model class constructor, e.g., `--network-option use_counts False`')
-parser.add_argument('-m', '--model-prefix', type=str, default='models/{auto}/network',
+parser.add_argument('--model-prefix', type=str, default='models/{auto}/network',
                     help='path to save or load the model; for training, this will be used as a prefix, so model snapshots '
                          'will saved to `{model_prefix}_epoch-%%d_state.pt` after each epoch, and the one with the best '
                          'validation metric to `{model_prefix}_best_epoch_state.pt`; for testing, this should be the full path '
@@ -143,8 +141,6 @@ parser.add_argument('--persistent-workers', action='store_true', default=False,
                     help='make workers persistent')
 parser.add_argument('--gpus', type=str, default='0',
                     help='device for the training/testing; to use CPU, set to empty string (""); to use multiple gpu, set it as a comma separated list, e.g., `1,2,3,4`')
-parser.add_argument('--predict-gpus', type=str, default=None,
-                    help='device for the testing; to use CPU, set to empty string (""); to use multiple gpu, set it as a comma separated list, e.g., `1,2,3,4`; if not set, use the same as `--gpus`')
 parser.add_argument('--num-workers-train', type=int, default=1,
                     help='number of threads to load the training dataset; memory consumption and disk access load increases (~linearly) with this numbers')
 parser.add_argument('--num-workers-val', type=int, default=1,
@@ -165,6 +161,8 @@ parser.add_argument('--epoch-start-attack', type=int, default=0,
                     help='Epoch from which start the adv attack')
 parser.add_argument('--eval-attack', action='store_true', default=False,
                     help='Add adv attack varied scores in the output files')
+parser.add_argument('--use-mdmm-constraints', action='store_true', default=False,
+                    help='add mdmm parameters / costraints to the optimizer parameters')
 parser.add_argument('--predict-output', type=str,
                     help='path to save the prediction output, support `.root` and `.parquet` format')
 parser.add_argument('--export-onnx', type=str, default=None,
@@ -172,8 +170,6 @@ parser.add_argument('--export-onnx', type=str, default=None,
                          'needs to set `--data-config`, `--network-config`, and `--model-prefix` (requires the full model path)')
 parser.add_argument('--onnx-opset', type=int, default=15,
                     help='ONNX opset version.')
-parser.add_argument('--io-test', action='store_true', default=False,
-                    help='test throughput of the dataloader')
 parser.add_argument('--copy-inputs', action='store_true', default=False,
                     help='copy input files to the current dir (can help to speed up dataloading when running over remote files, e.g., from EOS)')
 parser.add_argument('--log', type=str, default='',
@@ -502,8 +498,7 @@ def profile(args, model, model_info, device):
             model(*inputs)
             p.step()
 
-
-def optim(args, model, device):
+def optim(args, model, device, loss_func=None):
     """
     Optimizer and scheduler.
     :param args:
@@ -563,9 +558,18 @@ def optim(args, model, device):
     else:
         parameters = model.parameters()
 
+    ## replicating what is done in https://github.com/the-moliver/mdmm/blob/master/mdmm/mdmm.py#L154
+    if args.use_mdmm_constraints and hasattr(loss_func,'lambdas') and hasattr(loss_func,'slacks'):
+        params = parameters;
+        parameters = [
+            {'params': params, 'lr': args.start_lr},
+            {'params': loss_func.lambdas, 'lr': -args.start_lr},
+            {'params': loss_func.slacks, 'lr': args.start_lr}
+        ];
+        
     if args.optimizer == 'ranger':
         from utils.nn.optimizer.ranger import Ranger
-        opt = Ranger(parameters, lr=args.start_lr, **optimizer_options)
+        opt = Ranger(parameters, lr=args.start_lr, **optimizer_options);
     elif args.optimizer == 'adam':
         opt = torch.optim.Adam(parameters, lr=args.start_lr, **optimizer_options)
     elif args.optimizer == 'adamW':
@@ -679,16 +683,12 @@ def model_setup(args, data_config):
         missing_keys, unexpected_keys = model.load_state_dict(model_state, strict=False)
         _logger.info('Model initialized with weights from %s\n ... Missing: %s\n ... Unexpected: %s' %
                      (args.load_model_weights, missing_keys, unexpected_keys))
-    # _logger.info(model)
+
     flops(model, model_info)
     # loss function
-    try:
-        loss_func = network_module.get_loss(data_config, **network_options)
-        _logger.info('Using loss function %s with options %s' % (loss_func, network_options))
-    except AttributeError:
-        loss_func = torch.nn.CrossEntropyLoss()
-        _logger.warning('Loss function not defined in %s. Will use `torch.nn.CrossEntropyLoss()` by default.',
-                        args.network_config)
+    loss_func = network_module.get_loss(data_config, **network_options)
+    _logger.info('Using loss function %s with options %s' % (loss_func, network_options))
+
     return model, model_info, loss_func
 
 
@@ -904,11 +904,6 @@ def _main(args):
         else:
             test_loaders, data_config = test_load(args)
 
-    if args.io_test:
-        data_loader = train_loader if training_mode else list(test_loaders.values())[0]()
-        iotest(args, data_loader)
-        sys.exit(0);
-
     ## setup the model
     model, model_info, loss_func = model_setup(args, data_config)
     
@@ -935,7 +930,7 @@ def _main(args):
                 model = torch.nn.DataParallel(model, device_ids=gpus)
 
         # optimizer & learning rate
-        opt, scheduler = optim(args, model, dev)
+        opt, scheduler = optim(args, model, dev, loss_func=loss_func)
 
         # lr finder: keep it after all other setups
         if args.lr_finder is not None:
@@ -1101,9 +1096,6 @@ def main():
         args.model_prefix = args.model_prefix.replace('{auto}', model_name)
         args.log = args.log.replace('{auto}', model_name)
         print('Using auto-generated model prefix %s' % args.model_prefix)
-
-    if args.predict_gpus is None:
-        args.predict_gpus = args.gpus
 
     args.local_rank = None if args.backend is None else int(os.environ.get("LOCAL_RANK", "0"))
 
