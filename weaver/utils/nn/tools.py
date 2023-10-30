@@ -999,7 +999,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             gc.collect();
             if eval_fgsm:
                 return total_loss / num_batches, scores, labels, targets, labels_domain, observers, scores_fgsm
-            else
+            else:
                 return total_loss / num_batches, scores, labels, targets, labels_domain, observers
         else:
             gc.collect();
