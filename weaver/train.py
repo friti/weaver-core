@@ -961,11 +961,10 @@ def _main(args):
             _logger.info('Epoch #%d training' % epoch)
 
             if "attack" in args.weaver_mode:
-                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb,
-                      network_option=args.network_option,
+                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option,
                       eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack, frac_batch_attack=args.frac_batch_attack);
             else:
-                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option);
+                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
                 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -979,8 +978,8 @@ def _main(args):
                 _logger.info('Epoch #%d validating' % epoch)
 
             if "attack" in args.weaver_mode:                
-                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb,
-                                      network_option=args.network_option, eval_attack=args.eval_attack, eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack)
+                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb, network_option=args.network_option,
+                                      eval_attack=args.eval_attack, eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack)
             else:
                 val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, tb_helper=tb,  network_option=args.network_option)
                 
