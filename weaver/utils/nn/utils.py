@@ -16,7 +16,7 @@ def _flatten_label(label, mask=None):
 
 def _flatten_preds(preds, mask=None, label_axis=1):
     if preds.ndim > 2:
-        # assuming axis=1 corresponds to the classes                                                                                                                                                             
+        # assuming axis=1 corresponds to the classes                                                                                                                                             
         preds = preds.transpose(label_axis, -1).contiguous()
         preds = preds.view((-1, preds.shape[-1]))
         if mask is not None:

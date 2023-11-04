@@ -1,6 +1,7 @@
 ''' Particle Transformer (ParT)
 Paper: "Particle Transformer for Jet Tagging" - https://arxiv.org/abs/2202.03772
-1;95;0c'''
+'''
+
 import math
 import random
 import warnings
@@ -848,7 +849,7 @@ class ParticleTransformerTagger(nn.Module):
             ## domain and contrastive
             split_da=split_da,
             split_reg=split_reg,
-            flip_grad_da=flip_grad_da
+            flip_grad_da=flip_grad_da,
             use_contrastive_domain=use_contrastive_domain,
             alpha_grad=alpha_grad
         )
