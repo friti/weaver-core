@@ -359,7 +359,18 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
                 }
                 
-                            
+            ## add monitoring of the lambdas and slacks
+            if hasattr(loss_func,'lambdas') and len(loss_func.lambdas):
+                expression = "";
+                for lmbda in loss_func.lambdas:
+                    expression += '%.3f, '%(lmbda)
+                postfix['Lamdas'] = expression
+            if hasattr(loss_func,'slacks') and len(loss_func.slacks):
+                expression = "";
+                for lmbda in loss_func.slacks:
+                    expression += '%.3f, '%(lmbda)
+                postfix['Slacks'] = expression
+                
             tq.set_postfix(postfix);
                 
             if tb_helper:
