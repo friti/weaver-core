@@ -505,6 +505,7 @@ class ParticleTransformer(nn.Module):
                  use_amp=False,
                  split_da=False,
                  split_reg=False,
+                 flip_grad_da=True,
                  use_contrastive_domain=False,
                  alpha_grad=1,
                  **kwargs) -> None:
@@ -522,6 +523,7 @@ class ParticleTransformer(nn.Module):
         self.fc_contrastive_da = None;
         self.split_da = split_da;
         self.split_reg = split_reg;
+        self.flip_grad_da = flip_grad_da;
         self.save_grad_inputs = False;
         self.use_contrastive_domain = use_contrastive_domain;
         
@@ -609,7 +611,8 @@ class ParticleTransformer(nn.Module):
             fcs_contrastive_da = []
             if fc_contrastive_params and  use_contrastive_domain:
                 in_dim = embed_dim
-                fcs_contrastive_da.append(GradientReverse(self.alpha_grad));
+                if self.flip_grad_da:
+                    fcs_contrastive_da.append(GradientReverse(self.alpha_grad));
                 for out_dim, drop_rate in fc_contrastive_params:
                     fcs_contrastive_da.append(nn.Sequential(
                         nn.Linear(in_dim, out_dim),
@@ -626,7 +629,8 @@ class ParticleTransformer(nn.Module):
             if not self.split_da:
                 num_domain = sum(element for element in self.num_domains);
                 fcs_domain = []
-                fcs_domain.append(GradientReverse(self.alpha_grad));
+                if self.flip_grad_da:
+                    fcs_domain.append(GradientReverse(self.alpha_grad));
                 for idx, layer_param in enumerate(fc_da_params):
                     channels, drop_rate = layer_param
                     if idx == 0:
@@ -646,7 +650,8 @@ class ParticleTransformer(nn.Module):
             else:
                 for idd,dom in enumerate(self.num_domains):
                     fcs_domain = [];
-                    fcs_domain.append(GradientReverse(self.alpha_grad));
+                    if self.flip_grad_da:
+                        fcs_domain.append(GradientReverse(self.alpha_grad));
                     for idx, layer_param in enumerate(fc_da_params):
                         channels, drop_rate = layer_param
                         if idx == 0:
@@ -794,6 +799,7 @@ class ParticleTransformerTagger(nn.Module):
                  # options for splitting domain and regression outputs
                  split_da=False,
                  split_reg=False,
+                 flip_grad_da=True,
                  use_contrastive_domain=False,
                  # save gradiantes for attack
                  save_grad_inputs=False,
@@ -842,6 +848,7 @@ class ParticleTransformerTagger(nn.Module):
             ## domain and contrastive
             split_da=split_da,
             split_reg=split_reg,
+            flip_grad_da=flip_grad_da
             use_contrastive_domain=use_contrastive_domain,
             alpha_grad=alpha_grad
         )
