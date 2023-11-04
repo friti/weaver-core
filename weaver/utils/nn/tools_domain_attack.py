@@ -595,6 +595,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 model.save_grad_inputs = False;
                 inputs_attack = None;
                 use_attack = False;
+                torch.set_grad_enabled(False);
+                
                 if for_training:
                     rand_val = np.random.uniform(low=0,high=1);
                     if eps_attack and frac_attack and rand_val < frac_attack and epoch >= epoch_start_attack:
@@ -720,7 +722,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 if loss_cat: total_cat_loss += loss_cat
                 if loss_reg: total_reg_loss += loss_reg
                 if loss_domain: total_domain_loss += loss_domain                
-                if loss_attack: total_attack_loss += loss_attack
 
                 ## prediction + metric for classification
                 if np.iterable(label_cat) and torch.is_tensor(label_cat) and np.iterable(model_output_cat) and torch.is_tensor(model_output_cat):
