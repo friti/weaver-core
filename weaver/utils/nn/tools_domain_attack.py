@@ -296,16 +296,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     np.iterable(label_cat) and np.iterable(model_output_attack) and np.iterable(model_output_cat)):
                     if model_output_cat.shape == model_output_attack.shape:
                         count_attack += num_attack_examples;
-                        if network_options and network_options.get('select_label',False):
-                            residual_attack = torch.nn.functional.mse_loss(
-                                input=torch.softmax(model_output_attack,dim=1).gather(1,label_cat.view(-1,1)),
-                                target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
-                                reduction='sum');
-                        else:
-                            residual_attack = torch.nn.functional.kl_div(
-                                input=torch.log_softmax(model_output_attack,dim=1),
-                                target=torch.softmax(model_output_cat,dim=1),
-                                reduction='sum')/model_output_attack.size(dim=1);
+                        residual_attack = torch.nn.functional.kl_div(
+                            input=torch.log_softmax(model_output_attack,dim=1),
+                            target=torch.softmax(model_output_cat,dim=1),
+                            reduction='sum')/model_output_attack.size(dim=1);
                         sum_residual_attack += residual_attack;
             ## single domain region
             if num_domains == 1:
@@ -340,10 +334,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     'LossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
                     'LossAttack': '%.3f' % (total_attack_loss / num_batches_attack if num_batches_attack else 0),
                     'LossCont': '%.3f' % (total_contrastive_loss / num_batches if num_batches else 0),
-                    'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
-                    'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
-                    'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
-                    'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
+                    #'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
+                    #'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
+                    #'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
+                    #'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
                 }
             else:
                 postfix = {
@@ -756,16 +750,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         np.iterable(label_cat) and np.iterable(model_output_attack) and np.iterable(model_output_cat)):
                         if model_output_cat.shape == model_output_attack.shape:
                             count_attack += num_attack_examples;
-                            if network_options and network_options.get('select_label',False):
-                                residual_attack = torch.nn.functional.mse_loss(
-                                    input=torch.softmax(model_output_attack,dim=1).gather(1,label_cat.view(-1,1)),
-                                    target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
-                                    reduction='sum');
-                            else:
-                                residual_attack = torch.nn.functional.kl_div(
-                                    input=torch.log_softmax(model_output_attack,dim=1),
-                                    target=torch.softmax(model_output_cat,dim=1),
-                                    reduction='sum')/model_output_attack.size(dim=1);
+                            residual_attack = torch.nn.functional.mse_loss(
+                                input=torch.softmax(model_output_attack,dim=1).gather(1,label_cat.view(-1,1)),
+                                target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
+                                reduction='sum');
                             sum_residual_attack += residual_attack;
                 ## single domain region                                                                                                                                                          
                 if num_domains == 1:

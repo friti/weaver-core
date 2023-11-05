@@ -905,16 +905,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         np.iterable(label) and np.iterable(model_output_attack) and np.iterable(model_output_cat)):
                         if model_output_cat.shape == model_output_attack.shape:
                             count_attack += num_attack_examples;
-                            if network_options and network_options.get('select_label',False):
-                                residual_attack = torch.nn.functional.mse_loss(
-                                    input=torch.softmax(model_output_attack,dim=1).gather(1,label.view(-1,1)),
-                                    target=torch.softmax(model_output_cat,dim=1).gather(1,label.view(-1,1)),
-                                    reduction='sum');
-                            else:
-                                residual_attack = torch.nn.functional.kl_div(
-                                    input=torch.log_softmax(model_output_attack,dim=1),
-                                    target=torch.softmax(model_output_cat,dim=1),
-                                    reduction='sum')/model_output_attack.size(dim=1);
+                            residual_attack = torch.nn.functional.kl_div(
+                                input=torch.log_softmax(model_output_attack,dim=1),
+                                target=torch.softmax(model_output_cat,dim=1),
+                                reduction='sum')/model_output_attack.size(dim=1);
                             sum_residual_attack += residual_attack;
     
                 ### monitor results
