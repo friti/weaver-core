@@ -295,11 +295,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     np.iterable(label_cat) and np.iterable(model_output_attack) and np.iterable(model_output_cat)):
                     if model_output_cat.shape == model_output_attack.shape:
                         count_attack += num_attack_examples;
-                        residual_attack = torch.nn.functional.kl_div(
-                            input=torch.log_softmax(model_output_attack,dim=1),
-                            target=torch.softmax(model_output_cat,dim=1),
-                            reduction='sum')/model_output_attack.size(dim=1);
-                        sum_residual_attack += residual_attack;
+                        if network_options and network_options.get('use_mmd_loss',False):
+                            residual_attack = loss_func.MMDLoss(model_output_cat,model_output_attack);
+                        else:
+                            residual_attack = torch.nn.functional.kl_div(
+                                input=torch.log_softmax(model_output_attack,dim=1),
+                                target=torch.softmax(model_output_cat,dim=1),
+                                reduction='sum')/model_output_attack.size(dim=1);
+                            sum_residual_attack += residual_attack;
             ## single domain region
             if num_domains == 1:
                 if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
@@ -331,12 +334,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     'LossCat': '%.3f' % (total_cat_loss / num_batches if num_batches else 0),
                     'LossReg': '%.3f' % (total_reg_loss / num_batches if num_batches else 0),
                     'LossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
-                    'LossAttack': '%.3f' % (total_attack_loss / num_batches_attack if num_batches_attack else 0),
+                    'LossAttack': '%.3f' % (total_attack_loss if num_batches_attack else 0)
                     'LossCont': '%.3f' % (total_contrastive_loss / num_batches if num_batches else 0),
                     'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
                     'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
                     'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
-                    'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
+                    'AvgAttack': '%.3f' % ((sum_residual_attack if count_attack else 0) if network_options and network_options.get('use_mmd_loss',False) else (sum_residual_attack / count_attack if count_attack else 0))
                 }
             else:
                 postfix = {
@@ -349,7 +352,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
                     'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
                     'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
-                    'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
+                    'AvgAttack': '%.3f' % ((sum_residual_attack if count_attack else 0) if network_options and network_options.get('use_mmd_loss',False) else (sum_residual_attack / count_attack if count_attack else 0))
                 }
                 
             ## add monitoring of the lambdas and slacks
@@ -397,7 +400,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     _logger.info('Train AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Train AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))        
     _logger.info('Train AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
-    _logger.info('Train AvgAttack: %.5f'%(sum_residual_attack / count_attack if count_attack else 0))    
+    _logger.info('Train AvgAttack': '%.5f' % ((sum_residual_attack if count_attack else 0) if network_options and network_options.get('use_mmd_loss',False) else (sum_residual_attack / count_attack if count_attack else 0)))
     _logger.info('Train class distribution: \n %s', str(sorted(label_cat_counter.items())))
     _logger.info('Train domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
                 
@@ -411,7 +414,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             ("AccCat/train (epoch)", total_cat_correct / count_cat if count_cat else 0, epoch),
             ("AccDomain/train (epoch)", total_domain_correct / count_domain if count_domain else 0, epoch),
             ("MSE/train (epoch)", sum_sqr_err / count_cat if count_cat else 0, epoch),            
-            ("Attack/train (epoch)", sum_residual_attack / count_attack if count_attack else 0, epoch),            
+            ("Attack/train (epoch)", ((sum_residual_attack if count_attack else 0) if network_options and network_options.get('use_mmd_loss',False) else (sum_residual_attack / count_attack if count_attack else 0)), epoch),            
         ])
         
         if tb_helper.custom_fn:
@@ -748,12 +751,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     if (torch.is_tensor(label_cat) and torch.is_tensor(model_output_cat) and torch.is_tensor(model_output_attack) and 
                         np.iterable(label_cat) and np.iterable(model_output_attack) and np.iterable(model_output_cat)):
                         if model_output_cat.shape == model_output_attack.shape:
-                            count_attack += num_attack_examples;
-                            residual_attack = torch.nn.functional.mse_loss(
-                                input=torch.softmax(model_output_attack,dim=1).gather(1,label_cat.view(-1,1)),
-                                target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
-                                reduction='sum');
-                            sum_residual_attack += residual_attack;
+                          count_attack += num_attack_examples;
+                          if network_options and network_options.get('use_mmd_loss',False):
+                              residual_attack = loss_func.MMDLoss(model_output_cat,model_output_attack);
+                          else:
+                              residual_attack = torch.nn.functional.mse_loss(
+                                  input=torch.softmax(model_output_attack,dim=1).gather(1,label_cat.view(-1,1)),
+                                  target=torch.softmax(model_output_cat,dim=1).gather(1,label_cat.view(-1,1)),
+                                  reduction='sum');
+                              sum_residual_attack += residual_attack;
                 ## single domain region                                                                                                                                                          
                 if num_domains == 1:
                     if torch.is_tensor(label_domain) and torch.is_tensor(model_output_domain) and np.iterable(label_domain) and np.iterable(model_output_domain):
@@ -787,7 +793,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
                     'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
                     'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
-                    'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
+                    'AvgAttack': '%.3f' % ((sum_residual_attack if count_attack else 0) if network_options and network_options.get('use_mmd_loss',False) else (sum_residual_attack / count_attack if\
+ count_attack else 0))
                 }
 
                 tq.set_postfix(postfix);
@@ -818,7 +825,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     _logger.info('Eval AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Eval AvgAccDomain: %.5f'%(total_domain_correct / (count_domain) if count_domain else 0))
     _logger.info('Eval AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
-    _logger.info('Eval AvgAttack Attack: %.5f'%(sum_residual_attack / count_attack if count_attack else 0))    
+    _logger.info('Eval AvgAttack': '%.5f' % ((sum_residual_attack if count_attack else 0) if network_options and network_options.get('use_mmd_loss',False) else (sum_residual_attack / count_attack if count_attack else 0)))
     _logger.info('Eval class distribution: \n    %s', str(sorted(label_cat_counter.items())))
     _logger.info('Eval domain distribution: \n %s', ' '.join([str(sorted(i.items())) for i in label_domain_counter]))
 
@@ -833,7 +840,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             ("AccCat/%s (epoch)"%(tb_mode), total_cat_correct / count_cat if count_cat else 0, epoch),
             ("AccDomain/%s (epoch)"%(tb_mode), total_domain_correct / count_domain if count_domain else 0, epoch),
             ("MSE/%s (epoch)"%(tb_mode), sum_sqr_err / count_cat if count_cat else 0, epoch),
-            ("Attack/train Attack (epoch)", sum_residual_attack / count_attack if count_attack else 0, epoch),            
+            ("Attack/train Attack (epoch)", (sum_residual_attack if count_attack else 0) if network_options and network_options.get('use_mmd_loss',False) else (sum_residual_attack / count_attack if count_attack else 0), epoch),
             ])
         if tb_helper.custom_fn:
             with torch.no_grad():
