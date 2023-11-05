@@ -270,7 +270,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             model_output_cat = model_output_cat.detach()
             model_output_reg = model_output_reg.detach()
             model_output_domain = model_output_domain.detach()
-
+            ##
             correct_cat = 0;
             sqr_err = 0;
             if torch.is_tensor(label_cat) and torch.is_tensor(model_output_cat) and np.iterable(label_cat) and np.iterable(model_output_cat):
@@ -283,7 +283,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     residual_reg = pred_reg - target;            
                     sqr_err = residual_reg.square().sum().item()
                     sum_sqr_err += sqr_err
-
             ## fast gradient attack loss residual w.r.t. nominal
             residual_attack = 0;
             if use_attack:
@@ -334,10 +333,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     'LossDom': '%.3f' % (total_domain_loss / num_batches if num_batches else 0),
                     'LossAttack': '%.3f' % (total_attack_loss / num_batches_attack if num_batches_attack else 0),
                     'LossCont': '%.3f' % (total_contrastive_loss / num_batches if num_batches else 0),
-                    #'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
-                    #'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
-                    #'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
-                    #'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
+                    'AvgAccCat': '%.3f' % (total_cat_correct / count_cat if count_cat else 0),
+                    'AvgAccDom': '%.3f' % (total_domain_correct / (count_domain) if count_domain else 0),
+                    'AvgMSE': '%.3f' % (sum_sqr_err / count_cat if count_cat else 0),
+                    'AvgAttack': '%.3f' % (sum_residual_attack / count_attack if count_attack else 0)
                 }
             else:
                 postfix = {
