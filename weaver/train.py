@@ -117,7 +117,7 @@ parser.add_argument('--lr-scheduler', type=str, default='flat+decay',
                     help='learning rate scheduler')
 parser.add_argument('--lr-epochs', type=int, default=20,
                     help='number of epochs to be considered by lr optimizer')
-parser.add_argument('--lr-epoch-to-start-decay', type=int, default=3,
+parser.add_argument('--lr-epoch-to-start-decay', type=int, default=2,
                     help='in the decay lr-scheduler start decaying the lr from this epoch, while in flat+decay or flat+linear start decay from lr-epochs-1/lr-epoch-to-start-decay')
 parser.add_argument('--lr-decay-rate', type=int, default=0.7,
                     help='used in the decay lr-scheduler')
