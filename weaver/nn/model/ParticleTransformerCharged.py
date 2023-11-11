@@ -874,8 +874,8 @@ class ParticleTransformerTagger(nn.Module):
             mask = torch.cat([pf_ch_mask, pf_neu_mask, sv_mask, lt_mask], dim=2)
             
         with torch.cuda.amp.autocast(enabled=self.use_amp):
-            pf_ch_x = self.pf_embed(pf_ch_x)  # after embed: (seq_len, batch, embed_dim)
-            pf_neu_x = self.pf_embed(pf_neu_x)  # after embed: (seq_len, batch, embed_dim)
+            pf_ch_x = self.pf_ch_embed(pf_ch_x)  # after embed: (seq_len, batch, embed_dim)
+            pf_neu_x = self.pf_neu_embed(pf_neu_x)  # after embed: (seq_len, batch, embed_dim)
             sv_x = self.sv_embed(sv_x)
             lt_x = self.lt_embed(lt_x)
             x = torch.cat([pf_ch_x, pf_neu_x, sv_x, lt_x], dim=0)
