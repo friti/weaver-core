@@ -67,7 +67,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     for keys, vars in data_config.input_dicts.items():
         input_eps_min.append(torch.Tensor([data_config.preprocess_params[var]['eps_min'] if data_config.preprocess_params[var]['eps_min'] is not None else float(0.) for var in vars]));
         input_eps_max.append(torch.Tensor([data_config.preprocess_params[var]['eps_max'] if data_config.preprocess_params[var]['eps_max'] is not None else float(0.) for var in vars]));
-
+        input_eps_min[-1] = input_eps_min[-1].to(dev,non_blocking=True);
+        input_eps_max[-1] = input_eps_max[-1].to(dev,non_blocking=True);
+                      
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
@@ -202,9 +204,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         grad_scaler.scale(loss).backward(retain_graph=True)
                     ## produce gradient signs and features
                     if network_options and network_options.get('use_norm_gradient',False):
-                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]) for idx,element in enumerate(inputs)]
                     else:
-                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]) for idx,element in enumerate(inputs)]
                     ## infere the model to get the output on Attack inputs
                     if network_options and network_options.get('use_contrastive',False):
                         if network_options.get('use_contrastive_domain',False):
@@ -507,6 +509,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     for keys, vars in data_config.input_dicts.items():
         input_eps_min.append(torch.Tensor([data_config.preprocess_params[var]['eps_min'] if data_config.preprocess_params[var]['eps_min'] is not None else float(0.) for var in vars]));
         input_eps_max.append(torch.Tensor([data_config.preprocess_params[var]['eps_max'] if data_config.preprocess_params[var]['eps_max'] is not None else float(0.) for var in vars]));
+        input_eps_min[-1] = input_eps_min[-1].to(dev,non_blocking=True);
+        input_eps_max[-1] = input_eps_max[-1].to(dev,non_blocking=True);
 
     start_time = time.time()    
     with torch.no_grad():

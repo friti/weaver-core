@@ -41,12 +41,12 @@ def fgsm_attack(data: torch.Tensor,
         maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
         mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
         mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
-        data_grad = data.grad.data.sign().detach().to(data.device,non_blocking=True);
+        data_grad = data.grad.data.sign().detach();
         output = data+data_grad*torch.normal(mean=mean,std=eps_fgsm,size=data.shape).to(data.device,non_blocking=True)*torch.full(data.shape,eps_fgsm).to(data.device,non_blocking=True)*(maxd-mind);
     return output.detach();
     
 
-#@torch.jit.script
+@torch.jit.script
 def fngm_attack(data: torch.Tensor,
                 eps_fgsm: float,
                 eps_min: torch.Tensor,
@@ -64,7 +64,7 @@ def fngm_attack(data: torch.Tensor,
         maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
         mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
         mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
-        data_grad = data.grad.data.detach().to(data.device,non_blocking=True);
+        data_grad = data.grad.data.detach();
         data_grad = data_grad.nan_to_num();
         norm = data_grad.abs().pow(power).view(data_grad.size(0),-1).sum(dim=1).pow(1./power);
         norm = torch.max(norm, torch.ones_like(norm) * 1e-12).view(-1,1,1);
