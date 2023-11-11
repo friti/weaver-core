@@ -866,8 +866,8 @@ class ParticleTransformerTagger(nn.Module):
         # v: (N, 4, P) [px,py,pz,energy]
         # mask: (N, 1, P) -- real particle = 1, padded = 0
         with torch.set_grad_enabled(self.save_grad_inputs):
-            pf_ch_x, pf_ch_v, pf_ch_mask, _ = self.pf_trimmer(pf_ch_x, pf_ch_v, pf_ch_mask)
-            pf_neu_x, pf_neu_v, pf_neu_mask, _ = self.pf_trimmer(pf_neu_x, pf_neu_v, pf_neu_mask)
+            pf_ch_x, pf_ch_v, pf_ch_mask, _ = self.pf_ch_trimmer(pf_ch_x, pf_ch_v, pf_ch_mask)
+            pf_neu_x, pf_neu_v, pf_neu_mask, _ = self.pf_neu_trimmer(pf_neu_x, pf_neu_v, pf_neu_mask)
             sv_x, sv_v, sv_mask, _ = self.sv_trimmer(sv_x, sv_v, sv_mask)
             lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)
             v    = torch.cat([pf_ch_v, pf_neu_v, sv_v, lt_v], dim=2)
