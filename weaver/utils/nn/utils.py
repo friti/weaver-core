@@ -23,7 +23,6 @@ def _flatten_preds(preds, mask=None, label_axis=1):
             preds = preds[mask.view(-1)]
     return preds
 
-@torch.jit.script
 def fgsm_attack(data: torch.Tensor,
                 eps_fgsm: float,
                 eps_min: torch.Tensor,
@@ -46,7 +45,6 @@ def fgsm_attack(data: torch.Tensor,
     return output.detach();
     
 
-@torch.jit.script
 def fngm_attack(data: torch.Tensor,
                 eps_fgsm: float,
                 eps_min: torch.Tensor,
@@ -64,8 +62,7 @@ def fngm_attack(data: torch.Tensor,
         maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
         mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
         mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
-        data_grad = data.grad.data.detach();
-        data_grad = data_grad.nan_to_num();
+        data_grad = data.grad.data.detach().nan_to_num();
         norm = data_grad.abs().pow(power).view(data_grad.size(0),-1).sum(dim=1).pow(1./power);
         norm = torch.max(norm, torch.ones_like(norm) * 1e-12).view(-1,1,1);
         output = data+data_grad*(1./norm)*torch.full(data.shape,eps_fgsm).to(data.device,non_blocking=True)*(maxd-mind);

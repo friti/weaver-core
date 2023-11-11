@@ -69,7 +69,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
         input_eps_max.append(torch.Tensor([data_config.preprocess_params[var]['eps_max'] if data_config.preprocess_params[var]['eps_max'] is not None else float(0.) for var in vars]));
         input_eps_min[-1] = input_eps_min[-1].to(dev,non_blocking=True);
         input_eps_max[-1] = input_eps_max[-1].to(dev,non_blocking=True);
-                      
+
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
