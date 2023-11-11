@@ -25,44 +25,48 @@ def _flatten_preds(preds, mask=None, label_axis=1):
 
 @torch.jit.script
 def fgsm_attack(data: torch.Tensor,
-                data_grad: torch.Tensor,
                 eps_fgsm: float,
                 eps_min: torch.Tensor,
                 eps_max: torch.Tensor,
                 mean: float = 1):
 
-    maxd = eps_max;
-    mind = eps_min;
-    maxd = maxd.unsqueeze(0).unsqueeze(2)
-    mind = mind.unsqueeze(0).unsqueeze(2)
-    maxd = torch.repeat_interleave(maxd,data.size(dim=0),dim=0);
-    maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
-    mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
-    mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
-    output = data+data_grad*torch.normal(mean=mean,std=eps_fgsm,size=data.shape).to(data.device)*torch.full(data.shape,eps_fgsm).to(data.device)*(maxd-mind);
-    return output
+    if data.grad is None:
+        output = data;
+    else:
+        maxd = eps_max;
+        mind = eps_min;
+        maxd = maxd.unsqueeze(0).unsqueeze(2)
+        mind = mind.unsqueeze(0).unsqueeze(2)
+        maxd = torch.repeat_interleave(maxd,data.size(dim=0),dim=0);
+        maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
+        mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
+        mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
+        data_grad = data.grad.data.sign().detach().to(data.device,non_blocking=True);
+        output = data+data_grad*torch.normal(mean=mean,std=eps_fgsm,size=data.shape).to(data.device,non_blocking=True)*torch.full(data.shape,eps_fgsm).to(data.device,non_blocking=True)*(maxd-mind);
+    return output.detach();
+    
 
-
-@torch.jit.script
+#@torch.jit.script
 def fngm_attack(data: torch.Tensor,
-                data_grad: torch.Tensor,
                 eps_fgsm: float,
                 eps_min: torch.Tensor,
                 eps_max: torch.Tensor,
                 power: float = 2):
 
-    maxd = eps_max;
-    mind = eps_min;
-    maxd = maxd.unsqueeze(0).unsqueeze(2)
-    mind = mind.unsqueeze(0).unsqueeze(2)
-    maxd = torch.repeat_interleave(maxd,data.size(dim=0),dim=0);
-    maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
-    mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
-    mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
-    ## power is degree for normalization, take absolute val, collapse particle dimension
-    data_grad = data_grad.nan_to_num();
-    norm = data_grad.abs().pow(power).view(data_grad.size(0),-1).sum(dim=1).pow(1./power);
-    ## avoid divisions per zero
-    norm = torch.max(norm, torch.ones_like(norm) * 1e-12).view(-1,1,1);
-    output = data+data_grad*(1./norm)*torch.full(data.shape,eps_fgsm).to(data.device)*(maxd-mind);
-    return output
+    if data.grad is None:
+        output = data;
+    else:
+        maxd = eps_max;
+        mind = eps_min;
+        maxd = maxd.unsqueeze(0).unsqueeze(2)
+        mind = mind.unsqueeze(0).unsqueeze(2)
+        maxd = torch.repeat_interleave(maxd,data.size(dim=0),dim=0);
+        maxd = torch.repeat_interleave(maxd,data.size(dim=2),dim=2);
+        mind = torch.repeat_interleave(mind,data.size(dim=0),dim=0);
+        mind = torch.repeat_interleave(mind,data.size(dim=2),dim=2);
+        data_grad = data.grad.data.detach().to(data.device,non_blocking=True);
+        data_grad = data_grad.nan_to_num();
+        norm = data_grad.abs().pow(power).view(data_grad.size(0),-1).sum(dim=1).pow(1./power);
+        norm = torch.max(norm, torch.ones_like(norm) * 1e-12).view(-1,1,1);
+        output = data+data_grad*(1./norm)*torch.full(data.shape,eps_fgsm).to(data.device,non_blocking=True)*(maxd-mind);
+    return output.detach();

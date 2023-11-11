@@ -30,7 +30,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
     loss_contrastive, model_output_contrastive, model_output_contrastive_da, total_contrastive_loss = None, None, None, 0;
-    inputs_grad, inputs_attack, model_output_attack, loss_attack = None, None, None, None;
+    inputs_attack, model_output_attack, loss_attack = None, None, None;
     num_batches_attack, total_attack_loss, count_attack, residual_attack, sum_residual_attack = 0, 0, 0, 0, 0;
     use_attack, network_options = False, None;
     
@@ -196,15 +196,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                     else:
                         loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
-                        
-                    loss.backward(retain_graph=True);
+                    if grad_scaler is None:
+                        loss.backward(retain_graph=True);
+                    else:
+                        grad_scaler.scale(loss).backward(retain_graph=True)
                     ## produce gradient signs and features
                     if network_options and network_options.get('use_norm_gradient',False):
-                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
                     else:
-                        inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
                     ## infere the model to get the output on Attack inputs
                     if network_options and network_options.get('use_contrastive',False):
                         if network_options.get('use_contrastive_domain',False):
@@ -223,8 +223,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         else:
                             loss, loss_cat, loss_reg, loss_domain, loss_attack, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_attack,model_output_cat,model_output_contrastive);
                     else:
-                        loss, loss_cat, loss_reg, loss_domain, loss_attack = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_attack,model_output_cat);
-                        
+                        loss, loss_cat, loss_reg, loss_domain, loss_attack = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_attack,model_output_cat);                        
                 else:
                     if network_options and network_options.get('use_contrastive',False):
                         if network_options.get('use_contrastive_da',False):
@@ -445,7 +444,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, grad_scaler=None,
                       frac_attack=None, epoch_start_attack=None, eval_attack=None, eps_attack=None, network_option=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
@@ -464,7 +463,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
     sum_sqr_err, count_cat, count_domain = 0, 0, 0;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
-    inputs_grad, inputs_attack, model_output_attack = None, None, None;
+    inputs_attack, model_output_attack = None, None;
     pred_cat, pred_domain, pred_reg, correct_cat, correct_domain = None, None, None, None, None;
     loss, loss_cat, loss_domain, loss_reg, loss_attack = None, None, None, None, None;
     num_batches_attack, total_attack_loss, count_attack, residual_attack, sum_residual_attack = 0, 0, 0, 0, 0;
@@ -694,16 +693,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     if network_options and network_options.get('use_contrastive',False):
                         loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                     else:
-                        loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);                        
-                    loss.backward();
-                    if network_options and network_options.get('use_norm_gradient',False):
-                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        torch.set_grad_enabled(False);
-                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        loss, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
+                    if grad_scaler is None:
+                        loss.backward();
                     else:
-                        inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        torch.set_grad_enabled(False);
-                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        grad_scaler.scale(loss).backward()
+                    if network_options and network_options.get('use_norm_gradient',False):
+                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
+                    else:
+                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
                     model.zero_grad(set_to_none=True)
                     if network_options and network_options.get('use_contrastive',False):
                          if network_options.get('use_contrastive_domain',False):

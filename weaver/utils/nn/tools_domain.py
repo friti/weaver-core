@@ -280,7 +280,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_attack=None, eps_attack=None, network_option=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_attack=None, eps_attack=None,
+                      network_option=None, grad_scaler=None
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
@@ -298,7 +299,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
     sum_sqr_err, count_cat, count_domain = 0, 0, 0;
     inputs, label_cat, label_domain, target, model_output, model_output_cat, model_output_reg, model_output_domain  = None, None, None, None, None , None, None, None;
-    inputs_grad_sign, inputs_attack, model_output_attack = None, None, None;
+    inputs_attack, model_output_attack = None, None;
     pred_cat, pred_domain, pred_reg, correct_cat, correct_domain = None, None, None, None, None;
     loss, loss_cat, loss_domain, loss_reg = None, None, None, None;
     num_batches_attack, total_attack_loss, count_attack, residual_attack, sum_residual_attack = 0, 0, 0, 0, 0;
@@ -511,16 +512,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ## create adversarial testing attack features and evaluate the model
                 if eval_attack:
                     loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
-                    loss.backward();
-                    ## produce gradient signs and features                                                                                                                                                      
-                    if network_options and network_options.get('use_norm_gradient',False):
-                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        torch.set_grad_enabled(False);
-			inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    if grad_scaler is None:
+                        loss.backward();
                     else:
-                        inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
-                        torch.set_grad_enabled(False);
-                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        grad_scaler.scale(loss).backward()
+                    ## produce gradient signs and features                                                                                                                      
+                    if network_options and network_options.get('use_norm_gradient',False):
+			inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
+                    else:
+                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
                     model_output_attack = model(*inputs_attack)
                     model_output_attack = model_output_attack[:,:num_labels];
                     model_output_attack = _flatten_preds(model_output_attack,None);
