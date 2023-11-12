@@ -914,6 +914,7 @@ def _main(args):
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
     orig_model = model
+    grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
 
     if training_mode:
 
@@ -943,7 +944,6 @@ def _main(args):
             sys.exit(0);
 
         # training loop
-        grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
         best_val_metric = np.inf if "reg" in args.weaver_mode else 0
 
         for epoch in range(args.num_epochs):
