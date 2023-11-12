@@ -53,7 +53,7 @@ def fngm_attack(data: torch.Tensor,
                 eps_max: torch.Tensor,
                 power: float = 2):
 
-    if data.grad is None:
+    if data_grad is None:
         return data;
     else:
         maxd = eps_max.unsqueeze(0).unsqueeze(2)
