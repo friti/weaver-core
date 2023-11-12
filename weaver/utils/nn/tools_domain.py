@@ -518,9 +518,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         grad_scaler.scale(loss).backward()
                     ## produce gradient signs and features                                                                                                                      
                     if network_options and network_options.get('use_norm_gradient',False):
-			inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fngm_attack(element,inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     else:
-                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                        inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+
                     model_output_attack = model(*inputs_attack)
                     model_output_attack = model_output_attack[:,:num_labels];
                     model_output_attack = _flatten_preds(model_output_attack,None);
