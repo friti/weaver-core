@@ -204,9 +204,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                         grad_scaler.scale(loss).backward(retain_graph=True)
                     ## produce gradient signs and features
                     if network_options and network_options.get('use_norm_gradient',False):
-                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     else:
-                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     ## infere the model to get the output on Attack inputs
                     if network_options and network_options.get('use_contrastive',False):
                         if network_options.get('use_contrastive_domain',False):
@@ -703,9 +703,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     else:
                         grad_scaler.scale(loss).backward()
                     if network_options and network_options.get('use_norm_gradient',False):
-                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fngm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     else:
-                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)) for idx,element in enumerate(inputs)]
+                        inputs_attack = [fgsm_attack(element,eps_attack,input_eps_min[idx],input_eps_max[idx]).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                     model.zero_grad(set_to_none=True)
                     if network_options and network_options.get('use_contrastive',False):
                          if network_options.get('use_contrastive_domain',False):
