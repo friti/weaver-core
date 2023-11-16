@@ -526,6 +526,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         torch.set_grad_enabled(False);
                         inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
 
+                    model.zero_grad(set_to_none=True)
                     model_output_attack = model(*inputs_attack)
                     model_output_attack = model_output_attack[:,:num_labels];
                     model_output_attack = _flatten_preds(model_output_attack,None);

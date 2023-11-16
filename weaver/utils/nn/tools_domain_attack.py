@@ -161,10 +161,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             target = target.to(dev,non_blocking=True)            
             
             ### loss minimization
-            model.zero_grad(set_to_none=True);
+            model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):                
                 ## prepare the tensor
-                model.zero_grad(set_to_none=True)
                 label_cat = label_cat.squeeze();
                 label_domain = label_domain.squeeze();
                 label_domain_check = label_domain_check.squeeze();
@@ -199,7 +198,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     if grad_scaler is None:
                         loss.backward(retain_graph=True);
                     else:
-                        grad_scaler.scale(loss).backward(retain_graph=True)
+                        grad_scaler.scale(loss).backward(retain_graph=True);                        
                     ## produce gradient signs and features
                     if network_options and network_options.get('use_norm_gradient',False):
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
@@ -207,6 +206,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                     else:
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    ## take out the gradients cause were only used to generate the features    
+                    model.zero_grad(set_to_none=True)
                     ## infere the model to get the output on Attack inputs
                     if network_options and network_options.get('use_contrastive',False):
                         if network_options.get('use_contrastive_domain',False):
@@ -692,6 +693,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## create adversarial testing attack features and evaluate the model
                 if eval_attack and use_attack:
+                    ## first forward and bkg pass for gradients
                     if network_options and network_options.get('use_contrastive',False):
                         loss, _, _, _, _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                     else:
@@ -700,6 +702,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         loss.backward();
                     else:
                         grad_scaler.scale(loss).backward()
+                    ## generation of adversarial sample
                     if network_options and network_options.get('use_norm_gradient',False):
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         torch.set_grad_enabled(False);
@@ -708,7 +711,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         inputs_grad = [None if element.grad is None else element.grad.data.detach().sign().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
                         torch.set_grad_enabled(False);
                         inputs_attack = [element.detach().to(dev,non_blocking=True) if inputs_grad[idx] is None else fgsm_attack(element.detach(),inputs_grad[idx],eps_attack,input_eps_min[idx].to(dev,non_blocking=True),input_eps_max[idx].to(dev,non_blocking=True)).detach().to(dev,non_blocking=True) for idx,element in enumerate(inputs)]
+                    ## erase the gradient
                     model.zero_grad(set_to_none=True)
+                    ## infere the model
                     if network_options and network_options.get('use_contrastive',False):
                          if network_options.get('use_contrastive_domain',False):
                              model_output_attack, _, _ = model(*inputs_attack);
