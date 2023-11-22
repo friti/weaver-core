@@ -916,14 +916,14 @@ def _main(args):
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
     grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
-
-    model = model.to(dev)
     model_original = model;
     
     if training_mode:
 
         if args.compile_model:
             model = torch.compile(model, mode='max-autotune')
+
+        model = model.to(dev)
             
         # DistributedDataParallel
         if args.backend is not None: 
@@ -1006,10 +1006,13 @@ def _main(args):
             
     if args.data_test:
 
+        if args.compile_model:
+            model = torch.compile(model, mode='max-autotune')
+
+        model = model.to(dev)
+
         if args.backend is not None and local_rank != 0:
             sys.exit(0);
-        if training_mode:
-            test_loaders, data_config = test_load(args)
 
         if not args.model_prefix.endswith('.onnx'):
 
