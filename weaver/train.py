@@ -1036,7 +1036,7 @@ def _main(args):
             else:
                 if args.eval_attack:
                     test_metric, scores, labels, targets, labels_domain, observers, scores_attack = evaluate(
-                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, grad_scaler=grad_scaler, compile_model=args.compile_model
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, grad_scaler=grad_scaler, compile_model=args.compile_model,
                         eps_attack=args.eps_attack, eval_attack=args.eval_attack, network_option=args.network_option)
                 else:
                     test_metric, scores, labels, targets, labels_domain, observers = evaluate(
