@@ -180,6 +180,8 @@ parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], defa
                     help='backend for distributed training')
 parser.add_argument('--cross-validation', type=str, default=None,
                     help='enable k-fold cross validation; input format: `variable_name%k`')
+parser.add_argument('--compile-model', action='store_true', default=False,
+                    help='turn-on torch model compilation')
 
 def to_filelist(args, mode='train'):
 
@@ -913,13 +915,16 @@ def _main(args):
         
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
-    orig_model = model
     grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
 
+    model = model.to(dev)
+    model_original = model;
+    
     if training_mode:
 
-        model = orig_model.to(dev)
-
+        if args.compile_model:
+            model = torch.compile(model, mode='max-autotune')
+            
         # DistributedDataParallel
         if args.backend is not None: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -970,8 +975,8 @@ def _main(args):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
                     os.makedirs(dirname)
-                state_dict = model.module.state_dict() if isinstance(
-                    model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
+                state_dict = model_original.module.state_dict() if isinstance(
+                    model_original, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
                 
@@ -1005,8 +1010,6 @@ def _main(args):
             sys.exit(0);
         if training_mode:
             test_loaders, data_config = test_load(args)
-
-        model = orig_model.to(dev)
 
         if not args.model_prefix.endswith('.onnx'):
 
