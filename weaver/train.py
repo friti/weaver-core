@@ -869,14 +869,13 @@ def _main(args):
     # device detection
     if args.gpus:
         if args.backend is not None:
-            local_rank = args.local_rank;
+            torch.cuda.set_device(args.local_rank)
+            dev = torch.device(args.local_rank)
             local_world_size = len(gpus);
-            torch.cuda.set_device(local_rank)
-            gpus = [local_rank]
-            dev = torch.device(local_rank)
-            torch.distributed.init_process_group(backend=args.backend,rank=local_rank,world_size=local_world_size)
-            _logger.info(f'Using distributed PyTorch with {args.backend} backend')
+            gpus = [args.local_rank]
+            torch.distributed.init_process_group(backend=args.backend,rank=args.local_rank,world_size=local_world_size)
             torch.distributed.barrier()
+            _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
             gpus = [int(i) for i in args.gpus.split(',')]
             dev = torch.device(gpus[0])
@@ -926,9 +925,9 @@ def _main(args):
         if args.backend is not None: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             if gpus is not None:
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=True, gradient_as_bucket_view=True)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True, gradient_as_bucket_view=True)
         # DataParallel
-        elif args.backend is None:
+        else:
             if gpus is not None and len(gpus) > 1:
                 model = torch.nn.DataParallel(model, device_ids=gpus)
 
@@ -969,7 +968,7 @@ def _main(args):
             else:
                 train(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, compile_model=args.compile_model);
                 
-            if args.model_prefix and (args.backend is None or local_rank == 0):
+            if args.model_prefix and (args.backend is None or args.local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
                     os.makedirs(dirname)
@@ -992,7 +991,7 @@ def _main(args):
 
             if is_best_epoch:
                 best_val_metric = val_metric
-                if args.model_prefix and (args.backend is None or local_rank == 0):
+                if args.model_prefix and (args.backend is None or args.local_rank == 0):
                     shutil.copy2(args.model_prefix + '_epoch-%d_state.pt' %
                                  epoch, args.model_prefix + '_best_epoch_state.pt')
             _logger.info('Epoch #%d: Current validation metric: %.5f (best: %.5f)' %
@@ -1006,7 +1005,7 @@ def _main(args):
 
         model = model.to(dev)
 
-        if args.backend is not None and local_rank != 0:
+        if args.backend is not None and args.local_rank != 0:
             sys.exit(0);
 
         if not args.model_prefix.endswith('.onnx'):

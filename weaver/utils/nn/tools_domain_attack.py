@@ -5,6 +5,7 @@ import tqdm
 import time
 import torch
 import gc
+import torch._dynamo
 
 from collections import defaultdict, Counter
 from collections.abc import Iterable  
@@ -18,7 +19,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                    steps_per_epoch=None, grad_scaler=None, tb_helper=None, frac_attack=None, epoch_start_attack=None, eps_attack=None, frac_batch_attack=None, network_option=None):
 
     if compile_model:
+        torch._dynamo.config.suppress_errors = True
         model = torch.compile(model, mode='max-autotune');
+        
     model.train()
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
@@ -453,15 +456,20 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                       frac_attack=None, epoch_start_attack=None, eval_attack=None, eps_attack=None, network_option=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
+
     if compile_model:
+        import torch._dynamo
         model = torch.compile(model, mode='max-autotune')
+
     model.eval()
+
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
     else:
         torch.backends.cudnn.benchmark = False;
         torch.backends.cudnn.enabled = False;
+
     gc.enable();
     
     data_config = test_loader.dataset.config

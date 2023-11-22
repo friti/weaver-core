@@ -14,8 +14,11 @@ from .utils import _flatten_label, _flatten_preds, fgsm_attack, fngm_attack
 
 
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
-def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, compile_model=None):
 
+   if compile_model:
+        torch._dynamo.config.suppress_errors = True
+        model = torch.compile(model, mode='max-autotune');
 
     model.train()
     torch.backends.cudnn.benchmark = True; 
@@ -110,10 +113,14 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     gc.collect();
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
-def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, compile_model=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
 
-    model.eval()
+   if compile_model:
+        torch._dynamo.config.suppress_errors = True
+        model = torch.compile(model, mode='max-autotune');
+
+     model.eval()
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
@@ -303,9 +310,13 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
 
 
 ## train a regression with possible multi-dimensional target i.e. a list of 1D functions (target_names) 
-def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, compile_model=None):
 
-    model.train()
+   if compile_model:
+        torch._dynamo.config.suppress_errors = True
+        model = torch.compile(model, mode='max-autotune');
+
+     model.train()
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
@@ -400,10 +411,14 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     torch.cuda.empty_cache()
     gc.collect();
 
-def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, compile_model=None,
                         eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
-    model.eval()
+   if compile_model:
+        torch._dynamo.config.suppress_errors = True
+        model = torch.compile(model, mode='max-autotune');
+
+     model.eval()
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
@@ -591,9 +606,13 @@ def evaluate_onnx_regression(model_path, test_loader,
 
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
-def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, compile_model=None):
 
-    model.train()
+   if compile_model:
+        torch._dynamo.config.suppress_errors = True
+        model = torch.compile(model, mode='max-autotune');
+
+     model.train()
 
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
@@ -742,11 +761,16 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_attack=None, eps_attack=None, network_option=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_attack=None, eps_attack=None,
+                      network_option=None, compile_model=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
-    model.eval()
+   if compile_model:
+        torch._dynamo.config.suppress_errors = True
+        model = torch.compile(model, mode='max-autotune');
+
+     model.eval()
     if for_training:
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
