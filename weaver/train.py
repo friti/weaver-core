@@ -920,9 +920,6 @@ def _main(args):
     
     if training_mode:
 
-        if args.compile_model:
-            model = torch.compile(model, mode='max-autotune')
-
         model = model.to(dev)
             
         # DistributedDataParallel
@@ -966,10 +963,11 @@ def _main(args):
             _logger.info('Epoch #%d training' % epoch)
 
             if "attack" in args.weaver_mode:
-                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option,
-                      eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack, frac_batch_attack=args.frac_batch_attack);
+                train(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option,
+                      eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack, frac_batch_attack=args.frac_batch_attack,
+                      compile_model=args.compile_model);
             else:
-                train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
+                train(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, compile_model=args.compile_model);
                 
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -984,10 +982,10 @@ def _main(args):
 
             if "attack" in args.weaver_mode:                
                 val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, grad_scaler=grad_scaler, tb_helper=tb,
-                                      network_option=args.network_option,
+                                      network_option=args.network_option, compile_model=args.compile_model,
                                       eval_attack=args.eval_attack, eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack)
             else:
-                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, grad_scaler=grad_scaler,
+                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, grad_scaler=grad_scaler, compile_model=args.compile_model,
                                       tb_helper=tb,  network_option=args.network_option)
                 
             is_best_epoch = (val_metric < best_val_metric) if "reg" in args.weaver_mode else (val_metric > best_val_metric)
@@ -1005,9 +1003,6 @@ def _main(args):
                 scheduler.step()
             
     if args.data_test:
-
-        if args.compile_model:
-            model = torch.compile(model, mode='max-autotune')
 
         model = model.to(dev)
 
@@ -1041,11 +1036,12 @@ def _main(args):
             else:
                 if args.eval_attack:
                     test_metric, scores, labels, targets, labels_domain, observers, scores_attack = evaluate(
-                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, grad_scaler=grad_scaler,
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, grad_scaler=grad_scaler, compile_model=args.compile_model
                         eps_attack=args.eps_attack, eval_attack=args.eval_attack, network_option=args.network_option)
                 else:
                     test_metric, scores, labels, targets, labels_domain, observers = evaluate(
-                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, grad_scaler=grad_scaler, network_option=args.network_option)
+                        model, test_loader, dev, loss_func=loss_func, epoch=None, for_training=False, tb_helper=tb, grad_scaler=grad_scaler, compile_model=args.compile_model,
+                        network_option=args.network_option)
             _logger.info('Test metric %.5f' % test_metric, color='bold')
 
             if args.predict_output and scores.ndim:
