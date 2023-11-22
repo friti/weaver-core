@@ -172,7 +172,7 @@ parser.add_argument('--onnx-opset', type=int, default=15,
                     help='ONNX opset version.')
 parser.add_argument('--copy-inputs', action='store_true', default=False,
                     help='copy input files to the current dir (can help to speed up dataloading when running over remote files, e.g., from EOS)')
-parser.add_argument('--log', type=str, default='',
+parser.add_argument('--log', '-l', type=str, default='',
                     help='path to the log file; `{auto}` can be used as part of the path to auto-generate a name, based on the timestamp and network configuration')
 parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
@@ -866,14 +866,15 @@ def _main(args):
 
     # device detection
     if args.gpus:
-        if args.backend is not None:
+        gpus = [int(i) for i in args.gpus.split(',')]
+        ngpus = len(gpus);
+        if args.backend is not None and ngpus > 1:
             torch.cuda.set_device(args.local_rank)
             gpus = [args.local_rank]
             dev = torch.device(args.local_rank)
             torch.distributed.init_process_group(backend=args.backend)
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
-            gpus = [int(i) for i in args.gpus.split(',')]
             dev = torch.device(gpus[0])
     else:
         gpus = None
@@ -917,12 +918,12 @@ def _main(args):
         model = model.to(dev)
             
         # DistributedDataParallel
-        if args.backend is not None: 
+        if args.backend is not None and ngpus > 1: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank)
         else:
             # DataParallel
-            if gpus is not None and len(gpus) > 1:
+            if gpus is not None and ngpus > 1:
                 model = torch.nn.DataParallel(model, device_ids=gpus)
 
         # optimizer & learning rate
@@ -1008,12 +1009,12 @@ def _main(args):
                 '.pt') else args.model_prefix + '_best_epoch_state.pt'
             _logger.info('Loading model %s for eval' % model_path)
              
-            if args.backend is not None:
+            if args.backend is not None and ngpus > 1:
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
                 model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank)
                 model.module.load_state_dict(torch.load(model_path, map_location=dev))
             else:
-                if gpus is not None and len(gpus) > 1:
+                if gpus is not None and ngpus > 1:
                     model = torch.nn.DataParallel(model, device_ids=gpus)
                     model.module.load_state_dict(torch.load(model_path, map_location=dev))
                 else:
