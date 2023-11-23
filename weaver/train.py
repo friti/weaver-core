@@ -869,10 +869,10 @@ def _main(args):
         gpus = [int(i) for i in args.gpus.split(',')]
         ngpus = len(gpus);
         if args.backend is not None and ngpus > 1:
-            torch.cuda.set_device(args.local_rank)
             gpus = [args.local_rank]
-            dev = torch.device(args.local_rank)
             torch.distributed.init_process_group(backend=args.backend)
+            torch.cuda.set_device(args.local_rank)
+            dev = torch.device(args.local_rank)
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
             dev = torch.device(gpus[0])
@@ -915,6 +915,7 @@ def _main(args):
     model_original = model;
     
     if training_mode:
+
         model = model.to(dev)
             
         # DistributedDataParallel
