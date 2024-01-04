@@ -1,6 +1,6 @@
 # Prodouce a docker image with weaver
 
-* First step is install weaver locally following the recipe given in the main README file at [Weaver Installation](https://github.com/rgerosa/weaver/blob/dev_sim_class_reg/docker/README.md)
+* First step is install weaver locally following the recipe given in the main README file at [Weaver Installation](https://github.com/rgerosa/weaver/blob/adv_da_attack/docker/README.md)
 * Once installed Weaver within a conda environment, dependent packages can be exported via:
   ```sh
   conda activate weaver

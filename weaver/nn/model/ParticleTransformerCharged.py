@@ -10,16 +10,13 @@ import torch
 import torch.nn as nn
 from functools import partial
 
-
 @torch.jit.script
 def delta_phi(a, b):
     return (a - b + math.pi) % (2 * math.pi) - math.pi
 
-
 @torch.jit.script
 def delta_r2(eta1, phi1, eta2, phi2):
     return (eta1 - eta2)**2 + delta_phi(phi1, phi2)**2
-
 
 def to_pt2(x, eps=1e-8):
     pt2 = x[:, :2].square().sum(dim=1, keepdim=True)
@@ -27,13 +24,19 @@ def to_pt2(x, eps=1e-8):
         pt2 = pt2.clamp(min=eps)
     return pt2
 
+def to_eta(x, eps=1e-8):
+    pz = x[:, 2:3];
+    p  = x[:, :3].square().sum(dim=1, keepdim=True);
+    eta = 0.5 * torch.log((p+pz)/(p-pz))
+    if eps is not None:
+       eta = eta.clamp(min=eps)
+    return eta
 
 def to_m2(x, eps=1e-8):
     m2 = x[:, 3:4].square() - x[:, :3].square().sum(dim=1, keepdim=True)
     if eps is not None:
         m2 = m2.clamp(min=eps)
     return m2
-
 
 def atan2(y, x):
     sx = torch.sign(x)
@@ -42,19 +45,16 @@ def atan2(y, x):
     atan_part = torch.arctan(y / (x + (1 - sx ** 2))) * sx ** 2
     return atan_part + pi_part
 
-
-def to_ptrapphim(x, return_mass=True, eps=1e-8, for_onnx=False):
-    # x: (N, 4, ...), dim1 : (px, py, pz, E)
-    px, py, pz, energy = x.split((1, 1, 1, 1), dim=1)
-    pt = torch.sqrt(to_pt2(x, eps=eps))
-    phi = (atan2 if for_onnx else torch.atan2)(py, px)
-    rapidity = 0.5 * torch.log(((energy+pz) / (energy-pz)).clamp(min=1e-20))
+def to_ptetaphim(x, return_mass=True, eps=1e-8, for_onnx=False):
+    # compute new coordinates
+    pt  = torch.sqrt(to_pt2(x, eps=eps))
+    eta = to_eta(x, eps=eps);
+    phi = atan2(x[:,0:1],x[:,1:2]) if for_onnx else torch.atan2(x[:,0:1],x[:,1:2])
     if not return_mass:
-        return torch.cat((pt, rapidity, phi), dim=1)
+        return torch.cat((pt,eta,phi), dim=1)
     else:
         m = torch.sqrt(to_m2(x, eps=eps))
-        return torch.cat((pt, rapidity, phi, m), dim=1)
-
+        return torch.cat((pt,eta,phi,m), dim=1)
 
 def boost(x, boostp4, eps=1e-8):
     # boost x to the rest frame of boostp4
@@ -74,19 +74,22 @@ def p3_norm(p, eps=1e-8):
 
 
 def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
-    pti, rapi, phii = to_ptrapphim(xi, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
-    ptj, rapj, phij = to_ptrapphim(xj, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
 
-    delta = delta_r2(rapi, phii, rapj, phij).sqrt()
+    pti, etai, phii = to_ptetaphim(xi, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
+    ptj, etaj, phij = to_ptetaphim(xj, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
+    
+    delta = delta_r2(etai, phii, etaj, phij).sqrt()
     lndelta = torch.log(delta.clamp(min=eps))
+
     if num_outputs == 1:
         return lndelta
 
     if num_outputs > 1:
         ptmin = ((pti <= ptj) * pti + (pti > ptj) * ptj) if for_onnx else torch.minimum(pti, ptj)
-        lnkt = torch.log((ptmin * delta).clamp(min=eps))
-        lnz = torch.log((ptmin / (pti + ptj).clamp(min=eps)).clamp(min=eps))
+        lnkt  = torch.log((ptmin * delta).clamp(min=eps))
+        lnz   = torch.log((ptmin / (pti + ptj).clamp(min=eps)).clamp(min=eps))
         outputs = [lnkt, lnz, lndelta]
+        
     if num_outputs > 3:
         xij = xi + xj
         lnm2 = torch.log(to_m2(xij, eps=eps))
@@ -103,9 +106,9 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
         outputs.append(costheta)
 
     if num_outputs > 6:
-        deltarap = rapi - rapj
+        deltaeta = etai - etaj
         deltaphi = delta_phi(phii, phij)
-        outputs += [deltarap, deltaphi]
+        outputs += [deltaeta, deltaphi]
 
     assert (len(outputs) == num_outputs)
     return torch.cat(outputs, dim=1)
@@ -178,7 +181,7 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
 
 
 class SequenceTrimmer(nn.Module):
-
+    
     def __init__(self, enabled=False, target=(0.9, 1.02), **kwargs) -> None:
         super().__init__(**kwargs)
         self.enabled = enabled
@@ -501,14 +504,14 @@ class ParticleTransformer(nn.Module):
                  fc_contrastive_params=[],
                  activation='gelu',
                  # misc
-                 trim=True,
-                 for_inference=False,
+                 trim=False,
                  use_amp=False,
+                 for_inference=False,
                  split_da=False,
                  split_reg=False,
                  flip_grad_da=True,
-                 use_contrastive_domain=False,
                  alpha_grad=1,
+                 add_da_inference=False,
                  **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -521,12 +524,11 @@ class ParticleTransformer(nn.Module):
         self.alpha_grad = alpha_grad;
         self.fc_domain = None;
         self.fc_contrastive = None;
-        self.fc_contrastive_da = None;
         self.split_da = split_da;
         self.split_reg = split_reg;
         self.flip_grad_da = flip_grad_da;
         self.save_grad_inputs = False;
-        self.use_contrastive_domain = use_contrastive_domain;
+        self.add_da_inference = add_da_inference;
         
         embed_dim = embed_dims[-1] if len(embed_dims) > 0 else input_dim
         default_cfg = dict(embed_dim=embed_dim, num_heads=num_heads, ffn_ratio=4,
@@ -607,25 +609,7 @@ class ParticleTransformer(nn.Module):
             self.fc_contrastive = None;
             
         ## domain layers
-        if not for_inference and self.num_domains:
-            ## contrastive da projection
-            fcs_contrastive_da = []
-            if fc_contrastive_params and  use_contrastive_domain:
-                in_dim = embed_dim
-                if self.flip_grad_da:
-                    fcs_contrastive_da.append(GradientReverse(self.alpha_grad));
-                for out_dim, drop_rate in fc_contrastive_params:
-                    fcs_contrastive_da.append(nn.Sequential(
-                        nn.Linear(in_dim, out_dim),
-                        nn.BatchNorm1d(out_dim),
-                        nn.GELU() if activation == 'gelu' else nn.ReLU(),
-                        nn.Dropout(drop_rate))
-                    )
-                    in_dim = out_dim
-                fcs_contrastive_da.append(nn.Linear(in_dim,in_dim));
-                self.fc_contrastive_da = nn.Sequential(*fcs_contrastive_da);
-            else:
-                self.fc_contrastive_da = None;
+        if self.num_domains and (not for_inference or (for_inference and add_da_inference)):
             ## standard domain layers
             if not self.split_da:
                 num_domain = sum(element for element in self.num_domains);
@@ -752,13 +736,9 @@ class ParticleTransformer(nn.Module):
                         output = torch.cat((output,output_domain),dim=1);
 
             ### contrastive output
-            if self.fc_contrastive is not None and self.fc_contrastive_da is not None:
+            if self.fc_contrastive is not None:
                 output_cont = self.fc_contrastive(x_cls);
-                output_cont_da = self.fc_contrastive_da(x_cls);
-                return output, output_cont, output_cont_da;
-            elif self.fc_contrastive is not None:
-                output_cont = self.fc_contrastive(x_cls);
-                return output, output_cont;            
+                return output, output_cont;
             else:
                 return output
 
@@ -769,6 +749,8 @@ class ParticleTransformerTagger(nn.Module):
                  pf_ch_input_dim,
                  pf_neu_input_dim,
                  sv_input_dim,
+                 kaon_input_dim,
+                 lambda_input_dim,
                  lt_input_dim,
                  # output of network
                  num_classes=None,
@@ -794,7 +776,7 @@ class ParticleTransformerTagger(nn.Module):
                  fc_da_params=[],
                  fc_contrastive_params=[],
                  activation='gelu',
-                 # misc
+                 # miscellanea
                  trim=True,
                  for_inference=False,
                  use_amp=False,
@@ -802,10 +784,9 @@ class ParticleTransformerTagger(nn.Module):
                  split_da=False,
                  split_reg=False,
                  flip_grad_da=True,
-                 use_contrastive_domain=False,
-                 # save gradiantes for attack
                  save_grad_inputs=False,
                  alpha_grad=1,
+                 add_da_inference=False,
                  **kwargs) -> None:
 
         super().__init__(**kwargs)
@@ -816,10 +797,15 @@ class ParticleTransformerTagger(nn.Module):
         self.pf_ch_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.pf_neu_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.kaon_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.lambda_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.lt_trimmer = SequenceTrimmer(enabled=trim and not for_inference)        
+
         self.pf_ch_embed = Embed(pf_ch_input_dim, embed_dims, activation=activation)
         self.pf_neu_embed = Embed(pf_neu_input_dim, embed_dims, activation=activation)
         self.sv_embed = Embed(sv_input_dim, embed_dims, activation=activation)
+        self.kaon_embed = Embed(kaon_input_dim, embed_dims, activation=activation)
+        self.lambda_embed = Embed(lambda_input_dim, embed_dims, activation=activation)
         self.lt_embed = Embed(lt_input_dim, embed_dims, activation=activation)
         
         self.part = ParticleTransformer(
@@ -845,15 +831,13 @@ class ParticleTransformerTagger(nn.Module):
             fc_da_params=fc_da_params,
             fc_contrastive_params=fc_contrastive_params,
             activation=activation,
-            ## misc
-            trim=False,
+            ## misc            
             for_inference=for_inference,
-            use_amp=self.use_amp,
-            ## domain and contrastive
+            add_da_inference=add_da_inference,
+            use_amp=use_amp,            
             split_da=split_da,
             split_reg=split_reg,
             flip_grad_da=flip_grad_da,
-            use_contrastive_domain=use_contrastive_domain,
             alpha_grad=alpha_grad
         )
 
@@ -861,7 +845,14 @@ class ParticleTransformerTagger(nn.Module):
     def no_weight_decay(self):
         return {'part.cls_token', }
 
-    def forward(self, pf_ch_x=None, pf_ch_v=None, pf_ch_mask=None, pf_neu_x=None, pf_neu_v=None, pf_neu_mask=None, sv_x=None, sv_v=None, sv_mask=None, lt_x=None, lt_v=None, lt_mask=None):
+    def forward(self,
+                pf_ch_x=None, pf_ch_v=None, pf_ch_mask=None, ## charged pf
+                pf_neu_x=None, pf_neu_v=None, pf_neu_mask=None, ## neutral pf
+                sv_x=None, sv_v=None, sv_mask=None, # secondary vertex
+                kaon_x=None, kaon_v=None, kaon_mask=None, # kaon
+                lambda_x=None, lambda_v=None, lambda_mask=None, # lambdas
+                lt_x=None, lt_v=None, lt_mask=None ## lost tracks
+    ):
         # x: (N, C, P)
         # v: (N, 4, P) [px,py,pz,energy]
         # mask: (N, 1, P) -- real particle = 1, padded = 0
@@ -869,16 +860,20 @@ class ParticleTransformerTagger(nn.Module):
             pf_ch_x, pf_ch_v, pf_ch_mask, _ = self.pf_ch_trimmer(pf_ch_x, pf_ch_v, pf_ch_mask)
             pf_neu_x, pf_neu_v, pf_neu_mask, _ = self.pf_neu_trimmer(pf_neu_x, pf_neu_v, pf_neu_mask)
             sv_x, sv_v, sv_mask, _ = self.sv_trimmer(sv_x, sv_v, sv_mask)
-            lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)
-            v    = torch.cat([pf_ch_v, pf_neu_v, sv_v, lt_v], dim=2)
-            mask = torch.cat([pf_ch_mask, pf_neu_mask, sv_mask, lt_mask], dim=2)
+            kaon_x, kaon_v, kaon_mask, _ = self.sv_trimmer(kaon_x, kaon_v, kaon_mask)
+            lambda_x, lambda_v, lambda_mask, _ = self.sv_trimmer(lambda_x, lambda_v, lambda_mask)
+            lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)            
+            v    = torch.cat([pf_ch_v, pf_neu_v, sv_v, kaon_v, lambda_v, lt_v], dim=2)
+            mask = torch.cat([pf_ch_mask, pf_neu_mask, sv_mask, kaon_mask, lambda_mask, lt_mask], dim=2)
             
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             pf_ch_x = self.pf_ch_embed(pf_ch_x)  # after embed: (seq_len, batch, embed_dim)
             pf_neu_x = self.pf_neu_embed(pf_neu_x)  # after embed: (seq_len, batch, embed_dim)
             sv_x = self.sv_embed(sv_x)
+            kaon_x = self.sv_embed(kaon_x)
+            lambda_x = self.sv_embed(lambda_x)
             lt_x = self.lt_embed(lt_x)
-            x = torch.cat([pf_ch_x, pf_neu_x, sv_x, lt_x], dim=0)
+            x = torch.cat([pf_ch_x, pf_neu_x, sv_x, kaon_x, lambda_x, lt_x], dim=0)
             self.part.save_grad_inputs = self.save_grad_inputs
             return self.part(x, v, mask)
 

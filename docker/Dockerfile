@@ -1,5 +1,5 @@
 # import from dockerhub of cuda base
-FROM nvidia/cuda:11.7.0-cudnn8-runtime-centos7
+FROM nvidia/cuda:12.0.0-cudnn8-runtime-centos7
 
 # Maintainer label
 LABEL maintainer="Raffaele Gerosa <rgerosa@ucsd.edu>"
@@ -28,10 +28,10 @@ ARG PATH="/root/miniconda3/bin:${PATH}"
 # Update conda
 RUN conda update -n base -c defaults conda
 
-# Create the environment for weaver: first thing take out the torch cu116 specifics cause are not in the base pip package
 COPY weaver-environment.yaml .
 RUN conda env create -f weaver-environment.yaml
 RUN pip3 install torch torchvision torchaudio
+RUN pip3 install nvitop
 
 # Initialize conda bash config
 RUN conda init bash

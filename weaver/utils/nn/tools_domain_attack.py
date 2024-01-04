@@ -34,7 +34,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_domain_loss, count_cat, count_domain = 0, 0, 0, 0, 0, 0, 0;
     total_cat_correct, total_domain_correct, sum_sqr_err = 0, 0 ,0;
     loss, loss_cat, loss_reg, loss_domain, pred_cat, pred_reg, pred_domain, residual_reg, correct_cat, correct_domain = None, None, None, None, None, None, None, None, None, None;
-    loss_contrastive, model_output_contrastive, model_output_contrastive_da, total_contrastive_loss = None, None, None, 0;
+    loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, 0;
     inputs_attack, model_output_attack, loss_attack = None, None, None;
     num_batches_attack, total_attack_loss, count_attack, residual_attack, sum_residual_attack = 0, 0, 0, 0, 0;
     use_attack, network_options = False, None;
@@ -175,13 +175,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                 target = target.squeeze();
                 ## evaluate the model
                 if network_options and network_options.get('use_contrastive',False):
-                    if  network_options.get('use_contrastive_domain',False):
-                        model_output, model_output_contrastive, model_output_contrastive_da = model(*inputs)
-                        model_output_contrastive = model_output_contrastive[index_cat].squeeze().float();
-                        model_output_contrastive_da = model_output_contrastive_da[index_domain_all].squeeze().float();
-                    else:
-                        model_output, model_output_contrastive = model(*inputs)
-                        model_output_contrastive = model_output_contrastive[index_cat].squeeze().float();
+                    model_output, model_output_contrastive = model(*inputs)
+                    model_output_contrastive = model_output_contrastive[index_cat].squeeze().float();
                 else:
                     model_output  = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
@@ -215,10 +210,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                     model.zero_grad(set_to_none=True)
                     ## infere the model to get the output on Attack inputs
                     if network_options and network_options.get('use_contrastive',False):
-                        if network_options.get('use_contrastive_domain',False):
-                            model_output_attack, _, _ = model(*inputs_attack)
-                        else:
-                            model_output_attack, _ = model(*inputs_attack)                            
+                        model_output_attack, _ = model(*inputs_attack)                            
                     else:
                         model_output_attack = model(*inputs_attack)
                     model_output_attack = model_output_attack[:,:num_labels];
@@ -226,18 +218,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                     model_output_attack = model_output_attack[index_cat].squeeze().float();
                     ## compute the full loss
                     if network_options and network_options.get('use_contrastive',False):
-                        if network_options.get('use_contrastive_da',False):
-                            loss, loss_cat, loss_reg, loss_domain, loss_attack, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_attack,model_output_cat,model_output_contrastive,model_output_contrastive_da);
-                        else:
-                            loss, loss_cat, loss_reg, loss_domain, loss_attack, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_attack,model_output_cat,model_output_contrastive);
+                        loss, loss_cat, loss_reg, loss_domain, loss_attack, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_attack,model_output_cat,model_output_contrastive);
                     else:
                         loss, loss_cat, loss_reg, loss_domain, loss_attack = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,model_output_attack,model_output_cat);                        
                 else:
                     if network_options and network_options.get('use_contrastive',False):
-                        if network_options.get('use_contrastive_da',False):
-                            loss, loss_cat, loss_reg, loss_domain, loss_attack, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,input_cont=model_output_contrastive,input_cont_da=model_output_contrastive_da);
-                        else:
-                            loss, loss_cat, loss_reg, loss_domain, loss_attack, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,input_cont=model_output_contrastive);                            
+                        loss, loss_cat, loss_reg, loss_domain, loss_attack, loss_contrastive = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check,input_cont=model_output_contrastive);                            
                     else:
                         loss, loss_cat, loss_reg, loss_domain, loss_attack = loss_func(model_output_cat,label_cat,model_output_reg,target,model_output_domain,label_domain,label_domain_check);
                         
@@ -652,10 +638,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     
                 model.zero_grad(set_to_none=True);
                 if network_options and network_options.get('use_contrastive',False):
-                    if network_options.get('use_contrastive_domain',False):
-                        model_output, _, _ = model(*inputs)
-                    else:
-                        model_output, _ = model(*inputs)                        
+                    model_output, _ = model(*inputs)                        
                 else:                    
                     model_output = model(*inputs)
                 model_output_cat = model_output[:,:num_labels]
@@ -726,10 +709,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model.zero_grad(set_to_none=True)
                     ## infere the model
                     if network_options and network_options.get('use_contrastive',False):
-                         if network_options.get('use_contrastive_domain',False):
-                             model_output_attack, _, _ = model(*inputs_attack);
-                         else:
-                             model_output_attack, _ = model(*inputs_attack);
+                        model_output_attack, _ = model(*inputs_attack);
                     else:
                         model_output_attack = model(*inputs_attack);
                     model_output_attack = model_output_attack[:,:num_labels];
