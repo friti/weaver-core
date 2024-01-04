@@ -507,7 +507,6 @@ class ParticleTransformer(nn.Module):
                  split_da=False,
                  split_reg=False,
                  flip_grad_da=True,
-                 use_contrastive_domain=False,
                  alpha_grad=1,
                  **kwargs) -> None:
         super().__init__(**kwargs)
@@ -521,12 +520,10 @@ class ParticleTransformer(nn.Module):
         self.alpha_grad = alpha_grad;
         self.fc_domain = None;
         self.fc_contrastive = None;
-        self.fc_contrastive_da = None;
         self.split_da = split_da;
         self.split_reg = split_reg;
         self.flip_grad_da = flip_grad_da;
         self.save_grad_inputs = False;
-        self.use_contrastive_domain = use_contrastive_domain;
         
         embed_dim = embed_dims[-1] if len(embed_dims) > 0 else input_dim
         default_cfg = dict(embed_dim=embed_dim, num_heads=num_heads, ffn_ratio=4,
@@ -608,24 +605,6 @@ class ParticleTransformer(nn.Module):
             
         ## domain layers
         if not for_inference and self.num_domains:
-            ## contrastive da projection
-            fcs_contrastive_da = []
-            if fc_contrastive_params and  use_contrastive_domain:
-                in_dim = embed_dim
-                if self.flip_grad_da:
-                    fcs_contrastive_da.append(GradientReverse(self.alpha_grad));
-                for out_dim, drop_rate in fc_contrastive_params:
-                    fcs_contrastive_da.append(nn.Sequential(
-                        nn.Linear(in_dim, out_dim),
-                        nn.BatchNorm1d(out_dim),
-                        nn.GELU() if activation == 'gelu' else nn.ReLU(),
-                        nn.Dropout(drop_rate))
-                    )
-                    in_dim = out_dim
-                fcs_contrastive_da.append(nn.Linear(in_dim,in_dim));
-                self.fc_contrastive_da = nn.Sequential(*fcs_contrastive_da);
-            else:
-                self.fc_contrastive_da = None;
             ## standard domain layers
             if not self.split_da:
                 num_domain = sum(element for element in self.num_domains);
@@ -752,11 +731,7 @@ class ParticleTransformer(nn.Module):
                         output = torch.cat((output,output_domain),dim=1);
 
             ### contrastive output
-            if self.fc_contrastive is not None and self.fc_contrastive_da is not None:
-                output_cont = self.fc_contrastive(x_cls);
-                output_cont_da = self.fc_contrastive_da(x_cls);
-                return output, output_cont, output_cont_da;
-            elif self.fc_contrastive is not None:
+            if self.fc_contrastive is not None:
                 output_cont = self.fc_contrastive(x_cls);
                 return output, output_cont;            
             else:
@@ -801,7 +776,6 @@ class ParticleTransformerTagger(nn.Module):
                  split_da=False,
                  split_reg=False,
                  flip_grad_da=True,
-                 use_contrastive_domain=False,
                  # save gradiantes for attack
                  save_grad_inputs=False,
                  alpha_grad=1,
@@ -850,7 +824,6 @@ class ParticleTransformerTagger(nn.Module):
             split_da=split_da,
             split_reg=split_reg,
             flip_grad_da=flip_grad_da,
-            use_contrastive_domain=use_contrastive_domain,
             alpha_grad=alpha_grad
         )
 
