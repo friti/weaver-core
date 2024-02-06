@@ -164,7 +164,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
             label_domain = label_domain.to(dev,non_blocking=True)
             label_domain_check = label_domain_check.to(dev,non_blocking=True)
             target = target.to(dev,non_blocking=True)            
-            
+
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):                

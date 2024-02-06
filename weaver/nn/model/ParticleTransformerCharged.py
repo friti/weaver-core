@@ -26,7 +26,7 @@ def to_pt2(x, eps=1e-8):
 
 def to_eta(x, eps=1e-8):
     pz = x[:, 2:3];
-    p  = x[:, :3].square().sum(dim=1, keepdim=True);
+    p  = torch.sqrt(x[:, :3].square().sum(dim=1, keepdim=True));
     eta = 0.5 * torch.log((p+pz)/(p-pz))
     if eps is not None:
        eta = eta.clamp(min=eps)
@@ -77,34 +77,38 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
 
     pti, etai, phii = to_ptetaphim(xi, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
     ptj, etaj, phij = to_ptetaphim(xj, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
-    
-    delta = delta_r2(etai, phii, etaj, phij).sqrt()
+
+    delta   = torch.sqrt(delta_r2(etai, phii, etaj, phij));
     lndelta = torch.log(delta.clamp(min=eps))
 
+    ## log dR
     if num_outputs == 1:
         return lndelta
 
+    ## kt and anti-kt metrics
     if num_outputs > 1:
         ptmin = ((pti <= ptj) * pti + (pti > ptj) * ptj) if for_onnx else torch.minimum(pti, ptj)
         lnkt  = torch.log((ptmin * delta).clamp(min=eps))
         lnz   = torch.log((ptmin / (pti + ptj).clamp(min=eps)).clamp(min=eps))
         outputs = [lnkt, lnz, lndelta]
-        
+
+    ## invriant mass
     if num_outputs > 3:
         xij = xi + xj
         lnm2 = torch.log(to_m2(xij, eps=eps))
         outputs.append(lnm2)
-
+    
     if num_outputs > 4:
         lnds2 = torch.log(torch.clamp(-to_m2(xi - xj, eps=None), min=eps))
         outputs.append(lnds2)
 
-    # the following features are not symmetric for (i, j)
-    if num_outputs > 5:
+    # angle wrt the rest frame
+    if num_outputs > 5:        
         xj_boost = boost(xj, xij)
         costheta = (p3_norm(xj_boost, eps=eps) * p3_norm(xij, eps=eps)).sum(dim=1, keepdim=True)
         outputs.append(costheta)
 
+    # add the delta-eta and delta-phi of pairs in addition to the deltaR
     if num_outputs > 6:
         deltaeta = etai - etaj
         deltaphi = delta_phi(phii, phij)
@@ -794,19 +798,19 @@ class ParticleTransformerTagger(nn.Module):
         self.use_amp = use_amp
         self.save_grad_inputs = False if for_inference else save_grad_inputs;
         
-        self.pf_ch_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.pf_ch_trimmer  = SequenceTrimmer(enabled=trim and not for_inference)
         self.pf_neu_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.kaon_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.sv_trimmer     = SequenceTrimmer(enabled=trim and not for_inference)
+        self.kaon_trimmer   = SequenceTrimmer(enabled=trim and not for_inference)
         self.lambda_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.lt_trimmer = SequenceTrimmer(enabled=trim and not for_inference)        
+        self.lt_trimmer     = SequenceTrimmer(enabled=trim and not for_inference)        
 
-        self.pf_ch_embed = Embed(pf_ch_input_dim, embed_dims, activation=activation)
+        self.pf_ch_embed  = Embed(pf_ch_input_dim, embed_dims, activation=activation)
         self.pf_neu_embed = Embed(pf_neu_input_dim, embed_dims, activation=activation)
-        self.sv_embed = Embed(sv_input_dim, embed_dims, activation=activation)
-        self.kaon_embed = Embed(kaon_input_dim, embed_dims, activation=activation)
+        self.sv_embed     = Embed(sv_input_dim, embed_dims, activation=activation)
+        self.kaon_embed   = Embed(kaon_input_dim, embed_dims, activation=activation)
         self.lambda_embed = Embed(lambda_input_dim, embed_dims, activation=activation)
-        self.lt_embed = Embed(lt_input_dim, embed_dims, activation=activation)
+        self.lt_embed     = Embed(lt_input_dim, embed_dims, activation=activation)
         
         self.part = ParticleTransformer(
             input_dim=embed_dims[-1],
@@ -853,6 +857,7 @@ class ParticleTransformerTagger(nn.Module):
                 lambda_x=None, lambda_v=None, lambda_mask=None, # lambdas
                 lt_x=None, lt_v=None, lt_mask=None ## lost tracks
     ):
+
         # x: (N, C, P)
         # v: (N, 4, P) [px,py,pz,energy]
         # mask: (N, 1, P) -- real particle = 1, padded = 0
@@ -867,12 +872,12 @@ class ParticleTransformerTagger(nn.Module):
             mask = torch.cat([pf_ch_mask, pf_neu_mask, sv_mask, kaon_mask, lambda_mask, lt_mask], dim=2)
             
         with torch.cuda.amp.autocast(enabled=self.use_amp):
-            pf_ch_x = self.pf_ch_embed(pf_ch_x)  # after embed: (seq_len, batch, embed_dim)
+            pf_ch_x  = self.pf_ch_embed(pf_ch_x)  # after embed: (seq_len, batch, embed_dim)
             pf_neu_x = self.pf_neu_embed(pf_neu_x)  # after embed: (seq_len, batch, embed_dim)
-            sv_x = self.sv_embed(sv_x)
-            kaon_x = self.kaon_embed(kaon_x)
+            sv_x     = self.sv_embed(sv_x)
+            kaon_x   = self.kaon_embed(kaon_x)
             lambda_x = self.lambda_embed(lambda_x)
-            lt_x = self.lt_embed(lt_x)
+            lt_x     = self.lt_embed(lt_x)
             x = torch.cat([pf_ch_x, pf_neu_x, sv_x, kaon_x, lambda_x, lt_x], dim=0)
             self.part.save_grad_inputs = self.save_grad_inputs
             return self.part(x, v, mask)
