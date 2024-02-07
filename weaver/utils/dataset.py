@@ -23,10 +23,14 @@ def _finalize_inputs(table, data_config):
     for k in data_config.z_variables:
         if k in data_config.observer_names:
             a = ak.to_numpy(table[k])
-            if a.dtype in (np.uint16, np.uint32, np.uint64):
-                # FIXME: hack as torch only supports float64, float32, float16, complex64, complex128, int64, int32, int16, int8, uint8, and bool
-                a = a.astype('int64')
-            output[k] = a
+            if a.dtype == np.uint16:
+                output[k] = a.astype('int16')
+            elif a.dtype == np.uint32:
+                output[k] = a.astype('int32')
+            elif a.dtype == np.uint64:
+                output[k] = a.astype('int64')
+            else:
+                output[k] = table[k]
             
     # copy labels
     for k in data_config.label_names+data_config.target_names+data_config.label_domain_names:

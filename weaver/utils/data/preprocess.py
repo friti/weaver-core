@@ -17,7 +17,6 @@ def _apply_selection(table, selection, funcs={}):
     selected = ak.values_astype(_eval_expr(selection, table), 'bool')
     return table[selected]
 
-
 def _build_new_variables(table, funcs):
     if funcs is None:
         return table

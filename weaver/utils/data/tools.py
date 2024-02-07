@@ -85,11 +85,11 @@ def _batch_knn(supports, queries, k, maxlen_s, maxlen_q=None, n_jobs=1):
 
 def _batch_permute_indices(array, maxlen):
     random_array = ak.unflatten(np.random.rand(ak.count(array)), ak.num(array))
-     return ak.argsort(random_array)
+    return ak.argsort(random_array)
 
- def _batch_argsort(array):
-     return ak.argsort(array)
-
+def _batch_argsort(array):
+    return ak.argsort(array)
+ 
 def _batch_gather(array, indices):
      return array[indices]
  

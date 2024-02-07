@@ -35,12 +35,12 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, _, _, _, _, _ in tq:
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-            label  = y_cat[data_config.label_names[0]].long()
+            label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
             try:
-                label_mask = y_cat[data_config.label_names[0] + '_mask'].bool()
+                label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
             except KeyError:
                 label_mask = None
-            label = _flatten_label(label, label_mask)
+            label = _flatten_label(label,mask=label_mask)
 
             num_examples = label.shape[0]
             label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
@@ -50,7 +50,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)                
-                model_output = _flatten_preds(model_output, label_mask)
+                model_output = _flatten_preds(model_output, label=label, mask=label_mask)
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
                 loss = loss_func(model_output, label)
@@ -149,20 +149,19 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, _, _, Z, _, _ in tq:
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
-                label  = y_cat[data_config.label_names[0]].long()
+                label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
                 entry_count += label.shape[0]
                 try:
-                    label_mask = y_cat[data_config.label_names[0] + '_mask'].bool()
+                    label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
                 except KeyError:
                     label_mask = None
                 if not for_training and label_mask is not None:
                     labels_counts.append(np.squeeze(label_mask.numpy(force=True).sum(axis=-1).astype(dtype=np.int32)))
-
-                label = _flatten_label(label, label_mask)
+                label = _flatten_label(label,mask=label_mask)
                 num_examples = label.shape[0]
                 label_counter.update(label.numpy(force=True).astype(dtype=np.int32))
                 for k, v in y_cat.items():
-                    labels[k].append(_flatten_label(v,label_mask).numpy(force=True).astype(dtype=np.int32))
+                    labels[k].append(_flatten_label(v,mask=label_mask).numpy(force=True).astype(dtype=np.int32))
                 if not for_training:
                     for k, v in Z.items():
                         if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
@@ -170,11 +169,10 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                         else:
                             observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
 
-                label = label.to(dev,non_blocking=True)
                 count += num_examples
 
                 model_output = model(*inputs)
-                model_output = _flatten_preds(model_output, label_mask)                
+                model_output = _flatten_preds(model_output,label=label,mask=label_mask)                
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
 
@@ -276,10 +274,10 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
             for k, v in y_cat.items():
                 labels[k].append(v.numpy(force=True).astype(dtype=np.int32))
             for k, v in Z.items():
-                if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
-                    observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
-                else:
-                    observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
+               if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                  observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
+               else:
+                  observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score)).squeeze();
             scores.append(score.numpy(force=True).astype(dtype=np.float32))
@@ -624,7 +622,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     num_batches, total_loss, total_cat_loss, total_reg_loss, count = 0, 0, 0, 0, 0
     label_counter = Counter()
     total_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0
-    inputs, target, label, model_output = None, None, None, None;
+    inputs, target, label, model_output, label_mask = None, None, None, None, label_mask;
     loss, loss_cat, loss_reg, pred_cat, pred_reg, residual_reg, correct = None, None, None, None, None, None, None;
 
     start_time = time.time()
@@ -637,8 +635,12 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
-            label = y_cat[data_config.label_names[0]].long()
-            label = _flatten_label(label,None)
+            label = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
+            try:
+                label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
+            except KeyError:
+                label_mask = None
+            label = _flatten_label(label,mask=label_mask)
             label_counter.update(label.numpy(force=True).astype(dtype=np.int32))
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
@@ -648,9 +650,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     target = torch.column_stack((target,y_reg[names].float()))
             ### Number of samples in the batch
             num_examples = max(label.shape[0],target.shape[0]);
-            ### Send to device
-            label  = label.to(dev,non_blocking=True)
-            target = target.to(dev,non_blocking=True)            
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
@@ -658,7 +657,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 model_output = model(*inputs)                
                 model_output_cat = model_output[:,:num_labels];
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
-                model_output_cat = _flatten_preds(model_output_cat,None)
+                model_output_cat = _flatten_preds(model_output_cat,label=label,mask=label_mask)
                 model_output_cat = model_output_cat.squeeze().float();
                 model_output_reg = model_output_reg.squeeze().float();
                 label = label.squeeze();
@@ -782,7 +781,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     data_config = test_loader.dataset.config
     label_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0;
-    inputs, label, target,  model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None;
+    inputs, label, target,  model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg, label_mask = None, None, None, None, None , None, None, None, None, None;
     inputs_grad_sign, inputs_attack, model_output_attack, network_option = None, None, None, None;
     num_batches_attack, total_attack_loss, count_attack, residual_attack, sum_residual_attack = 0, 0, 0, 0, 0;
     scores_cat, scores_reg, scores_attack = [], [];
@@ -808,8 +807,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
-                label  = y_cat[data_config.label_names[0]].long()
-                label  = _flatten_label(label,None)
+                label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
+                try:
+                   label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
+                except KeyError:
+                   label_mask = None
+                label  = _flatten_label(label,mask=label_mask)
                 label_counter.update(label.numpy(force=True).astype(dtype=np.int32))
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
@@ -820,9 +823,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### update counters
                 num_examples = max(label.shape[0],target.shape[0]);
                 entry_count += num_examples
-                ### send to device
-                label  = label.to(dev,non_blocking=True)                
-                target = target.to(dev,non_blocking=True)            
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
                     labels[name].append(_flatten_label(y_cat[name],None).numpy(force=True).astype(dtype=np.int32))
@@ -839,7 +839,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### evaluate model
                 num_attack_examples = 0;
                 if eval_attack:
-                    num_attack_examples = max(label_cat.shape[0],target.shape[0]);                    
+                    num_attack_examples = max(label.shape[0],target.shape[0]);                    
                     torch.set_grad_enabled(True);
                     for idx,element in enumerate(inputs):        
                         element.requires_grad = True;
@@ -853,7 +853,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### build classification and regression outputs
                 model_output_cat = model_output[:,:num_labels];
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
-                model_output_cat = _flatten_preds(model_output_cat,None)
+                model_output_cat = _flatten_preds(model_output_cat,label=label,mask=label_mask)
                 model_output_cat = model_output_cat.squeeze().float();
                 model_output_reg = model_output_reg.squeeze().float();
                 label  = label.squeeze();
@@ -871,7 +871,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ## create adversarial testing attack features and evaluate the model
                 if eval_attack:
-                    loss, _ , _, _ = loss_func(model_output_cat,label_cat,model_output_reg,target);
+                    loss, _ , _, _ = loss_func(model_output_cat,label,model_output_reg,target);
                     loss.backward();
                     ## produce gradient signs and features                                                                                                                                     
                     if network_options and network_options.get('use_norm_gradient',False):
@@ -885,7 +885,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model.zero_grad(set_to_none=True)
                     model_output_attack = model(*inputs_attack)
                     model_output_attack = model_output_attack[:,:num_labels];
-                    model_output_attack = _flatten_preds(model_output_attack,None).squeeze().float();
+                    model_output_attack = _flatten_preds(model_output_attack,label=label,mask=label_mask).squeeze().float();
                     scores_attack.append(torch.softmax(model_output_attack,dim=1).detach().numpy(force=True).astype(dtype=np.float32));
                     
                 ### evaluate loss function
@@ -965,7 +965,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     _logger.info('Eval AvgAccCat: %.5f'%(total_cat_correct / count_cat if count_cat else 0))
     _logger.info('Eval AvgMSE: %.5f'%(sum_sqr_err / count_cat if count_cat else 0))
     _logger.info('Eval AvgAttack: %.5f'%(sum_residual_attack / count_attack if count_attack else 0))    
-    _logger.info('Eval class distribution: \n    %s', str(sorted(label_cat_counter.items())))
+    _logger.info('Eval class distribution: \n    %s', str(sorted(label_counter.items())))
 
     if tb_helper:
         tb_mode = 'eval' if for_training else 'test'

@@ -711,13 +711,12 @@ def iotest(args, data_loader):
     monitor_info = {k: _concat(v) for k, v in monitor_info.items()}
     if monitor_info:
         monitor_output_path = 'weaver_monitor_info.parquet'
-         try:
-             import awkward as ak
-             ak.to_parquet(ak.Array(monitor_info), monitor_output_path, compression='LZ4', compression_level=4)
-             _logger.info('Monitor info written to %s' % monitor_output_path, color='bold')
-         except Exception as e:
-             _logger.error('Error when writing output parquet file: \n' + str(e))
-
+        try:
+            import awkward as ak
+            ak.to_parquet(ak.Array(monitor_info), monitor_output_path, compression='LZ4', compression_level=4)
+            _logger.info('Monitor info written to %s' % monitor_output_path, color='bold')
+        except Exception as e:
+            _logger.error('Error when writing output parquet file: \n' + str(e))
 
 def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_attack=np.array([])):
     """
@@ -821,7 +820,11 @@ def save_parquet(args, output_path, scores, labels, targets, labels_domain, obse
     output.update(targets)
     output.update(labels_domain)
     output.update(observers)
-    ak.to_parquet(ak.Array(output), output_path, compression='LZ4', compression_level=4)
+    try:
+        ak.to_parquet(ak.Array(output), output_path, compression='LZ4', compression_level=4)
+        _logger.info('Written output to %s' % output_path, color='bold')
+    except Exception as e:
+        _logger.error('Error when writing output parquet file: \n' + str(e))
 
 
 def _main(args):
@@ -854,9 +857,9 @@ def _main(args):
         from utils.nn.tools import evaluate_onnx_classreg as evaluate_onnx
     elif args.weaver_mode == "classregdomain":
         _logger.info('Running in combined regression + classification mode with domain adaptation')
-        from utils.nn.tools_domain import train_classreg as train
-        from utils.nn.tools_domain import evaluate_classreg as evaluate
-        from utils.nn.tools_domain import evaluate_onnx_classreg as evaluate_onnx
+        from utils.nn.tools_domain_attack import train_classreg as train
+        from utils.nn.tools_domain_attack import evaluate_classreg as evaluate
+        from utils.nn.tools_domain_attack import evaluate_onnx_classreg as evaluate_onnx
     elif args.weaver_mode == "classregdomainattack":
         _logger.info('Running in combined regression + classification mode with domain adaptation and attack')
         from utils.nn.tools_domain_attack import train_classreg as train
