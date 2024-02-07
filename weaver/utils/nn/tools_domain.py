@@ -105,7 +105,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
             num_domain_examples = label_domain.shape[0];
 
-            label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32)
+            label_cat_np = label_cat.numpy(force=True).astype(dtype=np.int32)
             if np.iterable(label_cat_np):
                 label_cat_counter.update(label_cat_np)
             else:
@@ -115,14 +115,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             for idx, (k,v) in enumerate(y_domain_check.items()):
                 if num_domains == 1:
                     index_domain[k] = label_domain_check.nonzero();
-                    label_domain_np = label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32)
+                    label_domain_np = label_domain[index_domain[k]].squeeze().numpy(force=True).astype(dtype=np.int32)
                     if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np)
                     else:
                         _logger.info('label_domain not iterable --> shape %s'%(str(label_domain_np.shape)))
                 else:                    
                     index_domain[k] = label_domain_check[:,idx].nonzero();
-                    label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
+                    label_domain_np = label_domain[index_domain[k],idx].squeeze().numpy(force=True).astype(dtype=np.int32);
                     if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np)
                     else:
@@ -398,7 +398,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 label_domain_check = label_domain_check.squeeze()
 
                 ### counters
-                label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32)
+                label_cat_np = label_cat.numpy(force=True).astype(dtype=np.int32)
                 if np.iterable(label_cat_np):
                     label_cat_counter.update(label_cat_np)
                 else:
@@ -408,14 +408,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 for idx, (k,v) in enumerate(y_domain_check.items()):
                     if num_domains == 1:
                         index_domain[k] = label_domain_check.nonzero();
-                        label_domain_np = label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32)
+                        label_domain_np = label_domain[index_domain[k]].squeeze().numpy(force=True).astype(dtype=np.int32)
                         if np.iterable(label_domain_np):
                             label_domain_counter[idx].update(label_domain_np);
                         else:
                             _logger.info('label_domain not iterable --> shape %s'%(str(label_domain_np.shape)))
                     else:
                         index_domain[k] = label_domain_check[:,idx].nonzero();
-                        label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
+                        label_domain_np = label_domain[index_domain[k],idx].squeeze().numpy(force=True).astype(dtype=np.int32);
                         if np.iterable(label_domain_np):
                             label_domain_counter[idx].update(label_domain_np);
                         else:
@@ -434,30 +434,30 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### store truth labels for classification and regression as well as observers
                 for k, v in y_cat.items():
                     if not for_training:
-                        labels_cat[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
+                        labels_cat[k].append(_flatten_label(v,None).numpy(force=True).astype(dtype=np.int32))
                     else:
-                        labels_cat[k].append(_flatten_label(v[index_cat],None).cpu().numpy().astype(dtype=np.int32))
+                        labels_cat[k].append(_flatten_label(v[index_cat],None).numpy(force=True).astype(dtype=np.int32))
 
                 for k, v in y_reg.items():
                     if not for_training:
-                        targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
+                        targets[k].append(v.numpy(force=True).astype(dtype=np.float32))                
                     else:
-                        targets[k].append(v[index_cat].cpu().numpy().astype(dtype=np.float32))
+                        targets[k].append(v[index_cat].numpy(force=True).astype(dtype=np.float32))
                     
                 if not for_training:
-                    indexes_cat.append((index_offset+index_cat).cpu().numpy().astype(dtype=np.int32));
+                    indexes_cat.append((index_offset+index_cat).numpy(force=True).astype(dtype=np.int32));
                     for k, v in Z.items():                
-                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                         else:
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
 
                 for idx, (k, v) in enumerate(y_domain.items()):
                     if not for_training:
-                        labels_domain[k].append(v.squeeze().cpu().numpy().astype(dtype=np.int32))
-                        indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).cpu().numpy().astype(dtype=np.int32));
+                        labels_domain[k].append(v.squeeze().numpy(force=True).astype(dtype=np.int32))
+                        indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).numpy(force=True).astype(dtype=np.int32));
                     else:
-                        labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]]].squeeze().cpu().numpy().astype(dtype=np.int32))
+                        labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]]].squeeze().numpy(force=True).astype(dtype=np.int32))
                             
                 ### evaluate model
                 num_attack_examples = 0;
@@ -490,24 +490,24 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_cat = model_output_cat.squeeze().float();
                     model_output_reg = model_output_reg.squeeze().float();
                     model_output_domain = model_output_domain.squeeze().float();                    
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
-                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).numpy(force=True).astype(dtype=np.float32));
+                    scores_reg.append(model_output_reg.numpy(force=True).astype(dtype=np.float32));
                     for idx, name in enumerate(y_domain.keys()):
                         id_dom = idx*ldomain[idx];
                         score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                        scores_domain[name].append(torch.softmax(score_domain[index_domain[list(y_domain_check.keys())[idx]]].squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
+                        scores_domain[name].append(torch.softmax(score_domain[index_domain[list(y_domain_check.keys())[idx]]].squeeze(),dim=1).numpy(force=True).astype(dtype=np.float32));
                 else:
 
                     model_output_cat = model_output_cat.float();
                     model_output_reg = model_output_reg.float();
                     model_output_domain = model_output_domain.float();
 
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
-                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).numpy(force=True).astype(dtype=np.float32));
+                    scores_reg.append(model_output_reg.numpy(force=True).astype(dtype=np.float32));
                     for idx, name in enumerate(y_domain.keys()):
                         id_dom = idx*ldomain[idx];
                         score_domain = model_output_domain[:,id_dom:id_dom+ldomain[idx]];
-                        scores_domain[name].append(torch.softmax(score_domain.squeeze(),dim=1).cpu().numpy().astype(dtype=np.float32));
+                        scores_domain[name].append(torch.softmax(score_domain.squeeze(),dim=1).numpy(force=True).astype(dtype=np.float32));
                         
                     model_output_cat = model_output_cat[index_cat];
                     model_output_reg = model_output_reg[index_cat];
@@ -539,7 +539,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_attack = model_output_attack[:,:num_labels];
                     model_output_attack = _flatten_preds(model_output_attack,None);
                     model_output_attack = model_output_attack[index_cat].squeeze().float();
-                    scores_attack.append(torch.softmax(model_output_attack,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
+                    scores_attack.append(torch.softmax(model_output_attack,dim=1).detach().numpy(force=True).astype(dtype=np.float32));
 
                 ### evaluate loss function
                 num_batches += 1
@@ -818,19 +818,19 @@ def evaluate_onnx_classreg(model_path, test_loader,
             label_domain_check = label_domain_check.squeeze()
 
             ### counters
-            label_cat_np = label_cat.cpu().numpy().astype(dtype=np.int32);
+            label_cat_np = label_cat.numpy(force=True).astype(dtype=np.int32);
             if np.iterable(label_cat_np):
                 label_cat_counter.update(label_cat_np)
             index_domain = defaultdict(list)
             for idx, (k,v) in enumerate(y_domain_check.items()):
                 if num_domains == 1:
                     index_domain[k] = label_domain_check.nonzero();
-                    label_domain_np = label_domain[index_domain[k]].squeeze().cpu().numpy().astype(dtype=np.int32);
+                    label_domain_np = label_domain[index_domain[k]].squeeze().numpy(force=True).astype(dtype=np.int32);
                     if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np);
                 else:
                     index_domain[k] = label_domain_check[:,idx].nonzero();
-                    label_domain_np = label_domain[index_domain[k],idx].squeeze().cpu().numpy().astype(dtype=np.int32);
+                    label_domain_np = label_domain[index_domain[k],idx].squeeze().numpy(force=True).astype(dtype=np.int32);
                     if np.iterable(label_domain_np):
                         label_domain_counter[idx].update(label_domain_np);
 
@@ -839,19 +839,19 @@ def evaluate_onnx_classreg(model_path, test_loader,
             num_domain_examples = label_domain.shape[0]
 
             ### define truth labels for classification and regression
-            indexes_cat.append((index_offset+index_cat).cpu().numpy().astype(dtype=np.int32));
+            indexes_cat.append((index_offset+index_cat).numpy(force=True).astype(dtype=np.int32));
             for k, v in y_cat.items():
-                labels_cat[k].append(_flatten_label(v,None).cpu().numpy().astype(dtype=np.int32))
+                labels_cat[k].append(_flatten_label(v,None).numpy(force=True).astype(dtype=np.int32))
             for k, v in y_reg.items():
-                targets[k].append(v.cpu().numpy().astype(dtype=np.float32))                
+                targets[k].append(v.numpy(force=True).astype(dtype=np.float32))                
             for k, v in Z.items():                
-                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                 else:
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))                    
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.float32))                    
             for idx, (k, v) in enumerate(y_domain.items()):
-                labels_domain[k].append(v.squeeze().cpu().numpy().astype(dtype=np.int32))
-                indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).cpu().numpy().astype(dtype=np.int32));
+                labels_domain[k].append(v.squeeze().numpy(force=True).astype(dtype=np.int32))
+                indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).numpy(force=True).astype(dtype=np.int32));
   
             ### output of the mode
             model_output = sess.run([], inputs)
@@ -862,8 +862,8 @@ def evaluate_onnx_classreg(model_path, test_loader,
             label_cat = label_cat.squeeze();
             label_domain = label_domain.squeeze();
             target = target.squeeze();
-            scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
-            scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32));
+            scores_cat.append(torch.softmax(model_output_cat,dim=1).numpy(force=True).astype(dtype=np.float32));
+            scores_reg.append(model_output_reg.numpy(force=True).astype(dtype=np.float32));
 
             model_output_cat = model_output_cat[index_cat];
             model_output_reg = model_output_reg[index_cat];

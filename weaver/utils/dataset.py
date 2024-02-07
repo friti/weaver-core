@@ -8,12 +8,15 @@ import torch.utils.data
 from functools import partial
 from concurrent.futures.thread import ThreadPoolExecutor
 from .logger import _logger
-from .data.tools import _pad, _repeat_pad, _clip
+from .data.tools import _pad, _repeat_pad, _clip, _stack
 from .data.fileio import _read_files
 from .data.config import DataConfig, _md5
 from .data.preprocess import _apply_selection, _build_new_variables, _build_weights, AutoStandardizer, WeightMaker
 
 
+def _collate_awkward_array_fn(batch, *, collate_fn_map=None):
+    return _stack(batch, axis=0)
+ 
 def _finalize_inputs(table, data_config):
     output = {}
     # copy observer variables before transformation
@@ -21,8 +24,10 @@ def _finalize_inputs(table, data_config):
         if k in data_config.observer_names:
             a = ak.to_numpy(table[k])
             if a.dtype in (np.uint16, np.uint32, np.uint64):
+                # FIXME: hack as torch only supports float64, float32, float16, complex64, complex128, int64, int32, int16, int8, uint8, and bool
                 a = a.astype('int64')
             output[k] = a
+            
     # copy labels
     for k in data_config.label_names+data_config.target_names+data_config.label_domain_names:
         output[k] = ak.to_numpy(table[k])
@@ -54,8 +59,8 @@ def _finalize_inputs(table, data_config):
             output['_' + k] = ak.to_numpy(np.stack([ak.to_numpy(table[n]).astype('float32') for n in names], axis=1))
     # copy monitor variables
     for k in data_config.z_variables:
-        if k not in output:
-            output[k] = ak.to_numpy(table[k])
+        if k in data_config.monitor_variables:
+            output[k] = table[k]
     return output
 
 
@@ -76,7 +81,7 @@ def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale
             return keep_indices_cat.copy()
         keep_indices_dom = indices_dom[keep_flags_dom]
         keep_indices = np.concatenate((keep_indices_cat,keep_indices_dom),axis=0)
-        return keep_indices.copy()
+        return copy.deepcopy(keep_indices)
     else:
         n_repeats = len(weights_cat) // max(1, int(keep_flags_cat.sum()))
         if n_repeats > max_resample:
@@ -85,7 +90,7 @@ def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale
         randwgt_cat = np.random.uniform(low=0, high=weight_scale, size=len(weights_cat) * n_repeats)
         keep_indices_cat = indices_cat[randwgt_cat < np.repeat(weights_cat, n_repeats)]
         if not domain_classes:
-             keep_indices_cat.copy()
+            copy.deepcopy(keep_indices_cat)
         
         ## domain indexes
         keep_indices = keep_indices_cat;
@@ -100,7 +105,7 @@ def _get_reweight_indices(weights, up_sample=True, max_resample=10, weight_scale
                     randwgt_dom = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom)*domain_weights[idx])
                     keep_indices_dom = indices_dom[randwgt_dom < np.repeat(np.absolute(weights_dom),domain_weights[idx])]
                     keep_indices = np.concatenate((keep_indices,keep_indices_dom),axis=0)            
-        return keep_indices.copy()
+        return copy.deepcopy(keep_indices)
 
 
 def _check_labels(table):
@@ -187,7 +192,7 @@ class _SimpleIter(object):
 
         self._seed = None
         worker_info = torch.utils.data.get_worker_info()
-        file_dict = self._init_file_dict.copy()
+        file_dict = copy.deepcopy(self._init_file_dict)
         if worker_info is not None:
             # in a worker process
             self._name += '_worker%d' % worker_info.id
@@ -208,7 +213,7 @@ class _SimpleIter(object):
     def restart(self):
         print('=== Restarting DataIter %s, seed=%s ===' % (self._name, self._seed))
         # re-shuffle filelist and load range if for training
-        filelist = self.worker_filelist.copy()
+        filelist = copy.deepcopy(self.worker_filelist)
         if self._sampler_options['shuffle']:
             np.random.shuffle(filelist)
         if self._file_fraction < 1:
@@ -312,23 +317,23 @@ class _SimpleIter(object):
 
     def get_data(self, i):
         # inputs
-        X = {k: self.table['_' + k][i].copy() for k in self._data_config.input_names}
+        X = {k: copy.deepcopy(self.table['_' + k][i]) for k in self._data_config.input_names}
         # labels for classification
-        y_cat = {k: self.table[k][i].copy() for k in self._data_config.label_names}
+        y_cat = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_names}
         # target for regression
-        y_reg = {k: self.table[k][i].copy() for k in self._data_config.target_names}        
+        y_reg = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.target_names}        
         # labels for domain
         if self._data_config.label_domain_names:
-            y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
+            y_domain = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_domain_names}        
         else:
             y_domain = {};
         # observers / monitor variables
-        Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
+        Z = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.z_variables}
         # labelcheck for classificaiton
-        y_cat_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_names}
+        y_cat_check = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.labelcheck_names}
         # labelcheck for domain
         if self._data_config.labelcheck_domain_names:
-            y_domain_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_domain_names}            
+            y_domain_check = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.labelcheck_domain_names}            
         else:
             y_domain_check = {};
         return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check 
@@ -380,7 +385,10 @@ class SimpleIterDataset(torch.utils.data.IterableDataset):
             'max_resample': max_resample,
             'max_resample_dom': max_resample_dom,
         }
-
+    
+        from torch.utils.data._utils.collate import default_collate_fn_map
+        default_collate_fn_map.update({ak.Array: _collate_awkward_array_fn})
+        
         if for_training:
             self._sampler_options.update(training=True, shuffle=True, reweight=True)
         else:

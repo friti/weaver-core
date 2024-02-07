@@ -438,7 +438,7 @@ def onnx(args):
     _logger.info('Preprocessing parameters saved to %s', preprocessing_json)
 
 
-def flops(model, model_info):
+def flops(model, model_info,device='cpu'):
     """
     Count FLOPs and params.
     :param args:
@@ -449,11 +449,11 @@ def flops(model, model_info):
     from utils.flops_counter import get_model_complexity_info
     import copy
 
-    model = copy.deepcopy(model).cpu()
+    model = copy.deepcopy(model).to(device)
     model.eval()
 
     inputs = tuple(
-        torch.ones(model_info['input_shapes'][k], dtype=torch.float32) for k in model_info['input_names'])
+        torch.ones(model_info['input_shapes'][k], dtype=torch.float32, device=device) for k in model_info['input_names'])
 
     macs, params = get_model_complexity_info(model, inputs, as_strings=True, print_per_layer_stat=True, verbose=True)
     _logger.info('{:<30}  {:<8}'.format('Computational complexity: ', macs))
@@ -651,7 +651,7 @@ def optim(args, model, device, loss_func=None):
     return opt, scheduler
 
 
-def model_setup(args, data_config):
+def model_setup(args, data_config,device='cpu'):
     """
     Loads the model
     :param args:
@@ -684,7 +684,7 @@ def model_setup(args, data_config):
         _logger.info('Model initialized with weights from %s\n ... Missing: %s\n ... Unexpected: %s' %
                      (args.load_model_weights, missing_keys, unexpected_keys))
 
-    flops(model, model_info)
+    flops(model, model_info,device='cpu')
     # loss function
     loss_func = network_module.get_loss(data_config, **network_options)
     _logger.info('Using loss function %s with options %s' % (loss_func, network_options))
@@ -707,14 +707,16 @@ def iotest(args, data_loader):
 
     for X, y_cat, y_reg, y_quant, Z in tqdm(data_loader):
         for k, v in Z.items():
-            monitor_info[k].append(v.cpu().numpy())
+            monitor_info[k].append(v)
     monitor_info = {k: _concat(v) for k, v in monitor_info.items()}
     if monitor_info:
-        monitor_output_path = 'weaver_monitor_info.pkl'
-        import pickle
-        with open(monitor_output_path, 'wb') as f:
-            pickle.dump(monitor_info, f)
-        _logger.info('Monitor info written to %s' % monitor_output_path)
+        monitor_output_path = 'weaver_monitor_info.parquet'
+         try:
+             import awkward as ak
+             ak.to_parquet(ak.Array(monitor_info), monitor_output_path, compression='LZ4', compression_level=4)
+             _logger.info('Monitor info written to %s' % monitor_output_path, color='bold')
+         except Exception as e:
+             _logger.error('Error when writing output parquet file: \n' + str(e))
 
 
 def save_root(args, output_path, data_config, scores, labels, targets, labels_domain, observers, scores_attack=np.array([])):
@@ -903,7 +905,7 @@ def _main(args):
             test_loaders, data_config = test_load(args)
 
     ## setup the model
-    model, model_info, loss_func = model_setup(args, data_config)
+    model, model_info, loss_func = model_setup(args, data_config, device=dev)
     
     if args.profile:
         profile(args, model, model_info, device=dev)
@@ -921,7 +923,7 @@ def _main(args):
         # DistributedDataParallel
         if args.backend is not None and ngpus > 1: 
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank, find_unused_parameters=True)
         else:
             # DataParallel
             if gpus is not None and ngpus > 1:
@@ -1012,7 +1014,7 @@ def _main(args):
              
             if args.backend is not None and ngpus > 1:
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank, find_unused_parameters=True)
                 model.module.load_state_dict(torch.load(model_path, map_location=dev))
             else:
                 if gpus is not None and ngpus > 1:

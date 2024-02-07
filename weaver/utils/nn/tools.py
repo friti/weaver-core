@@ -156,19 +156,19 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 except KeyError:
                     label_mask = None
                 if not for_training and label_mask is not None:
-                    labels_counts.append(np.squeeze(label_mask.cpu().numpy().sum(axis=-1).astype(dtype=np.int32)))
+                    labels_counts.append(np.squeeze(label_mask.numpy(force=True).sum(axis=-1).astype(dtype=np.int32)))
 
                 label = _flatten_label(label, label_mask)
                 num_examples = label.shape[0]
-                label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
+                label_counter.update(label.numpy(force=True).astype(dtype=np.int32))
                 for k, v in y_cat.items():
-                    labels[k].append(_flatten_label(v,label_mask).cpu().numpy().astype(dtype=np.int32))
+                    labels[k].append(_flatten_label(v,label_mask).numpy(force=True).astype(dtype=np.int32))
                 if not for_training:
                     for k, v in Z.items():
-                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                         else:
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
 
                 label = label.to(dev,non_blocking=True)
                 count += num_examples
@@ -179,9 +179,9 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 label = label.squeeze();
 
                 if model_output.shape[0] == num_examples:
-                    scores.append(torch.softmax(model_output,dim=1).cpu().numpy().astype(dtype=np.float32))
+                    scores.append(torch.softmax(model_output,dim=1).numpy(force=True).astype(dtype=np.float32))
                 else:
-                    scores.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+                    scores.append(torch.zeros(num_examples,num_labels).numpy(force=True).astype(dtype=np.float32));
       
                 loss = 0 if loss_func is None else loss_func(model_output, label).item()
                 
@@ -269,20 +269,20 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, _, _, Z, _, _ in tq:
-            inputs = {k: v.cpu().numpy().astype(dtype=np.float32) for k, v in X.items()}
+           inputs = {k: v.numpy(force=True).astype(dtype=np.float32) for k, v in X.items()}
             label = y_cat[data_config.label_names[0]].long()
             num_examples = label.shape[0]
             label_counter.update(label.cpu.numpy().astype(dtype=np.int32))
             for k, v in y_cat.items():
-                labels[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                labels[k].append(v.numpy(force=True).astype(dtype=np.int32))
             for k, v in Z.items():
-                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                 else:
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score)).squeeze();
-            scores.append(score.cpu().numpy().astype(dtype=np.float32))
+            scores.append(score.numpy(force=True).astype(dtype=np.float32))
             preds = score.squeeze().float().argmax(1)
             label = label.squeeze();
             correct = (preds == label).sum()
@@ -447,17 +447,17 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                 num_examples = target.shape[0]
                 target = target.to(dev,non_blocking=True)
                 for k, v in y_reg.items():
-                    targets[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                    targets[k].append(v.numpy(force=True).astype(dtype=np.float32))
                 if not for_training:
                     for k, v in Z.items():
-                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                         else:
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
 
                 model_output = model(*inputs)
                 model_output = model_output.squeeze().float();
-                scores.append(model_output.cpu().numpy().astype(dtype=np.float32))      
+                scores.append(model_output.numpy(force=True).astype(dtype=np.float32))      
 
                 target =  target.squeeze();
                 loss = 0 if loss_func is None else loss_func(model_output, target).item()
@@ -555,16 +555,16 @@ def evaluate_onnx_regression(model_path, test_loader,
                     target = torch.column_stack((target,y[names].float()))
             num_examples = target.shape[0]            
             for k, v in y.items():
-                targets[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                targets[k].append(v.numpy(force=True).astype(dtype=np.float32))
             for k, v in Z.items():
-                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                 else:
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
 
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score)).squeeze()
-            scores.append(score.cpu().numpy().astype(dtype=np.float32))
+            scores.append(score.numpy(force=True).astype(dtype=np.float32))
             preds = score.squeeze().float();
             target = target.squeeze();
 
@@ -639,7 +639,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### build classification true labels (numpy argmax)
             label = y_cat[data_config.label_names[0]].long()
             label = _flatten_label(label,None)
-            label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
+            label_counter.update(label.numpy(force=True).astype(dtype=np.int32))
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
@@ -810,7 +810,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### build classification true labels
                 label  = y_cat[data_config.label_names[0]].long()
                 label  = _flatten_label(label,None)
-                label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
+                label_counter.update(label.numpy(force=True).astype(dtype=np.int32))
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
@@ -825,16 +825,16 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 target = target.to(dev,non_blocking=True)            
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
-                    labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy().astype(dtype=np.int32))
+                    labels[name].append(_flatten_label(y_cat[name],None).numpy(force=True).astype(dtype=np.int32))
                 for k, name in enumerate(data_config.target_names):
-                    targets[name].append(y_reg[name].cpu().numpy().astype(dtype=np.float32))                
+                    targets[name].append(y_reg[name].numpy(force=True).astype(dtype=np.float32))                
                 ### observers
                 if not for_training:
                     for k, v in Z.items():
-                        if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                        if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                         else:
-                            observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                            observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
                             
                 ### evaluate model
                 num_attack_examples = 0;
@@ -860,14 +860,14 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 target = target.squeeze();
                 ### save scores
                 if model_output_cat.shape[0] == num_examples and model_output_reg.shape[0] == num_examples:
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
-                    scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32))
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).numpy(force=True).astype(dtype=np.float32));
+                    scores_reg.append(model_output_reg.numpy(force=True).astype(dtype=np.float32))
                 else:
-                    scores_cat.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+                    scores_cat.append(torch.zeros(num_examples,num_labels).numpy(force=True).astype(dtype=np.float32));
                     if num_targets > 1:
-                        scores_reg.append(torch.zeros(num_examples,num_targets).cpu().numpy().astype(dtype=np.float32));
+                        scores_reg.append(torch.zeros(num_examples,num_targets).numpy(force=True).astype(dtype=np.float32));
                     else:
-                        scores_reg.append(torch.zeros(num_examples).cpu().numpy().astype(dtype=np.float32));                        
+                        scores_reg.append(torch.zeros(num_examples).numpy(force=True).astype(dtype=np.float32));                        
 
                 ## create adversarial testing attack features and evaluate the model
                 if eval_attack:
@@ -886,7 +886,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     model_output_attack = model(*inputs_attack)
                     model_output_attack = model_output_attack[:,:num_labels];
                     model_output_attack = _flatten_preds(model_output_attack,None).squeeze().float();
-                    scores_attack.append(torch.softmax(model_output_attack,dim=1).detach().cpu().numpy().astype(dtype=np.float32));
+                    scores_attack.append(torch.softmax(model_output_attack,dim=1).detach().numpy(force=True).astype(dtype=np.float32));
                     
                 ### evaluate loss function
                 if loss_func != None:
@@ -1052,7 +1052,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
             label = y_cat[data_config.label_names[0]].long();
-            label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
+            label_counter.update(label.numpy(force=True).astype(dtype=np.int32))
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
                     target = y_reg[names].float();
@@ -1061,19 +1061,19 @@ def evaluate_onnx_classreg(model_path, test_loader,
             num_examples = max(label.shape[0],target.shape[0]);
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
-                labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy().astype(dtype=np.int32))
+                labels[name].append(_flatten_label(y_cat[name],None).numpy(force=True).astype(dtype=np.int32))
             for k, name in enumerate(data_config.target_names):
-                targets[name].append(y_reg[name].cpu().numpy().astype(dtype=np.float32))                
+                targets[name].append(y_reg[name].numpy(force=True).astype(dtype=np.float32))                
             for k, v in Z.items():
-                if v.cpu().numpy().dtype in (np.int16, np.int32, np.int64):
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.int32))
+                if v.numpy(force=True).dtype in (np.int16, np.int32, np.int64):
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                 else:
-                    observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
+                    observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
             ### evaluate the network
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score)).squeeze();
-            scores_cat.append(score[:,:num_labels].cpu().numpy().astype(dtype=np.float32));
-            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32));
+            scores_cat.append(score[:,:num_labels].numpy(force=True).astype(dtype=np.float32));
+            scores_reg.append(score[:,num_labels:num_labels+num_targets].numpy(force=True).astype(dtype=np.float32));
             pred_cat = score[:,:num_labels].squeeze().float().argmax(1);
             pred_reg = score[:,num_labels:num_labels+num_targets].squeeze().float();
             count += num_examples
