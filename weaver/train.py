@@ -869,6 +869,8 @@ def _main(args):
     # training/testing mode
     training_mode = not args.predict
 
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    
     # device detection
     if args.gpus:
         gpus = [int(i) for i in args.gpus.split(',')]
