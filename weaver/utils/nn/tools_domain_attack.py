@@ -537,7 +537,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         target = v.float();
                     else:
                         target = torch.column_stack((target,v.float()))
-                target = target[index_cat].to(dev,non_blocking=True);
+                target = target.to(dev,non_blocking=True)
+                target = target[index_cat]
 
                 ### build domain true labels (numpy argmax)                                                                                                                                   
                 for idx, (k,v) in enumerate(y_domain.items()):
