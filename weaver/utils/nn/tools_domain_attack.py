@@ -97,14 +97,13 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                 for idx,element in enumerate(inputs):        
                     element.requires_grad = True
                     
-            label_cat = y_cat[data_config.label_names[0]][0:nrows_selected].long().to(dev,non_blocking=True)
-            
-            cat_check = y_cat_check[data_config.labelcheck_names[0]][0:nrows_selected].long().to(dev,non_blocking=True)
+            label_cat = y_cat[data_config.label_names[0]][0:nrows_selected].long()            
+            cat_check = y_cat_check[data_config.labelcheck_names[0]][0:nrows_selected].long()
             index_cat = cat_check.nonzero();
             label_cat = label_cat[index_cat];
             try:
-                label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
-                label_cat_mask = label_mask[index_cat];
+                label_mask = y_cat[data_config.label_names[0] + '_mask'].bool()
+                label_cat_mask = label_mask[index_cat].to(dev,non_blocking=True);
             except KeyError:
                 label_mask = None
                 label_cat_mask = None
@@ -116,7 +115,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                     target = v[0:nrows_selected].float();
                 else:
                     target = torch.column_stack((target,v[0:nrows_selected].float()))
-            target = target.to(dev,non_blocking=True)
             target = target[index_cat];
             ### build domain true labels (numpy argmax)
             for idx, (k, v) in enumerate(y_domain.items()):
@@ -133,9 +131,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                     label_domain_check = torch.column_stack((label_domain_check,v[0:nrows_selected].long()))
                     index_domain_all = torch.cat((index_domain_all,v[0:nrows_selected].long().nonzero()),0)
 
-            label_domain = label_domain.to(dev,non_blocking=True)            
-            index_domain_all = index_domain_all.to(dev,non_blocking=True)
-            label_domain_check = label_domain_check.to(dev,non_blocking=True)
             label_domain = label_domain[index_domain_all];
             label_domain_check = label_domain_check[index_domain_all];
             label_domain = label_domain.squeeze()
@@ -168,6 +163,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                         label_domain_counter[idx].update(label_domain_np)
                     else:
                         _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
+
+                
+            ## go on gpu
+            target = target.to(dev,non_blocking=True)
+            label_cat = label_cat.to(dev,non_blocking=True)
+            label_domain = label_domain.to(dev,non_blocking=True)            
+            index_domain_all = index_domain_all.to(dev,non_blocking=True)
+            label_domain_check = label_domain_check.to(dev,non_blocking=True)
 
             ### loss minimization
             model.zero_grad(set_to_none=True)
@@ -521,13 +524,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
-                label_cat = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True) 
-                cat_check = y_cat_check[data_config.labelcheck_names[0]].long().to(dev,non_blocking=True) 
+                label_cat = y_cat[data_config.label_names[0]].long()
+                cat_check = y_cat_check[data_config.labelcheck_names[0]].long()
                 index_cat = cat_check.nonzero();
                 label_cat = label_cat[index_cat];
                 try:
-                    label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
-                    label_cat_mask = label_cat_mask[index_cat];
+                    label_mask = y_cat[data_config.label_names[0] + '_mask'].bool()
+                    label_cat_mask = label_cat_mask[index_cat].to(dev,non_blocking=True);
                 except KeyError:
                     label_cat_mask = None
                     label_mask = None
@@ -537,7 +540,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         target = v.float();
                     else:
                         target = torch.column_stack((target,v.float()))
-                target = target.to(dev,non_blocking=True)
                 target = target[index_cat]
 
                 ### build domain true labels (numpy argmax)                                                                                                                                   
@@ -555,9 +557,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         label_domain_check = torch.column_stack((label_domain_check,v.long()))
                         index_domain_all = torch.cat((index_domain_all,v.long().nonzero()),0)
 
-                index_domain_all = index_domain_all.to(dev,non_blocking=True);
-                label_domain = label_domain.to(dev,non_blocking=True);
-                label_domain_check = label_domain_check.to(dev,non_blocking=True);
                 label_domain = label_domain[index_domain_all];
                 label_domain_check = label_domain_check[index_domain_all];
 
@@ -621,6 +620,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).numpy(force=True).astype(dtype=np.int32));
                     else:
                         labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]]].squeeze().numpy(force=True).astype(dtype=np.int32))
+
+                ### move to gpu
+                target = target.to(dev,non_blocking=True)
+                label_cat = label_cat.to(dev,non_blocking=True)
+                label_domain = label_domain.to(dev,non_blocking=True);
+                label_domain_check = label_domain_check.to(dev,non_blocking=True);
 
                 ### evaluate model enabling gradient
                 num_attack_examples = 0;

@@ -582,7 +582,7 @@ def optim(args, model, device, loss_func=None):
         _logger.info('Resume training from epoch %d' % args.load_epoch)
         _logger.info('Open model state file '+args.model_prefix+'_epoch-%d_state.pt' % args.load_epoch)
         model_state = torch.load(args.model_prefix + '_epoch-%d_state.pt' % args.load_epoch, map_location=device)
-        if isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
+        if isinstance(model,(torch.nn.parallel.DistributedDataParallel,torch.nn.DataParallel)):
             model.module.load_state_dict(model_state)
         else:
             model.load_state_dict(model_state)
@@ -869,8 +869,6 @@ def _main(args):
     # training/testing mode
     training_mode = not args.predict
 
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-    
     # device detection
     if args.gpus:
         gpus = [int(i) for i in args.gpus.split(',')]
@@ -919,8 +917,7 @@ def _main(args):
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
     grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
-    model_original = model;
-    
+
     if training_mode:
 
         model = model.to(dev)
@@ -975,8 +972,8 @@ def _main(args):
                 dirname = os.path.dirname(args.model_prefix)
                 if dirname and not os.path.exists(dirname):
                     os.makedirs(dirname)
-                state_dict = model_original.module.state_dict() if isinstance(
-                    model_original, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
+                state_dict = model.module.state_dict() if isinstance(
+                    model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)) else model.state_dict()
                 torch.save(state_dict, args.model_prefix + '_epoch-%d_state.pt' % epoch)
                 torch.save(opt.state_dict(), args.model_prefix + '_epoch-%d_optimizer.pt' % epoch)
                 
