@@ -752,10 +752,13 @@ class ParticleTransformerTagger(nn.Module):
                  # input tensors
                  pf_ch_input_dim,
                  pf_neu_input_dim,
+                 pf_muon_input_dim,
+                 pf_electron_input_dim,
+                 pf_photon_input_dim,
                  sv_input_dim,
                  kaon_input_dim,
                  lambda_input_dim,
-                 lt_input_dim,
+                 losttrack_input_dim,
                  # output of network
                  num_classes=None,
                  num_targets=None,
@@ -798,19 +801,25 @@ class ParticleTransformerTagger(nn.Module):
         self.use_amp = use_amp
         self.save_grad_inputs = False if for_inference else save_grad_inputs;
         
-        self.pf_ch_trimmer  = SequenceTrimmer(enabled=trim and not for_inference)
+        self.pf_ch_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.pf_neu_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.sv_trimmer     = SequenceTrimmer(enabled=trim and not for_inference)
-        self.kaon_trimmer   = SequenceTrimmer(enabled=trim and not for_inference)
+        self.pf_muon_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.pf_electron_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.pf_photon_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.sv_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
+        self.kaon_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
         self.lambda_trimmer = SequenceTrimmer(enabled=trim and not for_inference)
-        self.lt_trimmer     = SequenceTrimmer(enabled=trim and not for_inference)        
+        self.losttrack_trimmer = SequenceTrimmer(enabled=trim and not for_inference)        
 
-        self.pf_ch_embed  = Embed(pf_ch_input_dim, embed_dims, activation=activation)
+        self.pf_ch_embed = Embed(pf_ch_input_dim, embed_dims, activation=activation)
         self.pf_neu_embed = Embed(pf_neu_input_dim, embed_dims, activation=activation)
-        self.sv_embed     = Embed(sv_input_dim, embed_dims, activation=activation)
-        self.kaon_embed   = Embed(kaon_input_dim, embed_dims, activation=activation)
+        self.pf_muon_embed = Embed(pf_muon_input_dim, embed_dims, activation=activation)
+        self.pf_electron_embed = Embed(pf_electron_input_dim, embed_dims, activation=activation)
+        self.pf_photon_embed = Embed(pf_photon_input_dim, embed_dims, activation=activation)
+        self.sv_embed = Embed(sv_input_dim, embed_dims, activation=activation)
+        self.kaon_embed = Embed(kaon_input_dim, embed_dims, activation=activation)
         self.lambda_embed = Embed(lambda_input_dim, embed_dims, activation=activation)
-        self.lt_embed     = Embed(lt_input_dim, embed_dims, activation=activation)
+        self.losttrack_embed = Embed(losttrack_input_dim, embed_dims, activation=activation)
         
         self.part = ParticleTransformer(
             input_dim=embed_dims[-1],
@@ -852,6 +861,9 @@ class ParticleTransformerTagger(nn.Module):
     def forward(self,
                 pf_ch_x=None, pf_ch_v=None, pf_ch_mask=None, ## charged pf
                 pf_neu_x=None, pf_neu_v=None, pf_neu_mask=None, ## neutral pf
+                pf_mu_x=None, pf_mu_v=None, pf_mu_mask=None, ## muon pf
+                pf_ele_x=None, pf_ele_v=None, pf_ele_mask=None, ## electron pf
+                pf_pho_x=None, pf_pho_v=None, pf_pho_mask=None, ## photon pf
                 sv_x=None, sv_v=None, sv_mask=None, # secondary vertex
                 kaon_x=None, kaon_v=None, kaon_mask=None, # kaon
                 lambda_x=None, lambda_v=None, lambda_mask=None, # lambdas
@@ -864,21 +876,27 @@ class ParticleTransformerTagger(nn.Module):
         with torch.set_grad_enabled(self.save_grad_inputs):
             pf_ch_x, pf_ch_v, pf_ch_mask, _ = self.pf_ch_trimmer(pf_ch_x, pf_ch_v, pf_ch_mask)
             pf_neu_x, pf_neu_v, pf_neu_mask, _ = self.pf_neu_trimmer(pf_neu_x, pf_neu_v, pf_neu_mask)
+            pf_mu_x, pf_mu_v, pf_mu_mask, _ = self.pf_muon_trimmer(pf_mu_x, pf_mu_v, pf_mu_mask)
+            pf_ele_x, pf_ele_v, pf_ele_mask, _ = self.pf_electron_trimmer(pf_ele_x, pf_ele_v, pf_ele_mask)
+            pf_pho_x, pf_pho_v, pf_pho_mask, _ = self.pf_photon_trimmer(pf_pho_x, pf_pho_v, pf_pho_mask)
             sv_x, sv_v, sv_mask, _ = self.sv_trimmer(sv_x, sv_v, sv_mask)
             kaon_x, kaon_v, kaon_mask, _ = self.kaon_trimmer(kaon_x, kaon_v, kaon_mask)
             lambda_x, lambda_v, lambda_mask, _ = self.lambda_trimmer(lambda_x, lambda_v, lambda_mask)
-            lt_x, lt_v, lt_mask, _ = self.lt_trimmer(lt_x, lt_v, lt_mask)            
-            v    = torch.cat([pf_ch_v, pf_neu_v, sv_v, kaon_v, lambda_v, lt_v], dim=2)
-            mask = torch.cat([pf_ch_mask, pf_neu_mask, sv_mask, kaon_mask, lambda_mask, lt_mask], dim=2)
+            lt_x, lt_v, lt_mask, _ = self.losttrack_trimmer(lt_x, lt_v, lt_mask)            
+            v    = torch.cat([pf_ch_v, pf_neu_v, pf_mu_v, pf_ele_v, pf_pho_v, sv_v, kaon_v, lambda_v, lt_v], dim=2)
+            mask = torch.cat([pf_ch_mask, pf_neu_mask, pf_mu_mask, pf_ele_mask, pf_pho_mask, sv_mask, kaon_mask, lambda_mask, lt_mask], dim=2)
             
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             pf_ch_x  = self.pf_ch_embed(pf_ch_x)  # after embed: (seq_len, batch, embed_dim)
             pf_neu_x = self.pf_neu_embed(pf_neu_x)  # after embed: (seq_len, batch, embed_dim)
+            pf_mu_x  = self.pf_muon_embed(pf_muon_x)
+            pf_ele_x = self.pf_electron_embed(pf_ele_x)
+            pf_pho_x = self.pf_photon_embed(pf_pho_x)
             sv_x     = self.sv_embed(sv_x)
             kaon_x   = self.kaon_embed(kaon_x)
             lambda_x = self.lambda_embed(lambda_x)
-            lt_x     = self.lt_embed(lt_x)
-            x = torch.cat([pf_ch_x, pf_neu_x, sv_x, kaon_x, lambda_x, lt_x], dim=0)
+            lt_x     = self.losttrack_embed(lt_x)
+            x = torch.cat([pf_ch_x, pf_neu_x, pf_mu_x, pf_ele_x, pf_pho_x, sv_x, kaon_x, lambda_x, lt_x], dim=0)
             self.part.save_grad_inputs = self.save_grad_inputs
             return self.part(x, v, mask)
 
