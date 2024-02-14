@@ -97,8 +97,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                 for idx,element in enumerate(inputs):        
                     element.requires_grad = True
                     
-            label_cat = y_cat[data_config.label_names[0]][0:nrows_selected].long()            
-            cat_check = y_cat_check[data_config.labelcheck_names[0]][0:nrows_selected].long()
+            label_cat = y_cat[data_config.label_names[0]][0:nrows_selected].long().to(dev,non_blocking=True)           
+            cat_check = y_cat_check[data_config.labelcheck_names[0]][0:nrows_selected].long().to(dev,non_blocking=True)
             index_cat = cat_check.nonzero();
             label_cat = label_cat[index_cat];
             try:
@@ -115,13 +115,14 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                     target = v[0:nrows_selected].float();
                 else:
                     target = torch.column_stack((target,v[0:nrows_selected].float()))
-            target = target[index_cat];
+            target = target[index_cat].to(dev,non_blocking=True);
             ### build domain true labels (numpy argmax)
             for idx, (k, v) in enumerate(y_domain.items()):
                 if idx == 0:
                     label_domain = v[0:nrows_selected].long();
                 else:
                     label_domain = torch.column_stack((label_domain,v[0:nrows_selected].long()))
+            label_domain = label_domain.to(dev,non_blocking=True);
             ### store indexes to separate classification+regression events from DA
             for idx, (k, v) in enumerate(y_domain_check.items()):
                 if idx == 0:
@@ -130,7 +131,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                 else:
                     label_domain_check = torch.column_stack((label_domain_check,v[0:nrows_selected].long()))
                     index_domain_all = torch.cat((index_domain_all,v[0:nrows_selected].long().nonzero()),0)
-
+            label_domain_check = label_domain_check.to(dev,non_blocking=True);
+            index_domain_all = index_domain_all.to(dev,non_blocking=True);
             label_domain = label_domain[index_domain_all];
             label_domain_check = label_domain_check[index_domain_all];
             label_domain = label_domain.squeeze()
@@ -166,11 +168,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
 
                 
             ## go on gpu
-            target = target.to(dev,non_blocking=True)
-            label_cat = label_cat.to(dev,non_blocking=True)
-            label_domain = label_domain.to(dev,non_blocking=True)            
-            index_domain_all = index_domain_all.to(dev,non_blocking=True)
-            label_domain_check = label_domain_check.to(dev,non_blocking=True)
+            #target = target.to(dev,non_blocking=True)
+            #label_cat = label_cat.to(dev,non_blocking=True)
+            #label_domain = label_domain.to(dev,non_blocking=True)            
+            #index_domain_all = index_domain_all.to(dev,non_blocking=True)
+            #label_domain_check = label_domain_check.to(dev,non_blocking=True)
 
             ### loss minimization
             model.zero_grad(set_to_none=True)
@@ -270,7 +272,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
             target = target.detach()
             model_output_cat = model_output_cat.detach()
             model_output_reg = model_output_reg.detach()
-            model_output_domain = model_output_domain.detach()
+            model_output_domain = model_output_domain.detach()            
             ##
             correct_cat = 0;
             sqr_err = 0;
