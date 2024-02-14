@@ -20,8 +20,8 @@ def delta_r2(eta1, phi1, eta2, phi2):
 
 def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
 
-    pti, etai, phii, ei = xi.split((1, 1, 1), dim=1)
-    ptj, etaj, phij, ej = xj.split((1, 1, 1), dim=1)    
+    pti, etai, phii, ei = xi.split((1, 1, 1, 1), dim=1)
+    ptj, etaj, phij, ej = xj.split((1, 1, 1, 1), dim=1)    
     delta   = torch.sqrt(delta_r2(etai, phii, etaj, phij));
     lndelta = torch.log(delta.clamp(min=eps))
 
