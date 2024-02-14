@@ -115,7 +115,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
                     target = v[0:nrows_selected].float();
                 else:
                     target = torch.column_stack((target,v[0:nrows_selected].float()))
-            target = target[index_cat].to(dev,non_blocking=True);
+            target = target.to(dev,non_blocking=True);
+            target = target[index_cat];
             ### build domain true labels (numpy argmax)
             for idx, (k, v) in enumerate(y_domain.items()):
                 if idx == 0:
@@ -526,8 +527,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
-                label_cat = y_cat[data_config.label_names[0]].long()
-                cat_check = y_cat_check[data_config.labelcheck_names[0]].long()
+                label_cat = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True) 
+                cat_check = y_cat_check[data_config.labelcheck_names[0]].long().to(dev,non_blocking=True)
                 index_cat = cat_check.nonzero();
                 label_cat = label_cat[index_cat];
                 try:
@@ -542,6 +543,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         target = v.float();
                     else:
                         target = torch.column_stack((target,v.float()))
+                target = target.to(dev,non_blocking=True);
                 target = target[index_cat]
 
                 ### build domain true labels (numpy argmax)                                                                                                                                   
@@ -559,6 +561,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         label_domain_check = torch.column_stack((label_domain_check,v.long()))
                         index_domain_all = torch.cat((index_domain_all,v.long().nonzero()),0)
 
+                index_domain_all = index_domain_all.to(dev,non_blocking=True)
+                label_domain = label_domain.to(dev,non_blocking=True)
+                label_domain_check = label_domain_check.to(dev,non_blocking=True)
                 label_domain = label_domain[index_domain_all];
                 label_domain_check = label_domain_check[index_domain_all];
 
@@ -600,13 +605,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     if not for_training:
                         labels_cat[k].append(_flatten_label(v,label_mask.cpu() if label_mask is not None else None).numpy(force=True).astype(dtype=np.int32))
                     else:
-                        labels_cat[k].append(_flatten_label(v[index_cat],label_cat_mask.cpu() if label_cat_mask is not None else None).numpy(force=True).astype(dtype=np.int32))
+                        labels_cat[k].append(_flatten_label(v[index_cat.cpu()],label_cat_mask.cpu() if label_cat_mask is not None else None).numpy(force=True).astype(dtype=np.int32))
 
                 for k, v in y_reg.items():
                     if not for_training:
                         targets[k].append(v.numpy(force=True).astype(dtype=np.float32))                
                     else:
-                        targets[k].append(v[index_cat].numpy(force=True).astype(dtype=np.float32))
+                        targets[k].append(v[index_cat.cpu()].numpy(force=True).astype(dtype=np.float32))
                     
                 if not for_training:
                     indexes_cat.append((index_offset+index_cat).numpy(force=True).astype(dtype=np.int32));
@@ -619,15 +624,15 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 for idx, (k, v) in enumerate(y_domain.items()):
                     if not for_training:
                         labels_domain[k].append(v.squeeze().numpy(force=True).astype(dtype=np.int32))
-                        indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).numpy(force=True).astype(dtype=np.int32));
+                        indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]].cpu()).numpy(force=True).astype(dtype=np.int32));
                     else:
-                        labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]]].squeeze().numpy(force=True).astype(dtype=np.int32))
+                        labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]].cpu()].squeeze().numpy(force=True).astype(dtype=np.int32))
 
                 ### move to gpu
-                target = target.to(dev,non_blocking=True)
-                label_cat = label_cat.to(dev,non_blocking=True)
-                label_domain = label_domain.to(dev,non_blocking=True);
-                label_domain_check = label_domain_check.to(dev,non_blocking=True);
+                #target = target.to(dev,non_blocking=True)
+                #label_cat = label_cat.to(dev,non_blocking=True)
+                #label_domain = label_domain.to(dev,non_blocking=True);
+                #label_domain_check = label_domain_check.to(dev,non_blocking=True);
 
                 ### evaluate model enabling gradient
                 num_attack_examples = 0;

@@ -901,7 +901,6 @@ def _main(args):
         preprocess_data = preprocess_load(args);
         sys.exit(0);
     else:
-        torch.multiprocessing.set_sharing_strategy("file_system");
         if training_mode:
             train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names = train_load(args)
         else:
