@@ -889,7 +889,7 @@ class ParticleTransformerTagger(nn.Module):
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             pf_ch_x  = self.pf_ch_embed(pf_ch_x)  # after embed: (seq_len, batch, embed_dim)
             pf_neu_x = self.pf_neu_embed(pf_neu_x)  # after embed: (seq_len, batch, embed_dim)
-            pf_mu_x  = self.pf_muon_embed(pf_muon_x)
+            pf_mu_x  = self.pf_muon_embed(pf_mu_x)
             pf_ele_x = self.pf_electron_embed(pf_ele_x)
             pf_pho_x = self.pf_photon_embed(pf_pho_x)
             sv_x     = self.sv_embed(sv_x)
