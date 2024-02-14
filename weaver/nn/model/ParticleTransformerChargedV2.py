@@ -38,7 +38,7 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
 
     ## invriant mass of the pair
     if num_outputs > 3:        
-        lnm2 = torch.log(2*pti*ptj*(torch.cosh(etai-etaj)-torch.cos(deltaphi(phii,phij))).clamp(min=eps));
+        lnm2 = torch.log(2*pti*ptj*(torch.cosh(etai-etaj)-torch.cos(delta_phi(phii,phij))).clamp(min=eps));
         outputs.append(lnm2)
 
     ## invariant mass of the difference
