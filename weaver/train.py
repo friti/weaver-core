@@ -244,7 +244,7 @@ def to_filelist(args, mode='train'):
     return file_dict, filelist
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
-torch.multiprocessing.set_sharing_strategy("file_system")
+    torch.multiprocessing.set_sharing_strategy("file_system")
 
 def train_load(args):
     """
