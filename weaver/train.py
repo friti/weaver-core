@@ -243,8 +243,8 @@ def to_filelist(args, mode='train'):
     assert(len(filelist) == len(set(filelist)))
     return file_dict, filelist
 
-def set_worker_sharing_strategy(worker_id: int) -> None:
-    torch.multiprocessing.set_sharing_strategy("file_system")
+#def set_worker_sharing_strategy(worker_id: int) -> None:
+#torch.multiprocessing.set_sharing_strategy("file_system")
 
 def train_load(args):
     """
@@ -286,7 +286,7 @@ def train_load(args):
         train_data, batch_size=args.batch_size_train, drop_last=True, pin_memory=True,
         num_workers=min(args.num_workers_train, int(len(train_files) * args.file_fraction)),
         persistent_workers=args.num_workers_train > 0 and (args.steps_per_epoch is not None or args.persistent_workers),
-        worker_init_fn=set_worker_sharing_strategy
+        #worker_init_fn=set_worker_sharing_strategy
     )
 
     ## create validation dataset
@@ -306,7 +306,7 @@ def train_load(args):
         val_data, batch_size=args.batch_size_val, drop_last=True, pin_memory=True,
         num_workers=min(args.num_workers_val if args.data_val else args.num_workers_train, int(len(val_files) * args.file_fraction)),
         persistent_workers= (args.num_workers_val > 0 if args.data_val else args.num_workers_train > 0) and (args.steps_per_epoch_val is not None or args.persistent_workers),
-        worker_init_fn=set_worker_sharing_strategy
+        #worker_init_fn=set_worker_sharing_strategy
     )
 
     data_config = train_data.config
@@ -392,7 +392,8 @@ def test_load(args):
         )
         test_loader = DataLoader(
             test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False, 
-            pin_memory=True,worker_init_fn=set_worker_sharing_strategy
+            pin_memory=True,
+            #worker_init_fn=set_worker_sharing_strategy
         )
 
         return test_loader
