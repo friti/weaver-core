@@ -924,7 +924,7 @@ def _main(args):
             
         # DistributedDataParallel
         if args.backend is not None and ngpus > 1: 
-            #model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank)
         else:
             # DataParallel
@@ -1015,7 +1015,7 @@ def _main(args):
             _logger.info('Loading model %s for eval' % model_path)
              
             if args.backend is not None and ngpus > 1:
-                #model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
                 model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=args.local_rank)
                 model.module.load_state_dict(torch.load(model_path, map_location=dev))
             else:
