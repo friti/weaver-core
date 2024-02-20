@@ -921,10 +921,8 @@ def _main(args):
     if training_mode:
 
         model = model.to(dev)
-        if args.compile_model:
-            torch._dynamo.reset();
-            torch._dynamo.config.suppress_errors = True
-            model = torch.compile(model, mode='max-autotune');
+        if args.compile_model and ngpus:
+            model = torch.compile(model);
             
         # DistributedDataParallel
         if args.backend is not None and ngpus > 1: 
@@ -1005,7 +1003,7 @@ def _main(args):
     if args.data_test:
 
         model = model.to(dev)
-        if args.compile_model:
+        if args.compile_model and ngpus:
             torch._dynamo.reset();
             torch._dynamo.config.suppress_errors = True
             model = torch.compile(model, mode='max-autotune');
