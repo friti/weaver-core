@@ -15,14 +15,8 @@ from ..logger import _logger
 from .utils import _flatten_label, _flatten_preds, fgsm_attack, fngm_attack
 
 ## train classification + regssion into a total loss --> best training epoch decided on the loss function
-def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, compile_model=None,
-                   steps_per_epoch=None, grad_scaler=None, tb_helper=None, frac_attack=None, epoch_start_attack=None, eps_attack=None, frac_batch_attack=None, network_option=None):
+def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, frac_attack=None, epoch_start_attack=None, eps_attack=None, frac_batch_attack=None, network_option=None):
 
-    if compile_model:
-        torch._dynamo.reset();
-        torch._dynamo.config.suppress_errors = True
-        model = torch.compile(model, mode='max-autotune');
-        
     model.train()
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
@@ -449,15 +443,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, c
     gc.collect();
 
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, grad_scaler=None, compile_model=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, grad_scaler=None,
                       frac_attack=None, epoch_start_attack=None, eval_attack=None, eps_attack=None, network_option=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
-
-    if compile_model:
-        torch._dynamo.reset();
-        torch._dynamo.config.suppress_errors = True
-        model = torch.compile(model, mode='max-autotune')
 
     model.eval()
     torch.backends.cudnn.benchmark = False;

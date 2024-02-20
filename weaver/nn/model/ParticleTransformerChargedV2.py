@@ -7,6 +7,7 @@ import random
 import warnings
 import copy
 import torch
+import vector
 import torch.nn as nn
 from functools import partial
 
@@ -18,16 +19,21 @@ def delta_phi(a, b):
 def delta_r2(eta1, phi1, eta2, phi2):
     return (eta1 - eta2)**2 + delta_phi(phi1, phi2)**2
 
+def p4_from_ptetaphie(pt, eta, phi, energy):
+    vector.register_awkward()
+    return vector.zip({'pt': pt, 'eta': eta, 'phi': phi, 'energy': energy})
+
 def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
 
     pti, etai, phii, ei = xi.split((1, 1, 1, 1), dim=1)
     ptj, etaj, phij, ej = xj.split((1, 1, 1, 1), dim=1)    
     delta   = torch.sqrt(delta_r2(etai, phii, etaj, phij));
     lndelta = torch.log(delta.clamp(min=eps))
-
+    outputs = [];
+    
     ## log dR
     if num_outputs == 1:
-        return lndelta
+        outputs = [lndelta];
 
     ## kt and anti-kt metrics
     if num_outputs > 1:
@@ -43,8 +49,8 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
 
     ## invariant mass of the difference
     if num_outputs > 4:
-        p4i = _p4_from_ptetaphie(pti,etai,phii,ei);
-        p4j = _p4_from_ptetaphie(ptj,etaj,phij,ej);
+        p4i = p4_from_ptetaphie(pti,etai,phii,ei);
+        p4j = p4_from_ptetaphie(ptj,etaj,phij,ej);
         lnds2 = torch.log(torch.clamp(-(p4i-p4j).m2, min=eps));
         outputs.append(lnds2)
 
@@ -123,7 +129,6 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
         tensor.clamp_(min=a, max=b)
         return tensor
 
-
 class SequenceTrimmer(nn.Module):
     
     def __init__(self, enabled=False, target=(0.9, 1.02), **kwargs) -> None:
@@ -171,7 +176,6 @@ class SequenceTrimmer(nn.Module):
 
         return x, v, mask, uu
 
-
 class Embed(nn.Module):
     def __init__(self, input_dim, dims, normalize_input=True, activation='gelu'):
         super().__init__()
@@ -193,7 +197,6 @@ class Embed(nn.Module):
             x = self.input_bn(x)
             x = x.permute(2, 0, 1).contiguous()
         return self.embed(x)
-
 
 class PairEmbed(nn.Module):
     def __init__(
@@ -313,7 +316,6 @@ class PairEmbed(nn.Module):
             y = elements.view(-1, self.out_dim, seq_len, seq_len)
         return y
 
-
 class Block(nn.Module):
     def __init__(self, embed_dim=128, num_heads=8, ffn_ratio=4,
                  dropout=0.1, attn_dropout=0.1, activation_dropout=0.1,
@@ -398,7 +400,7 @@ class Block(nn.Module):
 
         return x
     
-## function and module to flip gradient                                                                                                                                                               
+## function and module to flip gradient
 class RevGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, alpha):
