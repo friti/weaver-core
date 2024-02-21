@@ -48,12 +48,20 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     if type(data_config.label_domain_value) == dict:
         num_labels_domain = sum(len(dct) if type(dct) == list else 1 for dct in data_config.label_domain_value.values())
     else:
-        num_labels_domain = len(data_config.label_domain_value);
+        if data_config.label_domain_value:
+            num_labels_domain = len(data_config.label_domain_value);
+        else:
+            num_labels_domain = 0;
+            
     ### number of labels per region as a list
     if type(data_config.label_domain_value) == dict:
         ldomain = [len(dct) if type(dct) == list else 1 for dct in data_config.label_domain_value.values()]
     else:
-        ldomain = [len(data_config.label_domain_value)];
+        if data_config.label_domain_value:
+            ldomain = [len(data_config.label_domain_value)];
+        else:
+            ldomain = []
+            
     ### label domain counter
     label_domain_counter = [];
     for idx, names in enumerate(data_config.label_domain_names):
