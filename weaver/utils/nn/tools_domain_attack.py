@@ -125,7 +125,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                     label_domain = v[0:nrows_selected].long();
                 else:
                     label_domain = torch.column_stack((label_domain,v[0:nrows_selected].long()))
-            label_domain = label_domain.to(dev,non_blocking=True);
+            if label_domain:
+                label_domain = label_domain.to(dev,non_blocking=True);
             ### store indexes to separate classification+regression events from DA
             for idx, (k, v) in enumerate(y_domain_check.items()):
                 if idx == 0:
@@ -134,16 +135,22 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 else:
                     label_domain_check = torch.column_stack((label_domain_check,v[0:nrows_selected].long()))
                     index_domain_all = torch.cat((index_domain_all,v[0:nrows_selected].long().nonzero()),0)
-            label_domain_check = label_domain_check.to(dev,non_blocking=True);
-            index_domain_all = index_domain_all.to(dev,non_blocking=True);
-            label_domain = label_domain[index_domain_all];
-            label_domain_check = label_domain_check[index_domain_all];
-            label_domain = label_domain.squeeze()
-            label_domain_check = label_domain_check.squeeze()            
+            if label_domain_check:
+                label_domain_check = label_domain_check.to(dev,non_blocking=True);
+                label_domain_check = label_domain_check[index_domain_all];
+                label_domain_check = label_domain_check.squeeze();
+            if index_domain_all:
+                index_domain_all = index_domain_all.to(dev,non_blocking=True);
+            if label_domain:
+                label_domain = label_domain[index_domain_all];
+                label_domain = label_domain.squeeze()
+                label_domain = label_domain.squeeze();
+                num_domain_examples = label_domain.shape[0];
+            if label_domain_check:
+                label_domain_check = label_domain_check.squeeze()            
 
             ### Number of samples in the batch
             num_cat_examples = max(label_cat.shape[0],target.shape[0]);
-            num_domain_examples = label_domain.shape[0];
 
             ### validity checks
             label_cat_np = label_cat.numpy(force=True).astype(dtype=np.int32)
@@ -170,20 +177,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         _logger.info('label_domain %d not iterable --> shape %s'%(idx,str(label_domain_np.shape)))
 
                 
-            ## go on gpu
-            #target = target.to(dev,non_blocking=True)
-            #label_cat = label_cat.to(dev,non_blocking=True)
-            #label_domain = label_domain.to(dev,non_blocking=True)            
-            #index_domain_all = index_domain_all.to(dev,non_blocking=True)
-            #label_domain_check = label_domain_check.to(dev,non_blocking=True)
-
             ### loss minimization
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):                
                 ## prepare the tensor
                 label_cat = label_cat.squeeze();
-                label_domain = label_domain.squeeze();
-                label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
                 ## evaluate the model
                 if network_options and network_options.get('use_contrastive',False):
@@ -199,7 +197,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 model_output_cat = model_output_cat[index_cat].squeeze().float();
                 model_output_reg = model_output_reg[index_cat].squeeze().float();
                 model_output_domain = model_output_domain[index_domain_all].squeeze().float();
-           
+                
                 ## Attack part
                 if use_attack:                    
                     num_attack_examples = max(label_cat.shape[0],target.shape[0]);
@@ -271,7 +269,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                 
             ## take the classification prediction and compare with the true labels            
             label_cat = label_cat.detach()
-            label_domain = label_domain.detach()
+            if label_domain:
+                label_domain = label_domain.detach()
             target = target.detach()
             model_output_cat = model_output_cat.detach()
             model_output_reg = model_output_reg.detach()
@@ -318,7 +317,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
                         total_domain_correct += correct_domain
                         count_domain += num_domain_examples;
             ## multiple domain regions
-            else:
+            elif num_domains > 1:
                 correct_domain = 0;
                 for idx, (k,v) in enumerate(y_domain_check.items()):                    
                     id_dom = idx*ldomain[idx];
@@ -495,13 +494,19 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     if type(data_config.label_domain_value) == dict:
         num_labels_domain = sum(len(dct) if type(dct) == list else 1 for dct in data_config.label_domain_value.values())
     else:
-        num_labels_domain = len(data_config.label_domain_value);
-
+        if data_config.label_domain_value:
+            num_labels_domain = len(data_config.label_domain_value);
+        else:
+            num_labels_domain = 0;
+            
     ### number of labels per region as a list
     if type(data_config.label_domain_value) == dict:
         ldomain = [len(dct) if type(dct) == list else 1 for dct in data_config.label_domain_value.values()]
     else:
-        ldomain = [len(data_config.label_domain_value)];
+        if data_config.label_domain_value:
+            ldomain = [len(data_config.label_domain_value)];
+        else:
+            ldomain = [];
     ### label counter
     label_domain_counter = [];
     for idx, names in enumerate(data_config.label_domain_names):
@@ -558,16 +563,20 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         label_domain_check = torch.column_stack((label_domain_check,v.long()))
                         index_domain_all = torch.cat((index_domain_all,v.long().nonzero()),0)
 
-                index_domain_all = index_domain_all.to(dev,non_blocking=True)
-                label_domain = label_domain.to(dev,non_blocking=True)
-                label_domain_check = label_domain_check.to(dev,non_blocking=True)
-                label_domain = label_domain[index_domain_all];
-                label_domain_check = label_domain_check[index_domain_all];
+                if index_domain_all:
+                    index_domain_all = index_domain_all.to(dev,non_blocking=True)
+                if label_domain:
+                    label_domain = label_domain.to(dev,non_blocking=True)
+                    label_domain = label_domain[index_domain_all];
+                    label_domain = label_domain.squeeze()
+                    num_domain_examples = label_domain.shape[0]
+                if label_domain_check:
+                    label_domain_check = label_domain_check.to(dev,non_blocking=True)
+                    label_domain_check = label_domain_check[index_domain_all];
+                    label_domain_check = label_domain_check.squeeze()
 
                 ### edit labels                                                                                                                                                                      
                 label_cat = _flatten_label(label_cat,mask=label_cat_mask)
-                label_domain = label_domain.squeeze()
-                label_domain_check = label_domain_check.squeeze()
 
                 ### counters
                 label_cat_np = label_cat.numpy(force=True).astype(dtype=np.int32)
@@ -595,7 +604,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
                 ### update counters
                 num_cat_examples = max(label_cat.shape[0],target.shape[0]);
-                num_domain_examples = label_domain.shape[0]
 
                 ### store truth labels for classification and regression as well as observers
                 for k, v in y_cat.items():                    
@@ -624,12 +632,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                         indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]].cpu()).numpy(force=True).astype(dtype=np.int32));
                     else:
                         labels_domain[k].append(v[index_domain[list(y_domain_check.keys())[idx]].cpu()].squeeze().numpy(force=True).astype(dtype=np.int32))
-
-                ### move to gpu
-                #target = target.to(dev,non_blocking=True)
-                #label_cat = label_cat.to(dev,non_blocking=True)
-                #label_domain = label_domain.to(dev,non_blocking=True);
-                #label_domain_check = label_domain_check.to(dev,non_blocking=True);
 
                 ### evaluate model enabling gradient
                 num_attack_examples = 0;
@@ -663,8 +665,10 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 model_output_domain = model_output[:,num_labels+num_targets:num_labels+num_targets+num_labels_domain]
                 model_output_cat, label_cat, label_cat_mask = _flatten_preds(model_output_cat,label=label_cat,mask=label_cat_mask);
                 label_cat = label_cat.squeeze();
-                label_domain = label_domain.squeeze();
-                label_domain_check = label_domain_check.squeeze();
+                if label_domain:
+                    label_domain = label_domain.squeeze();
+                if label_domain_check:
+                    label_domain_check = label_domain_check.squeeze();
                 target = target.squeeze();
                 
                 ### in validation only filter interesting events
@@ -804,7 +808,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                             total_domain_correct += correct_domain
                             count_domain += num_domain_examples                
                 ## multiple domains
-                else:
+                elif num_domains > 1:
                     correct_domain = 0;
                     for idx, (k,v) in enumerate(y_domain_check.items()):
                         id_dom = idx*ldomain[idx];
@@ -903,9 +907,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         scores_attack = np.concatenate(scores_attack).squeeze()
     if not for_training:
         indexes_cat = np.concatenate(indexes_cat).squeeze()
-        indexes_domain = {k: _concat(v) for k, v in indexes_domain.items()}
+        if indexes_domain:
+            indexes_domain = {k: _concat(v) for k, v in indexes_domain.items()}
     labels_cat    = {k: _concat(v) for k, v in labels_cat.items()}
-    labels_domain = {k: _concat(v) for k, v in labels_domain.items()}
+    if labels_domain:
+        labels_domain = {k: _concat(v) for k, v in labels_domain.items()}
     targets       = {k: _concat(v) for k, v in targets.items()}
     observers     = {k: _concat(v) for k, v in observers.items()}
 
