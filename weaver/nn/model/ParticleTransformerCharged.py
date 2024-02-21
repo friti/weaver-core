@@ -706,17 +706,15 @@ class ParticleTransformer(nn.Module):
             if self.fc is None:
                 return x_cls
 
-            ### classification and regression output
+            ### classification and regression output                                                                                                                                                        
+            output = self.fc(x_cls)
             if self.split_reg:
-                output = self.fc(x_cls)
                 output_reg = self.fc_reg(x_cls)
-            else:
-                output = self.fc(x_cls)
 
-            ### buld the final output to be returned to the main function
+            ### buld the final output to be returned to the main function                                                                                                                                    
             if self.for_inference:
                 if self.num_classes and not self.num_targets:
-                    output = torch.softmax(output, dim=1)                    
+                    output = torch.softmax(output, dim=1)
                 elif self.num_classes and self.num_targets:
                     if self.split_reg:
                         output_class = torch.softmax(output,dim=1);
@@ -725,19 +723,25 @@ class ParticleTransformer(nn.Module):
                         output_class = torch.softmax(output[:,:self.num_classes],dim=1);
                         output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
                         output = torch.cat((output_class,output_reg),dim=1);
-            elif self.num_domains and self.fc_domain:
-                if not self.split_da:
-                    output_domain = self.fc_domain(x_cls)
-                    if self.split_reg:
-                        output = torch.cat((output,output_reg,output_domain),dim=1);
+                if add_da_inference and self.num_domains and self.fc_domain:
+                    if not self.split_da:
+                        output_domain = self.fc_domain(x_cls)
+                        output = torch.cat((output,output_domain),dim=1);
                     else:
+                        for i,fc in enumerate(self.fc_domain):
+                            output_domain = fc(x_cls);
+                            output = torch.cat((output,output_domain),dim=1);
+            else:
+                if self.split_reg:
+                    output = torch.cat((output,output_reg),dim=1);
+                if self.num_domains and self.fc_domain:
+                    if not self.split_da:
+                        output_domain = self.fc_domain(x_cls)
                         output = torch.cat((output,output_domain),dim=1);
-                else:
-                    if self.split_reg:
-                        output = torch.cat((output,output_reg),dim=1);
-                    for i,fc in enumerate(self.fc_domain):
-                        output_domain = fc(x_cls);
-                        output = torch.cat((output,output_domain),dim=1);
+                    else:
+                        for i,fc in enumerate(self.fc_domain):
+                            output_domain = fc(x_cls);
+                            output = torch.cat((output,output_domain),dim=1);
 
             ### contrastive output
             if self.fc_contrastive is not None:

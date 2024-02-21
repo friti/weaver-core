@@ -967,7 +967,7 @@ def _main(args):
                 train(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option,
                       eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack, frac_batch_attack=args.frac_batch_attack);
             else:
-                train(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
+                train(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb, network_option=args.network_option);
                 
             if args.model_prefix and (args.backend is None or args.local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -984,7 +984,8 @@ def _main(args):
                 val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, grad_scaler=grad_scaler, tb_helper=tb,
                                       network_option=args.network_option, eval_attack=args.eval_attack, eps_attack=args.eps_attack, epoch_start_attack=args.epoch_start_attack, frac_attack=args.frac_attack)
             else:
-                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, grad_scaler=grad_scaler, tb_helper=tb,  network_option=args.network_option)
+                val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, grad_scaler=grad_scaler, tb_helper=tb,  
+                                      network_option=args.network_option, eval_attack=args.eval_attack)
                 
             is_best_epoch = (val_metric < best_val_metric) if "reg" in args.weaver_mode else (val_metric > best_val_metric)
 
