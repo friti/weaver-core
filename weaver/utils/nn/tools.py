@@ -614,7 +614,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, _, _, _, _ in tq:
-            if num_batches > 4: break;
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
@@ -803,7 +802,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
             for X, y_cat, y_reg, _, Z, _, _ in tq:
-                if num_batches > 3: break; 
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
