@@ -58,6 +58,12 @@ class DataConfig(object):
         if print_info:
             _logger.debug(opts)
 
+
+        self.train_load_branches = set()
+        self.train_aux_branches = set()
+        self.test_load_branches = set()
+        self.test_aux_branches = set()
+         
         self.selection = opts['selection']
         self.test_time_selection = opts['test_time_selection'] if opts['test_time_selection'] else self.selection
         self.var_funcs = copy.deepcopy(opts['new_variables'])
@@ -113,11 +119,11 @@ class DataConfig(object):
                 self.label_names = ('_label_',)
                 self.labelcheck_names = ('_labelcheck_',)
                 label_exprs = ['ak.to_numpy(%s)' % k for k in self.label_value]
-                self.var_funcs['_label_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
-                self.var_funcs['_labelcheck_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
+                self.register('_label_', 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
+                self.register('_labelcheck_', 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
             else:
                 self.label_names = tuple(self.label_value.keys())
-                self.var_funcs.update(self.label_value)
+                self.register(self.label_value)
                 self.labelcheck_names = None;
         else:
             self.label_names = tuple();
@@ -135,8 +141,8 @@ class DataConfig(object):
                 self.label_domain_names = ('_label_domain_',)
                 self.labelcheck_domain_names = ('_labelcheck_domain_',)
                 label_exprs = ['ak.to_numpy(%s)' % k for k in self.label_domain_value]
-                self.var_funcs['_label_domain_'] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
-                self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))
+                self.register('_label_domain_', 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
+                self.register('_labelcheck_domain_', 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
             else:
                 self.label_domain_names = tuple(self.label_domain_value.keys())                
                 self.labelcheck_domain_names = ()
@@ -145,10 +151,10 @@ class DataConfig(object):
                 for key, value in self.label_domain_value.items():
                     label_exprs = ['ak.to_numpy(%s)' % k for k in value]
                     label_check_exprs.append(label_exprs);                    
-                    self.var_funcs[key] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))            
+                    self.register(key, 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
                     self.labelcheck_domain_names += (key.replace('label','labelcheck'),);
-                    self.var_funcs[key.replace('label','labelcheck')] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))            
-                self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(','.join(value) for value in label_check_exprs))                
+                    self.register(key.replace('label','labelcheck'),'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
+                self.register('_labelcheck_domain_','np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(','.join(value) for value in label_check_exprs)))
         else:
             self.label_domain_names = tuple();
             self.label_domain_type  = None;
@@ -165,7 +171,7 @@ class DataConfig(object):
             else:
                 self.target_quantile = None;
             self.target_names = tuple(self.target_value.keys())
-            self.var_funcs.update(self.target_value)
+            self.register(self.target_value);
         else:
             self.target_names = tuple();
             self.target_type  = None;
@@ -178,16 +184,17 @@ class DataConfig(object):
             self.weight_name = 'weight_'
             self.use_precomputed_weights = opts['weights']['use_precomputed_weights']
             if self.use_precomputed_weights:
-                self.var_funcs[self.weight_name] = '*'.join(opts['weights']['weight_branches'])
+                self.register(self.weight_name, '*'.join(opts['weights']['weight_branches']), 'train')
             else:
                 ## re-weight
                 self.reweight_method = opts['weights']['reweight_method']
                 self.reweight_basewgt = opts['weights'].get('reweight_basewgt', None)
                 if self.reweight_basewgt:
-                    self.var_funcs[self.basewgt_name] = self.reweight_basewgt
+                    self.register(self.basewgt_name, self.reweight_basewgt, 'train')
                 self.reweight_branches = tuple(opts['weights']['reweight_vars'].keys())
                 self.reweight_bins = tuple(opts['weights']['reweight_vars'].values())
                 self.reweight_classes = tuple(opts['weights']['reweight_classes'])
+                self.register(self.reweight_branches + self.reweight_classes, to='train')
                 self.class_weights = opts['weights'].get('class_weights', None)
                 if self.class_weights is None:
                     self.class_weights = np.ones(len(self.reweight_classes))                    
@@ -257,43 +264,55 @@ class DataConfig(object):
         aux_branches = set()
         # selection
         if self.selection:
-            aux_branches.update(_get_variable_names(self.selection))
+            self.register(_get_variable_names(self.selection), to='train')
         # test time selection
         if self.test_time_selection:
-            aux_branches.update(_get_variable_names(self.test_time_selection))
-        # var_funcs
-        self.keep_branches.update(self.var_funcs.keys())
-        for expr in self.var_funcs.values():
-            aux_branches.update(_get_variable_names(expr))
+            self.register(_get_variable_names(self.test_time_selection), to='test')
         # inputs
         for names in self.input_dicts.values():
-            self.keep_branches.update(names)
-        # labels
-        self.keep_branches.update(self.label_names)
-        # targets
-        self.keep_branches.update(self.target_names)
-        # labels
-        self.keep_branches.update(self.label_domain_names)
-        # weight
-        if self.weight_name:
-            self.keep_branches.add(self.weight_name)
-            if not self.use_precomputed_weights:
-                aux_branches.update(self.reweight_branches)
-                aux_branches.update(self.reweight_classes)
+            self.register(names)
         # observers
-        self.keep_branches.update(self.observer_names)
+        self.register(self.observer_names, to='test')
         # monitor variables
+        self.register(self.monitor_variables)
         self.keep_branches.update(self.monitor_variables)
-        # keep and drop
-        self.drop_branches = (aux_branches - self.keep_branches)
-        self.load_branches = (aux_branches | self.keep_branches) - set(self.var_funcs.keys()) - {self.weight_name, }
+        # resolve dependencies
+        func_vars = set(self.var_funcs.keys())
+        for (load_branches, aux_branches) in (self.train_load_branches, self.train_aux_branches), (self.test_load_branches, self.test_aux_branches):
+            while (load_branches & func_vars):
+                for k in (load_branches & func_vars):
+                    aux_branches.add(k)
+                    load_branches.remove(k)
+                    load_branches.update(_get_variable_names(self.var_funcs[k]))
         if print_info:
-            _logger.debug('drop_branches:\n  %s', ','.join(self.drop_branches))
-            _logger.debug('load_branches:\n  %s', ','.join(self.load_branches))
+            _logger.debug('train_load_branches:\n  %s', ', '.join(sorted(self.train_load_branches)))
+            _logger.debug('train_aux_branches:\n  %s', ', '.join(sorted(self.train_aux_branches)))
+            _logger.debug('test_load_branches:\n  %s', ', '.join(sorted(self.test_load_branches)))
+            _logger.debug('test_aux_branches:\n  %s', ', '.join(sorted(self.test_aux_branches)))
 
     def __getattr__(self, name):
         return self.options[name]
 
+    def register(self, name, expr=None, to='both'):
+        assert to in ('train', 'test', 'both')
+        if isinstance(name, dict):
+            for k, v in name.items():
+                self.register(k, v, to)
+        elif isinstance(name, (list, tuple)):
+            for k in name:
+                self.register(k, None, to)
+        else:
+            if to in ('train', 'both'):
+                self.train_load_branches.add(name)
+            if to in ('test', 'both'):
+                self.test_load_branches.add(name)
+            if expr:
+                self.var_funcs[name] = expr
+                if to in ('train', 'both'):
+                    self.train_aux_branches.add(name)
+                if to in ('test', 'both'):
+                    self.test_aux_branches.add(name)
+    
     def dump(self, fp):
         with open(fp, 'w') as f:
             yaml.safe_dump(self.options, f, sort_keys=False)
