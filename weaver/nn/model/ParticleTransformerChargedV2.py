@@ -667,11 +667,11 @@ class ParticleTransformer(nn.Module):
                         output = torch.cat((output_class,output_reg),dim=1);
                 if add_da_inference and self.num_domains and self.fc_domain:
                     if not self.split_da:
-                        output_domain = self.fc_domain(x_cls)
+                        output_domain = torch.softmax(self.fc_domain(x_cls),dim=1);
                         output = torch.cat((output,output_domain),dim=1);
                     else:
                         for i,fc in enumerate(self.fc_domain):
-                            output_domain = fc(x_cls);
+                            output_domain = torch.softmax(fc(x_cls),dim=1);
                             output = torch.cat((output,output_domain),dim=1);
 
             else:
