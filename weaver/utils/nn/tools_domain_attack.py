@@ -18,7 +18,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     model.train()
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.enable();
 
     data_config = train_loader.dataset.config
 
