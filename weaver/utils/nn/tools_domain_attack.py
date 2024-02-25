@@ -4,8 +4,6 @@ import ast
 import tqdm
 import time
 import torch
-import gc
-import torch._dynamo
 
 from collections import defaultdict, Counter
 from collections.abc import Iterable  
@@ -435,9 +433,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
-    torch.cuda.empty_cache()
-    gc.collect();
-
 ## evaluate classification + regression task
 def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, grad_scaler=None,
                       frac_attack=None, epoch_start_attack=None, eval_attack=None, eps_attack=None, network_option=None,
@@ -452,8 +447,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         torch.backends.cudnn.benchmark = True;
         torch.backends.cudnn.enabled = True;
 
-    gc.enable();
-    
     data_config = test_loader.dataset.config
     label_cat_counter = Counter()
     total_loss, total_cat_loss, total_reg_loss, total_domain_loss, num_batches, total_cat_correct, total_domain_correct = 0, 0, 0, 0, 0, 0, 0;
@@ -927,16 +920,13 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
             _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
                 ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
-    torch.cuda.empty_cache()
     if for_training:
-        gc.collect();
         return total_loss / num_batches;
     else:
         scores_reg = scores_reg.reshape(len(scores_reg),num_targets);
         scores_domain = np.concatenate(list(scores_domain.values()),axis=1);
         scores_domain = scores_domain.reshape(len(scores_domain),num_labels_domain);
         scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)
-        gc.collect();
         if eval_attack:
             return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers, scores_attack
         else:
@@ -948,8 +938,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-    gc.enable();
-
     data_config = test_loader.dataset.config
     label_cat_counter = Counter()
     total_loss, num_batches, total_cat_correct, sum_sqr_err, count_cat, count_domain = 0, 0, 0, 0, 0, 0;
@@ -1149,7 +1137,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
     scores_reg = scores_reg.reshape(len(scores_reg),num_targets);
     scores_domain = torch.zeros(scores_cat.shape[0],num_labels_domain);
     scores = np.concatenate((scores_cat,scores_reg,scores_domain),axis=1)
-    gc.collect();
     return total_loss / num_batches, scores, labels_cat, targets, labels_domain, observers
 
 class TensorboardHelper(object):

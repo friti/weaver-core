@@ -9,6 +9,7 @@ import functools
 import numpy as np
 import math
 import torch
+import gc
 from torch.utils.data import DataLoader
 from utils.logger import _logger, _configLogger
 from utils.dataset import SimpleIterDataset
@@ -1000,7 +1001,10 @@ def _main(args):
 
             if scheduler and not getattr(scheduler, '_update_per_step', False):
                 scheduler.step()
-            
+
+            gc.collect();
+            torch.cuda.empty_cache();
+                
     if args.data_test:
 
         model = model.to(dev)
@@ -1069,6 +1073,9 @@ def _main(args):
                 else:
                     save_parquet(args, output_path, scores, labels, targets, domains, labels_domain, observers)
                 _logger.info('Written output to %s' % output_path, color='bold')
+
+            gc.collect();
+            torch.cuda.empty_cache();
 
 def main():
 

@@ -3,7 +3,6 @@ import awkward as ak
 import tqdm
 import time
 import torch
-import gc
 import ast
 
 from collections import defaultdict, Counter
@@ -19,7 +18,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     model.train()
     torch.backends.cudnn.benchmark = True; 
     torch.backends.cudnn.enabled = True;
-    gc.enable();
 
     data_config = train_loader.dataset.config
     label_counter = Counter()
@@ -105,8 +103,6 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
-    torch.cuda.empty_cache()
-    gc.collect();
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
@@ -119,7 +115,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     else:
         torch.backends.cudnn.benchmark = False;
         torch.backends.cudnn.enabled = False;
-    gc.enable();
 
     data_config = test_loader.dataset.config
 
@@ -218,9 +213,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
-    torch.cuda.empty_cache()
     if for_training:
-        gc.collect();
         return total_correct / count
     else:
         # convert 2D labels/scores
@@ -235,7 +228,6 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 scores = scores.reshape((entry_count, int(count / entry_count), -1)).transpose((1, 2))
                 for k, v in labels.items():
                     labels[k] = v.reshape((entry_count, -1))
-        gc.collect();
         return total_correct / count, scores, labels, targets, labels_domain, observers
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy --> use ONNX instead of pytorch
@@ -243,9 +235,7 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
 
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-
     data_config = test_loader.dataset.config
-    gc.enable();
 
     label_counter = Counter()
     total_correct, count = 0, 0, 0
@@ -295,7 +285,6 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
-    gc.collect();
     return total_correct / count, scores, labels, targets, labels_domain, observers
 
 
@@ -305,7 +294,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     model.train()   
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.enable();
     
     data_config = train_loader.dataset.config
 
@@ -392,8 +380,6 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
-    torch.cuda.empty_cache()
-    gc.collect();
 
 def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
                         eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
@@ -405,7 +391,6 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
    else:
        torch.backends.cudnn.benchmark = False;
        torch.backends.cudnn.enabled = False;
-   gc.enable();
        
    data_config = test_loader.dataset.config
 
@@ -497,14 +482,11 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
       _logger.info('Evaluation metrics: \n%s', '\n'.join(
          ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))        
 
-   torch.cuda.empty_cache()
    if for_training:
-      gc.collect();
       return total_loss / num_batches
    else:
       # convert 2D targets/scores
       scores = scores.reshape(len(scores),len(data_config.target_names))
-      gc.collect();
       return total_loss / num_batches, scores, labels, targets, labels_domain, observers
         
 ## evaluate regression via ONNX
@@ -514,7 +496,6 @@ def evaluate_onnx_regression(model_path, test_loader,
    import onnxruntime
    sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
-   gc.enable();
    data_config = test_loader.dataset.config
 
    num_batches, total_loss, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0
@@ -577,8 +558,6 @@ def evaluate_onnx_regression(model_path, test_loader,
       _logger.info('Evaluation metrics: \n%s', '\n'.join(
          ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
         
-   gc.collect();
-
    scores = scores.reshape(len(scores),len(data_config.target_names))
    return total_loos/num_batches, scores, labels, targets, labels_domain, observers
 
@@ -589,7 +568,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     model.train()
     torch.backends.cudnn.benchmark = True;
     torch.backends.cudnn.enabled = True;
-    gc.enable();
     
     data_config = train_loader.dataset.config
    
@@ -756,11 +734,9 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
         # update the batch state
         tb_helper.batch_train_count += num_batches
 
-    torch.cuda.empty_cache()
-    gc.collect();
-
 ## evaluate classification + regression task
-def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, eval_attack=None, eps_attack=None, network_option=None, grad_scaler=None,
+def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+                      eval_attack=None, eps_attack=None, network_option=None, grad_scaler=None,
                       eval_cat_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
     
@@ -771,7 +747,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
     else:
         torch.backends.cudnn.benchmark = False;
         torch.backends.cudnn.enabled = False;
-    gc.enable();
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
@@ -1013,21 +988,17 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         _logger.info('Evaluation Regression metrics for '+name+' target: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_reg_results.items()]))        
 
-    torch.cuda.empty_cache()
     if for_training:
-        gc.collect();
         return total_loss / num_batches;
     else:
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
-            gc.collect();
             if eval_fgsm:
                 return total_loss / num_batches, scores, labels, targets, labels_domain, observers, scores_attack
             else:
                 return total_loss / num_batches, scores, labels, targets, labels_domain, observers
         else:
-            gc.collect();
             if eval_fgsm:
                 return total_loss / num_batches, scores_reg, labels, targets, labels_domain, observers, scores_attack;
             else:
@@ -1039,8 +1010,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
    import onnxruntime
    sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-
-   gc.enable();
 
    data_config = test_loader.dataset.config
    label_counter = Counter()
@@ -1131,10 +1100,8 @@ def evaluate_onnx_classreg(model_path, test_loader,
    if scores_reg.ndim and scores_cat.ndim: 
       scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
       scores = np.concatenate((scores_cat,scores_reg),axis=1)        
-      gc.collect();
       return total_loss / num_batches, scores, labels, targets, labels_domain, observers
    else:
-      gc.collect();
       return total_loss / num_batches, scores_reg, labels, targets, labels_domain, observers
 
 class TensorboardHelper(object):
