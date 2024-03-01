@@ -13,7 +13,7 @@ from .utils import _flatten_label, _flatten_preds, fgsm_attack, fngm_attack
 
 
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
-def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
+def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None,network_option=None):
 
     model.train()
     torch.backends.cudnn.benchmark = True; 
@@ -22,14 +22,16 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     data_config = train_loader.dataset.config
     label_counter = Counter()
     count, num_batches, total_loss, total_correct = 0, 0, 0, 0
-    loss, inputs, label, label_mask, model_output, preds, correct = None, None, None, None, None, None, None
+    loss, inputs, label, weight, label_mask, model_output, preds, correct = None, None, None, None, None, None, None, None
 
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, y_cat, _, _, _, _, _ in tq:
+        for X, y_cat, _, _, _, _, _, y_weight in tq:
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
+            if y_weight:
+                weight = [y_weight[k].float().to(dev,non_blocking=True) for k in data_config.label_weight_names]
             try:
                 label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
             except KeyError:
@@ -46,8 +48,15 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 model_output = model(*inputs)                
                 model_output = _flatten_preds(model_output, label=label, mask=label_mask)
                 model_output = model_output.squeeze().float();
-                label = label.squeeze();
-                loss = loss_func(model_output, label)
+                label  = label.squeeze();
+                if label_mask:
+                    label_mask = label_mask.squeeze();
+                if weight:
+                    weight = weight.squeeze();
+                    loss = loss_func(model_output, label, weight)
+                else:
+                    loss = loss_func(model_output, label)
+                    
             if grad_scaler is None:
                 loss.backward()
                 opt.step()
@@ -105,7 +114,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
-def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,network_option=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
 
     model.eval()
@@ -120,7 +129,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     label_counter = Counter()
     num_batches, count, entry_count, total_correct, total_loss = 0, 0, 0, 0, 0
-    inputs, label, label_mask, model_output,  preds, loss, correct = None, None, None, None, None, None, None
+    inputs, label, label_mask, model_output, weight, preds, loss, correct = None, None, None, None, None, None, None, None
     scores = []
     labels_counts = []
     labels = defaultdict(list)
@@ -134,9 +143,11 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y_cat, _, _, Z, _, _ in tq:
+            for X, y_cat, _, _, Z, _, _, y_weight in tq:
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
+                if y_weight:
+                    weight = y_weight.float().squeeze().to(dev,non_blocking=True);
                 entry_count += label.shape[0]
                 try:
                     label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
@@ -167,8 +178,14 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                     scores.append(torch.softmax(model_output,dim=1).numpy(force=True).astype(dtype=np.float32))
                 else:
                     scores.append(torch.zeros(num_examples,num_labels).numpy(force=True).astype(dtype=np.float32));
-      
-                loss = 0 if loss_func is None else loss_func(model_output, label).item()
+
+                if loss_func is None :                    
+                    loss = 0
+                else:
+                    if weight:
+                        loss_func(model_output, label, weight).item()
+                    else:
+                        loss_func(model_output, label).item()
                 
                 num_batches += 1
                 _, preds = model_output.max(1)
@@ -302,7 +319,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-       for X, _, y_reg, _, _, _, _ in tq:
+       for X, _, y_reg, _, _, _, _, _ in tq:
          inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
          for idx, names in enumerate(data_config.target_names):
             if idx == 0:
@@ -402,7 +419,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
    with torch.no_grad():
       with tqdm.tqdm(test_loader) as tq:
-         for X, _, y_reg, _, Z, _, _ in tq:
+         for X, _, y_reg, _, Z, _, _, _ in tq:
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             for idx, names in enumerate(data_config.target_names):
                if idx == 0:
@@ -505,7 +522,7 @@ def evaluate_onnx_regression(model_path, test_loader,
 
    start_time = time.time()
    with tqdm.tqdm(test_loader) as tq:
-      for X, _, y_reg, _, Z, _, _ in tq:
+      for X, _, y_reg, _, Z, _, _, _ in tq:
          inputs = {k: v.numpy().astype(dtype=np.float32) for k, v in X.items()}
          for idx, names in enumerate(data_config.target_names):
             if idx == 0:
@@ -591,7 +608,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
     start_time = time.time()
 
     with tqdm.tqdm(train_loader) as tq:
-        for X, y_cat, y_reg, _, _, _, _ in tq:
+        for X, y_cat, y_reg, _, _, _, _, _ in tq:
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             ### build classification true labels (numpy argmax)
@@ -776,7 +793,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y_cat, y_reg, _, Z, _, _ in tq:
+            for X, y_cat, y_reg, _, Z, _, _, _ in tq:
                 ### input features for the model
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 ### build classification true labels
@@ -1024,7 +1041,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
    num_targets = len(data_config.target_value);
 
    with tqdm.tqdm(test_loader) as tq:
-      for X, y_cat, y_reg, _, Z, _, _ in tq:
+      for X, y_cat, y_reg, _, Z, _, _, _ in tq:
          ### input features for the model
          inputs = {k: v.numpy() for k, v in X.items()}
          label = y_cat[data_config.label_names[0]].long();

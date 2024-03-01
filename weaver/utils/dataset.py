@@ -33,7 +33,7 @@ def _finalize_inputs(table, data_config):
                 output[k] = table[k]
             
     # copy labels
-    for k in data_config.label_names+data_config.target_names+data_config.label_domain_names:
+    for k in data_config.label_names+data_config.target_names+data_config.label_domain_names+data_config.label_weight_names:
         output[k] = ak.to_numpy(table[k])
     # copy labelcheck
     for k in data_config.labelcheck_names:
@@ -323,26 +323,46 @@ class _SimpleIter(object):
 
     def get_data(self, i):
         # inputs
-        X = {k: copy.deepcopy(self.table['_' + k][i]) for k in self._data_config.input_names}
+        if self._data_config.input_names:
+            X = {k: copy.deepcopy(self.table['_' + k][i]) for k in self._data_config.input_names}
+        else:
+            X = {};
         # labels for classification
-        y_cat = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_names}
+        if self._data_config.label_names:
+            y_cat = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_names}
+        else:
+            y_cat = {};
         # target for regression
-        y_reg = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.target_names}        
+        if self._data_config.target_names:
+            y_reg = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.target_names}
+        else:
+            y_reg = {};
+        # labels for classification
+        if self._data_config.label_weight:
+            y_weight = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_weight}
+        else:
+            y_weight = {};
         # labels for domain
         if self._data_config.label_domain_names:
             y_domain = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_domain_names}        
         else:
             y_domain = {};
         # observers / monitor variables
-        Z = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.z_variables}
+        if self._data_config.z_variables:
+            Z = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.z_variables}
+        else:
+            Z = {};
         # labelcheck for classificaiton
-        y_cat_check = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.labelcheck_names}
+        if self._data_config.labelcheck_names:
+            y_cat_check = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.labelcheck_names}
+        else:
+            y_cat_check = {};
         # labelcheck for domain
         if self._data_config.labelcheck_domain_names:
             y_domain_check = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.labelcheck_domain_names}            
         else:
             y_domain_check = {};
-        return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check 
+        return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check, y_weight 
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):
     r"""Base IterableDataset.

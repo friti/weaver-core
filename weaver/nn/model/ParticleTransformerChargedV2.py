@@ -51,7 +51,9 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
     if num_outputs > 4:
         p4i = p4_from_ptetaphie(pti,etai,phii,ei);
         p4j = p4_from_ptetaphie(ptj,etaj,phij,ej);
-        lnds2 = torch.log(torch.clamp(-(p4i-p4j).m2, min=eps));
+        p4ij = p4i-p4j
+        ds2  = -torch.from_numpy(ak.to_numpy(p4ij.m2));
+        lnds2 = torch.log(-ds2.clamp(min=eps));
         outputs.append(lnds2)
 
     # add the delta-eta and delta-phi of pairs in addition to the deltaR

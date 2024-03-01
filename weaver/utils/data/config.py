@@ -123,12 +123,19 @@ class DataConfig(object):
                 self.register('_labelcheck_', 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
             else:
                 self.label_names = tuple(self.label_value.keys())
+                self.label_weight = opts['labels']['weight'];
                 self.register(self.label_value)
                 self.labelcheck_names = None;
+            if opts['labels']['weight']:
+                self.label_weight = opts['labels']['weight']            
+                self.label_weight_names = tuple(self.label_weight)
+                self.register(self.label_weight);
         else:
             self.label_names = tuple();
             self.label_type  = None;
             self.label_value = None;
+            self.label_weight = None;
+            self.label_weight_names = None;
             self.labelcheck_names = None;
 
         ## domain
@@ -240,6 +247,8 @@ class DataConfig(object):
             _log('preprocess_params:\n - %s', '\n - '.join(str(it) for it in self.preprocess_params.items()))
             if self.label_names: 
                 _log('label_names: %s', str(self.label_names))
+            if self.label_weight_names: 
+                _log('label_weight_names: %s', str(self.label_weight_names))
             if self.target_names: 
                 _log('target_names: %s', str(self.target_names))
             if self.target_quantile:
