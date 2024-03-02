@@ -123,13 +123,15 @@ class DataConfig(object):
                 self.register('_labelcheck_', 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs)))
             else:
                 self.label_names = tuple(self.label_value.keys())
-                self.label_weight = opts['labels']['weight'];
                 self.register(self.label_value)
                 self.labelcheck_names = None;
-            if opts['labels']['weight']:
+            if 'weight' in opts['labels']:
                 self.label_weight = opts['labels']['weight']            
                 self.label_weight_names = tuple(self.label_weight)
                 self.register(self.label_weight);
+            else:
+                self.label_weight = None;
+                self.label_weight_names = None;                                
         else:
             self.label_names = tuple();
             self.label_type  = None;

@@ -173,7 +173,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 model_output = _flatten_preds(model_output,label=label,mask=label_mask)                
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
-
+                
                 if model_output.shape[0] == num_examples:
                     scores.append(torch.softmax(model_output,dim=1).numpy(force=True).astype(dtype=np.float32))
                 else:
@@ -590,7 +590,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
    
     num_batches, total_loss, total_cat_loss, total_reg_loss, count = 0, 0, 0, 0, 0
     label_counter = Counter()
-    total_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0
+    total_correct, sum_sqr_err = 0, 0
     inputs, target, label, model_output, label_mask = None, None, None, None, None;
     loss, loss_cat, loss_reg, pred_cat, pred_reg, residual_reg, correct = None, None, None, None, None, None, None;
     loss_contrastive, model_output_contrastive, total_contrastive_loss = None, None, 0;
@@ -685,8 +685,6 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ## take the regression prediction and compare with true targets
             pred_reg = model_output_reg.detach().float();
             residual_reg = pred_reg - target;            
-            abs_err = residual_reg.abs().sum().item();
-            sum_abs_err += abs_err;
             sqr_err = residual_reg.square().sum().item()
             sum_sqr_err += sqr_err
             
@@ -767,7 +765,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
-    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0;
+    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0;
     inputs, label, target,  model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg, label_mask = None, None, None, None, None , None, None, None, None, None;
     inputs_grad_sign, inputs_attack, model_output_attack, network_options = None, None, None, None;
     num_batches_attack, total_attack_loss, count_attack, residual_attack, sum_residual_attack = 0, 0, 0, 0, 0;
@@ -814,6 +812,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### update counters
                 num_examples = max(label.shape[0],target.shape[0]);
                 entry_count += num_examples
+
                 ### define truth labels for classification and regression
                 for k, name in enumerate(data_config.label_names):                    
                     labels[name].append(_flatten_label(y_cat[name],None).numpy(force=True).astype(dtype=np.int32))
@@ -914,8 +913,6 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     ### regression spread
                     pred_reg = model_output_reg.float()
                     residual_reg = pred_reg - target;
-                    abs_err = residual_reg.abs().sum().item();
-                    sum_abs_err += abs_err;
                     sqr_err = residual_reg.square().sum().item()
                     sum_sqr_err += sqr_err
                     
@@ -1030,7 +1027,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
 
    data_config = test_loader.dataset.config
    label_counter = Counter()
-   num_batches, total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0, 0
+   num_batches, total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, count = 0, 0, 0, 0, 0, 0, 0
    scores_cat, scores_reg = [], []
    labels, targets, observers, labels_domain = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None;
@@ -1076,8 +1073,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
                correct = (pred_cat == label).sum().item()
                total_correct += correct
                residual_reg = pred_reg - target;
-               abs_err = residual_reg.abs().sum().item();
-               sum_abs_err += abs_err;
                sqr_err = residual_reg.square().sum().item()
                sum_sqr_err += sqr_err
 
@@ -1087,8 +1082,6 @@ def evaluate_onnx_classreg(model_path, test_loader,
                'AvgAcc': '%.5f' % (total_correct / count),
                'MSE': '%.5f' % (sqr_err / num_examples),
                'AvgMSE': '%.5f' % (sum_sqr_err / count),
-               'MAE': '%.5f' % (abs_err / num_examples),
-               'AvgMAE': '%.5f' % (sum_abs_err / count),                        
             })
 
    time_diff = time.time() - start_time
