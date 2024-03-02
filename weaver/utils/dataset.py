@@ -33,14 +33,27 @@ def _finalize_inputs(table, data_config):
                 output[k] = table[k]
             
     # copy labels
-    for k in data_config.label_names+data_config.target_names+data_config.label_domain_names+data_config.label_weight_names:
-        output[k] = ak.to_numpy(table[k])
+    if data_config.label_names:
+        for k in data_config.label_names:
+            output[k] = ak.to_numpy(table[k])
+    if data_config.target_names:
+        for k in data_config.target_names:
+            output[k] = ak.to_numpy(table[k])
+    if data_config.label_domain_names:
+        for k in data_config.label_domain_names:
+            output[k] = ak.to_numpy(table[k])
+    if data_config.label_weight_names:
+        for k in data_config.label_weight_names:
+            output[k] = ak.to_numpy(table[k])
+            
     # copy labelcheck
-    for k in data_config.labelcheck_names:
-        output[k] = ak.to_numpy(table[k])
+    if data_config.labelcheck_names:
+        for k in data_config.labelcheck_names:
+            output[k] = ak.to_numpy(table[k])
     if data_config.labelcheck_domain_names:
         for k in data_config.labelcheck_domain_names:
             output[k] = ak.to_numpy(table[k])
+            
     # transformation
     for k, params in data_config.preprocess_params.items():
         if data_config._auto_standardization and params['center'] == 'auto':
