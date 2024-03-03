@@ -31,7 +31,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
             if y_weight:
-                weight = [y_weight[k].float().to(dev,non_blocking=True) for k in data_config.label_weight_names]
+                weight = [y_weight[k].float().to(dev,non_blocking=True) for k in data_config.label_sample_weight_names]
             try:
                 label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
             except KeyError:
