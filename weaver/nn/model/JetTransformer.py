@@ -20,6 +20,10 @@ def p4_from_ptetaphie(pt, eta, phi, energy):
     vector.register_awkward()
     return vector.zip({'pt': pt, 'eta': eta, 'phi': phi, 'energy': energy})
 
+def p4_from_pxpypxe(px, py, pz, energy):
+    vector.register_awkward()
+    return vector.zip({'px': px, 'py': py, 'pz': pz, 'energy': energy})
+
 def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8):
 
     pti, etai, phii, ei = xi.split((1, 1, 1, 1), dim=1)
@@ -39,9 +43,13 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8):
     lnz   = torch.log(z);
     
     ## invariant mass, pt, eta, phi of the pair
-    p4i = p4_from_ptetaphie(pti,etai,phii,ei);
-    p4j = p4_from_ptetaphie(ptj,etaj,phij,ej);
-    p4ij = p4i+p4j;
+    pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.cos(phii), pti*torch.sinh(etai);
+    pxj, pyj, pzj = ptj*torch.cos(phij),  ptj*torch.cos(phij), ptj*torch.sinh(etaj);
+    pxij = pxi+pxj;
+    pyij = pyi+pyj;
+    pzij = pzi+pzj;
+    eij = ei+ej;    
+    p4ij = p4_from_pxpypxe(pxij,pyij,pzij,eij);
     etaij = torch.from_numpy(ak.to_numpy(p4ij.eta));
     m2ij  = torch.from_numpy(ak.to_numpy(p4ij.m2)).clamp(min=eps);
     pt2ij = torch.from_numpy(ak.to_numpy(p4ij.pt2)).clamp(min=eps);
