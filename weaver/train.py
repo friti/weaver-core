@@ -1121,14 +1121,16 @@ def main():
 
     if args.cross_validation:
         model_dir, model_fn = os.path.split(args.model_prefix)
-        predict_output_base, predict_output_ext = os.path.splitext(args.predict_output)
+        if args.predict_output:
+            predict_output_base, predict_output_ext = os.path.splitext(args.predict_output)
         load_model = args.load_model_weights or None
         var_name, kfold = args.cross_validation.split('%')
         kfold = int(kfold)
         for i in range(kfold):
             _logger.info(f'\n=== Running cross validation, fold {i} of {kfold} ===')
             args.model_prefix = os.path.join(f'{model_dir}_fold{i}', model_fn)
-            args.predict_output = f'{predict_output_base}_fold{i}' + predict_output_ext
+            if args.predict_output:
+                args.predict_output = f'{predict_output_base}_fold{i}' + predict_output_ext
             args.extra_selection = f'{var_name}%{kfold}!={i}'
             args.extra_test_selection = f'{var_name}%{kfold}=={i}'
             if load_model and '{fold}' in load_model:
