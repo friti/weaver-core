@@ -58,12 +58,12 @@ class DataConfig(object):
         if print_info:
             _logger.debug(opts)
 
-
+        #
         self.train_load_branches = set()
         self.train_aux_branches = set()
         self.test_load_branches = set()
         self.test_aux_branches = set()
-         
+        # 
         self.selection = opts['selection']
         self.test_time_selection = opts['test_time_selection'] if opts['test_time_selection'] else self.selection
         self.var_funcs = copy.deepcopy(opts['new_variables'])
@@ -135,7 +135,6 @@ class DataConfig(object):
             if 'class_weight' in opts['labels']:
                 self.label_class_weight = opts['labels']['class_weight']            
                 self.label_class_weight_names = tuple(self.label_class_weight)
-                self.register(self.label_class_weight);
             else:
                 self.label_class_weight = None;
                 self.label_class_weight_names = None;                                
