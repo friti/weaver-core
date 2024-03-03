@@ -42,8 +42,8 @@ def _finalize_inputs(table, data_config):
     if data_config.label_domain_names:
         for k in data_config.label_domain_names:
             output[k] = ak.to_numpy(table[k])
-    if data_config.label_weight_names:
-        for k in data_config.label_weight_names:
+    if data_config.label_sample_weight_names:
+        for k in data_config.label_sample_weight_names:
             output[k] = ak.to_numpy(table[k])
             
     # copy labelcheck
@@ -351,8 +351,8 @@ class _SimpleIter(object):
         else:
             y_reg = {};
         # labels for classification
-        if self._data_config.label_weight:
-            y_weight = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_weight}
+        if self._data_config.label_sample_weight:
+            y_weight = {k: copy.deepcopy(self.table[k][i]) for k in self._data_config.label_sample_weight}
         else:
             y_weight = {};
         # labels for domain

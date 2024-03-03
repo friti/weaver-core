@@ -125,20 +125,29 @@ class DataConfig(object):
                 self.label_names = tuple(self.label_value.keys())
                 self.register(self.label_value)
                 self.labelcheck_names = None;
-            if 'weight' in opts['labels']:
-                self.label_weight = opts['labels']['weight']            
-                self.label_weight_names = tuple(self.label_weight)
-                self.register(self.label_weight);
+            if 'sample_weight' in opts['labels']:
+                self.label_sample_weight = opts['labels']['sample_weight']            
+                self.label_sample_weight_names = tuple(self.label_sample_weight)
+                self.register(self.label_sample_weight);
             else:
-                self.label_weight = None;
-                self.label_weight_names = None;                                
+                self.label_sample_weight = None;
+                self.label_sample_weight_names = None;                                
+            if 'class_weight' in opts['labels']:
+                self.label_class_weight = opts['labels']['class_weight']            
+                self.label_class_weight_names = tuple(self.label_class_weight)
+                self.register(self.label_class_weight);
+            else:
+                self.label_class_weight = None;
+                self.label_class_weight_names = None;                                
         else:
             self.label_names = tuple();
             self.label_type  = None;
             self.label_value = None;
-            self.label_weight = None;
-            self.label_weight_names = None;
             self.labelcheck_names = None;
+            self.label_sample_weight = None;
+            self.label_sample_weight_names = None;
+            self.label_class_weight = None;
+            self.label_class_weight_names = None;
 
         ## domain
         if opts['labels_domain']:
@@ -249,8 +258,10 @@ class DataConfig(object):
             _log('preprocess_params:\n - %s', '\n - '.join(str(it) for it in self.preprocess_params.items()))
             if self.label_names: 
                 _log('label_names: %s', str(self.label_names))
-            if self.label_weight_names: 
-                _log('label_weight_names: %s', str(self.label_weight_names))
+            if self.label_sample_weight_names: 
+                _log('label_sample_weight_names: %s', str(self.label_sample_weight_names))
+            if self.label_class_weight_names: 
+                _log('label_class_weight_names: %s', str(self.label_class_weight_names))
             if self.target_names: 
                 _log('target_names: %s', str(self.target_names))
             if self.target_quantile:

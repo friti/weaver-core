@@ -1133,7 +1133,6 @@ def main():
             args.extra_test_selection = f'{var_name}%{kfold}=={i}'
             if load_model and '{fold}' in load_model:
                 args.load_model_weights = load_model.replace('{fold}', f'fold{i}')
-
             _main(args)
     else:
         _main(args)
