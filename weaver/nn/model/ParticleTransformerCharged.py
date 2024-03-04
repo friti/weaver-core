@@ -25,18 +25,17 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
 
     ## dr between particles
     drij   = torch.sqrt(delta_r2(etai, phii, etaj, phij)).clamp(min=eps);
-    lndrij = torch.log(drij);
-    
-    if num_outputs == 1:
-        outputs = [lndelta];
+    lndrij = torch.log(drij);    
 
     ## kt and anti-kt metrics
     if num_outputs > 1:
         ptmin = ((pti <= ptj) * pti + (pti > ptj) * ptj) if for_onnx else torch.minimum(pti, ptj)
         lnkt  = torch.log((ptmin * drij).clamp(min=eps))
         lnz   = torch.log((ptmin / (pti + ptj).clamp(min=eps)).clamp(min=eps))
-        outputs = [lnkt, lnz, lndelta]
-
+        outputs = [lnkt, lnz, lndrij]
+    else:
+        outputs = [lndrij];
+        
     ## invriant mass of the pair
     if num_outputs > 3:
         pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.sin(phii), pti*torch.sinh(etai);
@@ -47,24 +46,24 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
         eij  = ei+ej;
         m2ij = (eij**2-pij**2).clamp(min=eps);
         lnm2ij = torch.log(m2ij);
-        outputs.append(lnm2ij)
+        outputs += [lnm2ij];
 
-        ## invariant mass of the difference
-        if num_outputs > 4:
-            pxij = pxi-pxj;
-            pyij = pyi-pyj;
-            pzij = pzi-pzj;
-            eij  = ei-ej;
-            pij  = torch.sqrt(pxij**2+pyij**2+pzij**2)
-            ds2  = torch.clamp(-(eij**2-pij**2),min=eps)
-            lnds2 = torch.log(ds2);
-            outputs.append(lnds2)
+    ## invariant mass of the difference
+    if num_outputs > 4:
+        pxij = pxi-pxj;
+        pyij = pyi-pyj;
+        pzij = pzi-pzj;
+        eij  = ei-ej;
+        pij  = torch.sqrt(pxij**2+pyij**2+pzij**2)
+        ds2  = torch.clamp(-(eij**2-pij**2),min=eps)
+        lnds2 = torch.log(ds2);
+        outputs += [lnds2]
 
-        # add the delta-eta and delta-phi of pairs in addition to the deltaR
-        if num_outputs > 5:
-            deltaeta = etai - etaj
-            deltaphi = delta_phi(phii, phij)
-            outputs += [deltaeta, deltaphi]
+    # add the delta-eta and delta-phi of pairs in addition to the deltaR
+    if num_outputs > 5:
+        deltaeta = etai - etaj
+        deltaphi = delta_phi(phii, phij)
+        outputs += [deltaeta, deltaphi]
 
     assert (len(outputs) == num_outputs)
     return torch.cat(outputs, dim=1)
