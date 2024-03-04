@@ -3,8 +3,6 @@ import random
 import warnings
 import copy
 import torch
-import vector
-import awkward as ak
 import torch.nn as nn
 from functools import partial
 
@@ -16,26 +14,18 @@ def delta_phi(a, b):
 def delta_r2(eta1, phi1, eta2, phi2):
     return (eta1 - eta2)**2 + delta_phi(phi1, phi2)**2
 
-def p4_from_ptetaphie(pt, eta, phi, energy):
-    vector.register_awkward()
-    return vector.zip({'pt': pt, 'eta': eta, 'phi': phi, 'energy': energy})
-
-def p4_from_pxpypxe(px, py, pz, energy):
-    vector.register_awkward()
-    return vector.zip({'px': px, 'py': py, 'pz': pz, 'energy': energy})
-
 def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8):
 
     pti, etai, phii, ei = xi.split((1, 1, 1, 1), dim=1)
     ptj, etaj, phij, ej = xj.split((1, 1, 1, 1), dim=1)
 
-    ## distance metric
+    ## distances deta, dphi, dR
     detaij = etai - etaj
     dphiij = delta_phi(phii, phij)
     drij   = torch.sqrt(delta_r2(etai, phii, etaj, phij)).clamp(min=eps);
     lndrij = torch.log(drij);
     
-    ## kT and anti-kT
+    ## kT and anti-kT metrics
     ptmin = torch.minimum(pti, ptj)
     kt    = (ptmin * drij).clamp(min=eps);
     lnkt  = torch.log(kt);
@@ -43,16 +33,16 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8):
     lnz   = torch.log(z);
     
     ## invariant mass, pt, eta, phi of the pair
-    pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.cos(phii), pti*torch.sinh(etai);
-    pxj, pyj, pzj = ptj*torch.cos(phij),  ptj*torch.cos(phij), ptj*torch.sinh(etaj);
+    pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.sin(phii), pti*torch.sinh(etai);
+    pxj, pyj, pzj = ptj*torch.cos(phij),  ptj*torch.sin(phij), ptj*torch.sinh(etaj);    
     pxij = pxi+pxj;
     pyij = pyi+pyj;
     pzij = pzi+pzj;
-    eij = ei+ej;    
-    p4ij = p4_from_pxpypxe(pxij,pyij,pzij,eij);
-    etaij = torch.from_numpy(ak.to_numpy(p4ij.eta));
-    m2ij  = torch.from_numpy(ak.to_numpy(p4ij.m2)).clamp(min=eps);
-    pt2ij = torch.from_numpy(ak.to_numpy(p4ij.pt2)).clamp(min=eps);
+    pij  = torch.sqrt(pxij**2+pyij**2+pzij**2)
+    etaij = 0.5*torch.log((pzij/pij).clamp(min=eps));
+    eij  = ei+ej;
+    m2ij = eij**2-pij**2
+    pt2ij = pxij**2+pyij**2 
     lnm2ij = torch.log(m2ij);
     lnpt2ij = torch.log(pt2ij);
 
