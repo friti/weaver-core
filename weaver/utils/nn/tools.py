@@ -32,6 +32,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
             if y_weight:
                 weight = y_weight[data_config.label_sample_weight_names[0]].float().to(dev,non_blocking=True)
+                weight = weight.squeeze();
             try:
                 label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
             except KeyError:
@@ -51,8 +52,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 label  = label.squeeze();
                 if label_mask:
                     label_mask = label_mask.squeeze();
-                if weight:
-                    weight = weight.squeeze();
+                if torch.is_tensor(weight):
                     loss = loss_func(model_output, label, weight)
                 else:
                     loss = loss_func(model_output, label)
@@ -148,6 +148,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 label  = y_cat[data_config.label_names[0]].long().to(dev,non_blocking=True)
                 if y_weight:
                     weight = y_weight[data_config.label_sample_weight_names[0]].float().to(dev,non_blocking=True)
+                    weight = weight.squeeze();
                 entry_count += label.shape[0]
                 try:
                     label_mask = y_cat[data_config.label_names[0] + '_mask'].bool().to(dev,non_blocking=True)
@@ -182,10 +183,10 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 if loss_func is None :                    
                     loss = 0
                 else:
-                    if weight:
-                        loss_func(model_output, label, weight).item()
+                    if torch.is_tensor(weight):
+                        loss = loss_func(model_output, label, weight).item()
                     else:
-                        loss_func(model_output, label).item()
+                        loss = loss_func(model_output, label).item()
                 
                 num_batches += 1
                 _, preds = model_output.max(1)
@@ -333,7 +334,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
                model_output = model(*inputs)
                model_output = model_output.squeeze().float();
                target = target.squeeze();
-               loss  = loss_func(model_output, target)
+               loss = loss_func(model_output, target)
             if grad_scaler is None:
                loss.backward()
                opt.step()
