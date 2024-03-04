@@ -45,7 +45,7 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
         pyij = pyi+pyj;
         pzij = pzi+pzj;
         eij  = ei+ej;
-        m2ij = (eij**2-pij**2)..clamp(min=eps);
+        m2ij = (eij**2-pij**2).clamp(min=eps);
         lnm2ij = torch.log(m2ij);
         outputs.append(lnm2ij)
 
