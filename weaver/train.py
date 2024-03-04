@@ -948,8 +948,7 @@ def _main(args):
             sys.exit(0);
 
         # training loop
-        best_val_metric = np.inf if "reg" in args.weaver_mode else 0
-
+        best_val_metric = np.inf;
         for epoch in range(args.num_epochs):
             
             if args.load_epoch is not None:
@@ -988,7 +987,7 @@ def _main(args):
                 val_metric = evaluate(model, val_loader, dev, epoch, loss_func=loss_func, steps_per_epoch=args.steps_per_epoch_val, grad_scaler=grad_scaler, tb_helper=tb,  
                                       network_option=args.network_option, eval_attack=args.eval_attack)
                 
-            is_best_epoch = (val_metric < best_val_metric) if "reg" in args.weaver_mode else (val_metric > best_val_metric)
+            is_best_epoch = (val_metric < best_val_metric)
 
             if is_best_epoch:
                 best_val_metric = val_metric
