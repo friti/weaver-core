@@ -13,7 +13,7 @@ from .utils import _flatten_label, _flatten_preds, fgsm_attack, fngm_attack
 
 
 ## train a classifier for which classes are condensed into a single label_name --> argmax of numpy
-def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None,network_option=None):
+def train_classification(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None, network_option=None):
 
     model.train()
     torch.backends.cudnn.benchmark = True; 
@@ -114,7 +114,8 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
-def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None, network_option=None, grad_scaler=None,
+def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
+                            eval_attack=None, eps_attack=None, network_option=None, grad_scaler=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
 
     model.eval()
