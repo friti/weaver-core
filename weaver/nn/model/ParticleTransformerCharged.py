@@ -18,101 +18,53 @@ def delta_phi(a, b):
 def delta_r2(eta1, phi1, eta2, phi2):
     return (eta1 - eta2)**2 + delta_phi(phi1, phi2)**2
 
-def to_pt2(x, eps=1e-8):
-    pt2 = x[:, :2].square().sum(dim=1, keepdim=True)
-    if eps is not None:
-        pt2 = pt2.clamp(min=eps)
-    return pt2
-
-def to_eta(x, eps=1e-8):
-    pz = x[:, 2:3];
-    p  = torch.sqrt(x[:, :3].square().sum(dim=1, keepdim=True));
-    eta = 0.5 * torch.log((p+pz)/(p-pz))
-    if eps is not None:
-       eta = eta.clamp(min=eps)
-    return eta
-
-def to_m2(x, eps=1e-8):
-    m2 = x[:, 3:4].square() - x[:, :3].square().sum(dim=1, keepdim=True)
-    if eps is not None:
-        m2 = m2.clamp(min=eps)
-    return m2
-
-def atan2(y, x):
-    sx = torch.sign(x)
-    sy = torch.sign(y)
-    pi_part = (sy + sx * (sy ** 2 - 1)) * (sx - 1) * (-math.pi / 2)
-    atan_part = torch.arctan(y / (x + (1 - sx ** 2))) * sx ** 2
-    return atan_part + pi_part
-
-def to_ptetaphim(x, return_mass=True, eps=1e-8, for_onnx=False):
-    # compute new coordinates
-    pt  = torch.sqrt(to_pt2(x, eps=eps))
-    eta = to_eta(x, eps=eps);
-    phi = atan2(x[:,0:1],x[:,1:2]) if for_onnx else torch.atan2(x[:,0:1],x[:,1:2])
-    if not return_mass:
-        return torch.cat((pt,eta,phi), dim=1)
-    else:
-        m = torch.sqrt(to_m2(x, eps=eps))
-        return torch.cat((pt,eta,phi,m), dim=1)
-
-def boost(x, boostp4, eps=1e-8):
-    # boost x to the rest frame of boostp4
-    # x: (N, 4, ...), dim1 : (px, py, pz, E)
-    p3 = -boostp4[:, :3] / boostp4[:, 3:].clamp(min=eps)
-    b2 = p3.square().sum(dim=1, keepdim=True)
-    gamma = (1 - b2).clamp(min=eps)**(-0.5)
-    gamma2 = (gamma - 1) / b2
-    gamma2.masked_fill_(b2 == 0, 0)
-    bp = (x[:, :3] * p3).sum(dim=1, keepdim=True)
-    v = x[:, :3] + gamma2 * bp * p3 + x[:, 3:] * gamma * p3
-    return v
-
-
-def p3_norm(p, eps=1e-8):
-    return p[:, :3] / p[:, :3].norm(dim=1, keepdim=True).clamp(min=eps)
-
-
 def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
 
-    pti, etai, phii = to_ptetaphim(xi, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
-    ptj, etaj, phij = to_ptetaphim(xj, False, eps=None, for_onnx=for_onnx).split((1, 1, 1), dim=1)
+    pti, etai, phii, ei = xi.split((1, 1, 1, 1), dim=1)
+    ptj, etaj, phij, ej = xj.split((1, 1, 1, 1), dim=1)
 
-    delta   = torch.sqrt(delta_r2(etai, phii, etaj, phij));
-    lndelta = torch.log(delta.clamp(min=eps))
-
-    ## log dR
+    ## dr between particles
+    drij   = torch.sqrt(delta_r2(etai, phii, etaj, phij)).clamp(min=eps);
+    lndrij = torch.log(drij);
+    
     if num_outputs == 1:
-        return lndelta
+        outputs = [lndelta];
 
     ## kt and anti-kt metrics
     if num_outputs > 1:
         ptmin = ((pti <= ptj) * pti + (pti > ptj) * ptj) if for_onnx else torch.minimum(pti, ptj)
-        lnkt  = torch.log((ptmin * delta).clamp(min=eps))
+        lnkt  = torch.log((ptmin * drij).clamp(min=eps))
         lnz   = torch.log((ptmin / (pti + ptj).clamp(min=eps)).clamp(min=eps))
         outputs = [lnkt, lnz, lndelta]
 
-    ## invriant mass
+    ## invriant mass of the pair
     if num_outputs > 3:
-        xij = xi + xj
-        lnm2 = torch.log(to_m2(xij, eps=eps))
-        outputs.append(lnm2)
-    
-    if num_outputs > 4:
-        lnds2 = torch.log(torch.clamp(-to_m2(xi - xj, eps=None), min=eps))
-        outputs.append(lnds2)
+        pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.sin(phii), pti*torch.sinh(etai);
+        pxj, pyj, pzj = ptj*torch.cos(phij),  ptj*torch.sin(phij), ptj*torch.sinh(etaj);
+        pxij = pxi+pxj;
+        pyij = pyi+pyj;
+        pzij = pzi+pzj;
+        eij  = ei+ej;
+        m2ij = (eij**2-pij**2)..clamp(min=eps);
+        lnm2ij = torch.log(m2ij);
+        outputs.append(lnm2ij)
 
-    # angle wrt the rest frame
-    if num_outputs > 5:        
-        xj_boost = boost(xj, xij)
-        costheta = (p3_norm(xj_boost, eps=eps) * p3_norm(xij, eps=eps)).sum(dim=1, keepdim=True)
-        outputs.append(costheta)
+        ## invariant mass of the difference
+        if num_outputs > 4:
+            pxij = pxi-pxj;
+            pyij = pyi-pyj;
+            pzij = pzi-pzj;
+            eij  = ei-ej;
+            pij  = torch.sqrt(pxij**2+pyij**2+pzij**2)
+            ds2  = torch.clamp(-(eij**2-pij**2),min=eps)
+            lnds2 = torch.log(ds2);
+            outputs.append(lnds2)
 
-    # add the delta-eta and delta-phi of pairs in addition to the deltaR
-    if num_outputs > 6:
-        deltaeta = etai - etaj
-        deltaphi = delta_phi(phii, phij)
-        outputs += [deltaeta, deltaphi]
+        # add the delta-eta and delta-phi of pairs in addition to the deltaR
+        if num_outputs > 5:
+            deltaeta = etai - etaj
+            deltaphi = delta_phi(phii, phij)
+            outputs += [deltaeta, deltaphi]
 
     assert (len(outputs) == num_outputs)
     return torch.cat(outputs, dim=1)
@@ -183,7 +135,6 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
         tensor.clamp_(min=a, max=b)
         return tensor
 
-
 class SequenceTrimmer(nn.Module):
     
     def __init__(self, enabled=False, target=(0.9, 1.02), **kwargs) -> None:
@@ -231,7 +182,6 @@ class SequenceTrimmer(nn.Module):
 
         return x, v, mask, uu
 
-
 class Embed(nn.Module):
     def __init__(self, input_dim, dims, normalize_input=True, activation='gelu'):
         super().__init__()
@@ -253,7 +203,6 @@ class Embed(nn.Module):
             x = self.input_bn(x)
             x = x.permute(2, 0, 1).contiguous()
         return self.embed(x)
-
 
 class PairEmbed(nn.Module):
     def __init__(
@@ -373,7 +322,6 @@ class PairEmbed(nn.Module):
             y = elements.view(-1, self.out_dim, seq_len, seq_len)
         return y
 
-
 class Block(nn.Module):
     def __init__(self, embed_dim=128, num_heads=8, ffn_ratio=4,
                  dropout=0.1, attn_dropout=0.1, activation_dropout=0.1,
@@ -458,7 +406,7 @@ class Block(nn.Module):
 
         return x
     
-## function and module to flip gradient                                                                                                                                                               
+## function and module to flip gradient
 class RevGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, alpha):
@@ -706,15 +654,15 @@ class ParticleTransformer(nn.Module):
             if self.fc is None:
                 return x_cls
 
-            ### classification and regression output                                                                                                                                                        
+            ### classification and regression output
             output = self.fc(x_cls)
             if self.split_reg:
                 output_reg = self.fc_reg(x_cls)
 
-            ### buld the final output to be returned to the main function                                                                                                                                    
+            ### buld the final output to be returned to the main function
             if self.for_inference:
                 if self.num_classes and not self.num_targets:
-                    output = torch.softmax(output, dim=1)
+                    output = torch.softmax(output, dim=1)                                    
                 elif self.num_classes and self.num_targets:
                     if self.split_reg:
                         output_class = torch.softmax(output,dim=1);
@@ -725,15 +673,16 @@ class ParticleTransformer(nn.Module):
                         output = torch.cat((output_class,output_reg),dim=1);
                 if add_da_inference and self.num_domains and self.fc_domain:
                     if not self.split_da:
-                        output_domain = torch.softmax(self.fc_domain(x_cls), dim=1);
+                        output_domain = torch.softmax(self.fc_domain(x_cls),dim=1);
                         output = torch.cat((output,output_domain),dim=1);
                     else:
                         for i,fc in enumerate(self.fc_domain):
-                            output_domain = torch.softmax(fc(x_cls), dim=1);
+                            output_domain = torch.softmax(fc(x_cls),dim=1);
                             output = torch.cat((output,output_domain),dim=1);
+
             else:
                 if self.split_reg:
-                    output = torch.cat((output,output_reg),dim=1);
+                    output = torch.cat((output,output_reg),dim=1);                
                 if self.num_domains and self.fc_domain:
                     if not self.split_da:
                         output_domain = self.fc_domain(x_cls)
@@ -742,7 +691,7 @@ class ParticleTransformer(nn.Module):
                         for i,fc in enumerate(self.fc_domain):
                             output_domain = fc(x_cls);
                             output = torch.cat((output,output_domain),dim=1);
-
+        
             ### contrastive output
             if self.fc_contrastive is not None:
                 output_cont = self.fc_contrastive(x_cls);
@@ -903,5 +852,3 @@ class ParticleTransformerTagger(nn.Module):
             x = torch.cat([pf_ch_x, pf_neu_x, pf_mu_x, pf_ele_x, pf_pho_x, sv_x, kaon_x, lambda_x, lt_x], dim=0)
             self.part.save_grad_inputs = self.save_grad_inputs
             return self.part(x, v, mask)
-
-

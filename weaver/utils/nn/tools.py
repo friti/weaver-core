@@ -46,7 +46,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)                
-                model_output = _flatten_preds(model_output, label=label, mask=label_mask)
+                model_output, label, label_mask = _flatten_preds(model_output, label=label, mask=label_mask)
                 model_output = model_output.squeeze().float();
                 label  = label.squeeze();
                 if label_mask:
@@ -170,7 +170,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 count += num_examples
 
                 model_output = model(*inputs)
-                model_output = _flatten_preds(model_output,label=label,mask=label_mask)                
+                model_output, label, label_mask = _flatten_preds(model_output,label=label,mask=label_mask)                
                 model_output = model_output.squeeze().float();
                 label = label.squeeze();
                 
