@@ -192,7 +192,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 num_batches += 1
                 _, preds = model_output.max(1)
                 correct = (preds == label).sum().item()
-                total_loss += loss * num_examples
+                total_loss += loss;
                 total_correct += correct
 
                 tq.set_postfix({
@@ -233,7 +233,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
     if for_training:
-        return total_correct / count
+        return total_loss / num_batches
     else:
         # convert 2D labels/scores
         if len(scores) != entry_count:
@@ -247,7 +247,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 scores = scores.reshape((entry_count, int(count / entry_count), -1)).transpose((1, 2))
                 for k, v in labels.items():
                     labels[k] = v.reshape((entry_count, -1))
-        return total_correct / count, scores, labels, targets, labels_domain, observers
+        return total_loss / num_batches, scores, labels, targets, labels_domain, observers
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy --> use ONNX instead of pytorch
 def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):

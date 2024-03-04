@@ -39,14 +39,14 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8):
     pyij = pyi+pyj;
     pzij = pzi+pzj;
     pij  = torch.sqrt(pxij**2+pyij**2+pzij**2)
-    etaij = 0.5*torch.log((pzij/pij).clamp(min=eps));
     eij  = ei+ej;
     m2ij = eij**2-pij**2
     pt2ij = pxij**2+pyij**2 
+    etaij = etai+etaj
     lnm2ij = torch.log(m2ij);
     lnpt2ij = torch.log(pt2ij);
 
-    outputs = [detaij,dphiij,lndrij,ptmin,lnkt,lnz,etaij,lnm2ij,lnpt2ij]
+    outputs = [detaij,dphiij,lndrij,lnkt,lnz,etaij,lnm2ij,lnpt2ij]
     return torch.cat(outputs, dim=1)
 
 def build_sparse_tensor(uu, idx, seq_len):
