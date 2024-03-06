@@ -88,7 +88,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 tb_helper.write_scalars([
                     ("Loss/train", loss, tb_helper.batch_train_count + num_batches),
                     ("Acc/train", correct / num_examples, tb_helper.batch_train_count + num_batches),
-                    ])
+                    ])>
                 if tb_helper.custom_fn:
                     with torch.no_grad():
                         tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=num_batches, mode='train')
@@ -99,6 +99,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     time_diff = time.time() - start_time
     _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
     _logger.info('Train AvgLoss: %.5f, AvgAcc: %.5f' % (total_loss / num_batches, total_correct / count))
+    _logger.info('Train AvgAccCat: %.5f'%(total_correct / count if count else 0))
     _logger.info('Train class distribution: \n    %s', str(sorted(label_counter.items())))
 
     if tb_helper:
@@ -212,6 +213,8 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     time_diff = time.time() - start_time
     _logger.info('Processed %d entries in total (avg. speed %.1f entries/s)' % (count, count / time_diff))
+    _logger.info('Evaluation AvgLoss: %.5f, AvgAcc: %.5f' % (total_loss / num_batches, total_correct / count))
+    _logger.info('Evaluation AvgAccCat: %.5f'%(total_correct / count if count else 0))
     _logger.info('Evaluation class distribution: \n    %s', str(sorted(label_counter.items())))
 
     if tb_helper:
