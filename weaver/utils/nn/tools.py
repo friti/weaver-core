@@ -88,7 +88,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 tb_helper.write_scalars([
                     ("Loss/train", loss, tb_helper.batch_train_count + num_batches),
                     ("Acc/train", correct / num_examples, tb_helper.batch_train_count + num_batches),
-                    ])>
+                    ])
                 if tb_helper.custom_fn:
                     with torch.no_grad():
                         tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=num_batches, mode='train')
