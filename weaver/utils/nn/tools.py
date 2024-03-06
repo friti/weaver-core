@@ -1010,12 +1010,12 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
-            if eval_fgsm:
+            if eval_attack:
                 return total_loss / num_batches, scores, labels, targets, labels_domain, observers, scores_attack
             else:
                 return total_loss / num_batches, scores, labels, targets, labels_domain, observers
         else:
-            if eval_fgsm:
+            if eval_attack:
                 return total_loss / num_batches, scores_reg, labels, targets, labels_domain, observers, scores_attack;
             else:
                 return total_loss / num_batches, scores_reg, labels, targets, labels_domain, observers;
