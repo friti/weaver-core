@@ -181,6 +181,8 @@ parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], defa
                     help='backend for distributed training')
 parser.add_argument('--cross-validation', type=str, default=None,
                     help='enable k-fold cross validation; input format: `variable_name%k`')
+parser.add_argument('--start-from-fold', type=int, default=0,
+                    help='restart from a fold != 0')
 parser.add_argument('--compile-model', action='store_true', default=False,
                     help='turn-on torch model compilation')
 
@@ -385,19 +387,23 @@ def test_load(args):
         _logger.info('Running on test file group %s with %d files:\n...%s', name, len(filelist), '\n...'.join(filelist))
 
         num_workers = min(args.num_workers_test, len(filelist))
+
         test_data = SimpleIterDataset(
             {name: filelist}, args.data_config, for_training=False,
             load_range_and_fraction=((0, 1), args.data_fraction),
-            fetch_by_files=args.fetch_by_files_test, fetch_step=args.fetch_step_test,
-            name='test_' + name
-        )
-        test_loader = DataLoader(
-            test_data, num_workers=num_workers, batch_size=args.batch_size_test, drop_last=False, 
-            pin_memory=True,
-            worker_init_fn=set_worker_sharing_strategy
+	    file_fraction=args.file_fraction,
+            fetch_by_files=args.fetch_by_files_test,
+            fetch_step=args.fetch_step_test,
+            in_memory=args.in_memory,
+            name='test_' + name            
         )
 
-        return test_loader
+        test_loader = DataLoader(
+            test_data, batch_size=args.batch_size_test, drop_last=False, pin_memory=True,
+            num_workers = min(args.num_workers_test, len(filelist)),
+            worker_init_fn=set_worker_sharing_strategy
+        )        
+        return test_loader;
 
     test_loaders = {name: functools.partial(get_test_loader, name) for name in file_dict}
     data_config = SimpleIterDataset({}, args.data_config, for_training=False).config
@@ -1008,9 +1014,7 @@ def _main(args):
 
         model = model.to(dev)
         if args.compile_model and ngpus:
-            torch._dynamo.reset();
-            torch._dynamo.config.suppress_errors = True
-            model = torch.compile(model, mode='max-autotune');
+            model = torch.compile(model);
 
         if args.backend is not None and args.local_rank != 0:
             sys.exit(0);
@@ -1125,7 +1129,7 @@ def main():
         load_model = args.load_model_weights or None
         var_name, kfold = args.cross_validation.split('%')
         kfold = int(kfold)
-        for i in range(kfold):
+        for i in range(args.start_from_fold,kfold):
             _logger.info(f'\n=== Running cross validation, fold {i} of {kfold} ===')
             args.model_prefix = os.path.join(f'{model_dir}_fold{i}', model_fn)
             if args.predict_output:
