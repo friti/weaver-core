@@ -120,12 +120,8 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
 
     model.eval()
-    if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
-    else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     data_config = test_loader.dataset.config
 
@@ -407,12 +403,8 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                         eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
    model.eval()
-   if for_training:
-      torch.backends.cudnn.benchmark = True;
-      torch.backends.cudnn.enabled = True;
-   else:
-       torch.backends.cudnn.benchmark = False;
-       torch.backends.cudnn.enabled = False;
+   torch.backends.cudnn.benchmark = True;
+   torch.backends.cudnn.enabled = True;
        
    data_config = test_loader.dataset.config
 
@@ -761,12 +753,8 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                       eval_reg_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
     
     model.eval()
-    if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
-    else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
+    torch.backends.cudnn.benchmark = True;
+    torch.backends.cudnn.enabled = True;
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
