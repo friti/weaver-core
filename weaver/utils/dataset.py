@@ -75,7 +75,7 @@ def _finalize_inputs(table, data_config):
         else:
             a = [ak.to_numpy(table[n]).astype('float32') for n in names];
             if len(a) > 0:
-                output['_' + k] = ak.to_numpy(np.stack([ak.to_numpy(table[n]).astype('float32') for n in names], axis=1))
+                output['_' + k] = ak.to_numpy(np.stack(a,axis=1))
             else:
                 output['_' + k] = ak.to_numpy([]);
     # copy monitor variables
