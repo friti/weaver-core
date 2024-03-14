@@ -51,9 +51,9 @@ def _repeat_pad(a, maxlen, shuffle=False, dtype='float32'):
     x = ak.to_numpy(ak.flatten(a))
     if len(x) > 0:
         x = np.tile(x, int(np.ceil(len(a) * maxlen / len(x))))
-    if shuffle:
-        np.random.shuffle(x)
-    x = x[:len(a) * maxlen].reshape((len(a), maxlen))
+        if shuffle:
+            np.random.shuffle(x)
+        x = x[:len(a) * maxlen].reshape((len(a), maxlen))
     mask = _pad(ak.zeros_like(a), maxlen, value=1)
     x = _pad(a, maxlen) + mask * x
     return ak.values_astype(x, dtype)
