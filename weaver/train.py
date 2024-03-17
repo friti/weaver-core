@@ -189,20 +189,29 @@ def to_filelist(args, mode='train'):
     # keyword-based: 'a:/path/to/a b:/path/to/b'
     file_dict = {}
     for f in flist:
-        if ':' in f:
-            name, fp = f.split(':')
+        ## with xrootd a file by file list is provided
+        if 'root:' in f:
+            name, files = '_', f
+            if name in file_dict:
+                file_dict[name].append(files)
+            else:
+                file_dict[name] = []
+                file_dict[name].append(files)
         else:
-            name, fp = '_', f
-        files = glob.glob(fp)
-        if name in file_dict:
-            file_dict[name] += files
-        else:
-            file_dict[name] = files
-
-    # sort files
-    for name, files in file_dict.items():
-        file_dict[name] = sorted(files)
-
+            if ':' in f:
+                name, fp = f.split(':')
+            else:
+                name, fp = '_', f
+            files = glob.glob(fp)
+            if name in file_dict:
+                file_dict[name] += files
+            else:
+                file_dict[name] = files
+        # sort files
+        for name, files in file_dict.items():
+            print(name," ",files);
+            file_dict[name] = sorted(files)
+    print(file_dict);
     if args.local_rank is not None:
         if mode == 'train':
             local_world_size = int(os.environ['LOCAL_WORLD_SIZE'])

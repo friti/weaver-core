@@ -18,7 +18,9 @@ def _collate_awkward_array_fn(batch, *, collate_fn_map=None):
     return _stack(batch, axis=0)
  
 def _finalize_inputs(table, data_config):
+
     output = {}
+
     # copy observer variables before transformation
     for k in data_config.z_variables:
         if k in data_config.observer_names:
