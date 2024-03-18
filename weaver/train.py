@@ -209,9 +209,8 @@ def to_filelist(args, mode='train'):
                 file_dict[name] = files
         # sort files
         for name, files in file_dict.items():
-            print(name," ",files);
             file_dict[name] = sorted(files)
-    print(file_dict);
+
     if args.local_rank is not None:
         if mode == 'train':
             local_world_size = int(os.environ['LOCAL_WORLD_SIZE'])
@@ -361,19 +360,29 @@ def test_load(args):
     # split --data-test: 'a%10:/path/to/a/*'
     file_dict = {}
     split_dict = {}
+
     for f in args.data_test:
-        if ':' in f:
-            name, fp = f.split(':')
-            if '%' in name:
-                name, split = name.split('%')
-                split_dict[name] = int(split)
+        ## special case of xrootd path to single files
+        if 'root:' in f:
+            name, files = '_', f
+            if name in file_dict:
+                file_dict[name].append(files)
+            else:
+                file_dict[name] = []
+                file_dict[name].append(files)
         else:
-            name, fp = '', f
-        files = glob.glob(fp)
-        if name in file_dict:
-            file_dict[name] += files
-        else:
-            file_dict[name] = files
+            if ':' in f:
+                name, fp = f.split(':')
+                if '%' in name:
+                    name, split = name.split('%')
+                    split_dict[name] = int(split)
+            else:
+                name, fp = '', f
+            files = glob.glob(fp)            
+            if name in file_dict:
+                file_dict[name] += files
+            else:
+                file_dict[name] = files
 
     # sort files
     for name, files in file_dict.items():
