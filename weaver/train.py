@@ -213,7 +213,7 @@ def to_filelist(args, mode='train'):
 
     if args.local_rank is not None:
         if mode == 'train':
-            local_world_size = int(os.environ['LOCAL_WORLD_SIZE'])
+            local_world_size = int(torch.distributed.get_world_size())
             new_file_dict = {}
             for name, files in file_dict.items():
                 new_files = files[args.local_rank::local_world_size]
@@ -896,9 +896,9 @@ def _main(args):
         ngpus = len(gpus);
         if args.backend is not None and ngpus > 1:
             gpus = [args.local_rank]
-            torch.distributed.init_process_group(backend=args.backend)
             torch.cuda.set_device(args.local_rank)
             dev = torch.device(args.local_rank)
+            torch.distributed.init_process_group(backend=args.backend,init_method='env://')
             _logger.info(f'Using distributed PyTorch with {args.backend} backend')
         else:
             dev = torch.device(gpus[0])
