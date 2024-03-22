@@ -176,7 +176,7 @@ parser.add_argument('--start-from-fold', type=int, default=0,
                     help='restart from a fold != 0')
 parser.add_argument('--compile-model', action='store_true', default=False,
                     help='turn-on torch model compilation')
-parser.add_argument("--local_rank", default=None, type=int,
+parser.add_argument("--local-rank", default=None, type=int,
                     help='local rank for DistributedDataParallel')
 
 def to_filelist(args, mode='train'):
