@@ -176,6 +176,8 @@ parser.add_argument('--start-from-fold', type=int, default=0,
                     help='restart from a fold != 0')
 parser.add_argument('--compile-model', action='store_true', default=False,
                     help='turn-on torch model compilation')
+parser.add_argument("--local_rank", default=None, type=int,
+                    help='local rank for DistributedDataParallel')
 
 def to_filelist(args, mode='train'):
 
@@ -1126,8 +1128,9 @@ def main():
         args.log = args.log.replace('{auto}', model_name)
         print('Using auto-generated model prefix %s' % args.model_prefix)
 
-    args.local_rank = None if args.backend is None else int(os.environ.get("LOCAL_RANK", "0"))
-
+    if args.local_rank == None:
+        args.local_rank = None if args.backend is None else int(os.environ.get("LOCAL_RANK","0"))
+        
     stdout = sys.stdout
     if args.local_rank is not None:
         args.log += '.%03d' % args.local_rank
