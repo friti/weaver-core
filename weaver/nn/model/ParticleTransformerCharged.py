@@ -670,7 +670,7 @@ class ParticleTransformer(nn.Module):
                         output_class = torch.softmax(output[:,:self.num_classes],dim=1);
                         output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
                         output = torch.cat((output_class,output_reg),dim=1);
-                if add_da_inference and self.num_domains and self.fc_domain:
+                if self.add_da_inference and self.num_domains and self.fc_domain:
                     if not self.split_da:
                         output_domain = torch.softmax(self.fc_domain(x_cls),dim=1);
                         output = torch.cat((output,output_domain),dim=1);
