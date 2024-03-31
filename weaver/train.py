@@ -459,7 +459,7 @@ def onnx(args):
     _logger.info('ONNX model saved to %s', args.export_onnx)
 
     preprocessing_json = os.path.join(os.path.dirname(args.export_onnx),args.export_onnx.replace(".onnx",".json"))
-    data_config.export_json(preprocessing_json)
+    data_config.export_json(preprocessing_json,args.network_config.get("add_da_inference",False))
     _logger.info('Preprocessing parameters saved to %s', preprocessing_json)
 
 

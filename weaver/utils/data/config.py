@@ -365,11 +365,14 @@ class DataConfig(object):
     def __deepcopy__(self, memo):
         return self.copy()
 
-    def export_json(self, fp):
+    def export_json(self, fp, add_da=False):
         import json
         ## class+reg+domain        
         if self.target_names and self.label_names and self.label_domain_names:
-            j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
+            if add_da:
+                j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
+            else:
+                j = {'output_names':self.label_value+list(self.target_value.keys())+self.label_domain_value, 'input_names':self.input_names}                
         ## class+reg
         elif self.target_names and self.label_names and not self.label_domain_names:
             j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
