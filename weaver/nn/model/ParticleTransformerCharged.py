@@ -38,8 +38,13 @@ def pairwise_lv_fts(xi, xj, num_outputs=4, eps=1e-8, for_onnx=False):
         
     ## invriant mass of the pair
     if num_outputs > 3:
-        pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.sin(phii), pti*torch.sinh(etai);
-        pxj, pyj, pzj = ptj*torch.cos(phij),  ptj*torch.sin(phij), ptj*torch.sinh(etaj);
+        if for_onnx:
+            pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.sin(phii), 0.5*pti*(torch.exp(etai)-torch.exp(-etai));
+            pxj, pyj, pzj = ptj*torch.cos(phij),  ptj*torch.sin(phij), 0.5*ptj*(torch.exp(etaj)-torch.exp(-etai));
+        else:
+            pxi, pyi, pzi = pti*torch.cos(phii),  pti*torch.sin(phii), pti*torch.sinh(etai);
+            pxj, pyj, pzj = ptj*torch.cos(phij),  ptj*torch.sin(phij), ptj*torch.sinh(etaj);
+            
         pxij = pxi+pxj;
         pyij = pyi+pyj;
         pzij = pzi+pzj;
