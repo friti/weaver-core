@@ -1,6 +1,7 @@
 import numpy as np
 import yaml
 import copy
+import itertools
 
 from ..logger import _logger
 from .tools import _get_variable_names
@@ -370,7 +371,7 @@ class DataConfig(object):
         ## class+reg+domain        
         if self.target_names and self.label_names and self.label_domain_names:
             if add_da:
-                j = {'output_names':self.label_value+list(self.target_value.keys())+self.label_domain_value, 'input_names':self.input_names}                
+                j = {'output_names':self.label_value+list(self.target_value.keys())+list(itertools.chain.from_iterable(self.label_domain_value.values())), 'input_names':self.input_names}  
             else:
                 j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
         ## class+reg
