@@ -370,9 +370,9 @@ class DataConfig(object):
         ## class+reg+domain        
         if self.target_names and self.label_names and self.label_domain_names:
             if add_da:
-                j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
-            else:
                 j = {'output_names':self.label_value+list(self.target_value.keys())+self.label_domain_value, 'input_names':self.input_names}                
+            else:
+                j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
         ## class+reg
         elif self.target_names and self.label_names and not self.label_domain_names:
             j = {'output_names':self.label_value+list(self.target_value.keys()), 'input_names':self.input_names}
