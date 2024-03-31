@@ -160,7 +160,7 @@ parser.add_argument('--predict-output', type=str,
 parser.add_argument('--export-onnx', type=str, default=None,
                     help='export the PyTorch model to ONNX model and save it at the given path (path must ends w/ .onnx); '
                          'needs to set `--data-config`, `--network-config`, and `--model-prefix` (requires the full model path)')
-parser.add_argument('--onnx-opset', type=int, default=15,
+parser.add_argument('--onnx-opset', type=int, default=17,
                     help='ONNX opset version.')
 parser.add_argument('--copy-inputs', action='store_true', default=False,
                     help='copy input files to the current dir (can help to speed up dataloading when running over remote files, e.g., from EOS)')
