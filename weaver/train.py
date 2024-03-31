@@ -458,7 +458,7 @@ def onnx(args):
                       opset_version=args.onnx_opset)
     _logger.info('ONNX model saved to %s', args.export_onnx)
 
-    preprocessing_json = os.path.join(os.path.dirname(args.export_onnx), 'preprocess.json')
+    preprocessing_json = os.path.join(os.path.dirname(args.export_onnx),args.export_onnx.replace(".onnx",".json"))
     data_config.export_json(preprocessing_json)
     _logger.info('Preprocessing parameters saved to %s', preprocessing_json)
 
