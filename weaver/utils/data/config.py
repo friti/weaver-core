@@ -391,7 +391,7 @@ class DataConfig(object):
                 info = self.preprocess_params[var_name]
                 j[k]['var_infos'][var_name] = {
                     'median': 0 if info['center'] is None else info['center'],
-                    'norm_factor': info['scale'],
+                    'norm_factor': 1 if info['scale'] is None else info['scale'],
                     'replace_inf_value': 0,
                     'lower_bound': -1e32 if info['center'] is None else info['min'],
                     'upper_bound': 1e32 if info['center'] is None else info['max'],
