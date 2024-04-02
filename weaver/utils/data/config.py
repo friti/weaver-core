@@ -387,7 +387,8 @@ class DataConfig(object):
         for k, v in self.input_dicts.items():
             j[k] = {'var_names': v, 'var_infos': {}}
             for var_name in v:
-                j[k]['var_length'] = self.preprocess_params[var_name]['length']
+                j[k]['min_length'] = 1
+                j[k]['max_length'] = self.preprocess_params[var_name]['length']
                 info = self.preprocess_params[var_name]
                 j[k]['var_infos'][var_name] = {
                     'median': 0 if info['center'] is None else info['center'],
