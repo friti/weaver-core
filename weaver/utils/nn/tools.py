@@ -278,7 +278,7 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
                   observers[k].append(v.numpy(force=True).astype(dtype=np.int32))
                else:
                   observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
-            score = sess.run([], inputs)
+            score = sess.run([], inputs)[0]
             score = torch.as_tensor(np.array(score)).squeeze();
             scores.append(score.numpy(force=True).astype(dtype=np.float32))
             preds = score.squeeze().float().argmax(1)
@@ -535,7 +535,7 @@ def evaluate_onnx_regression(model_path, test_loader,
             else:
                observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
 
-         score = sess.run([], inputs)
+         score = sess.run([], inputs)[0]
          score = torch.as_tensor(np.array(score)).squeeze()
          scores.append(score.numpy(force=True).astype(dtype=np.float32))
          preds = score.squeeze().float();
@@ -1053,7 +1053,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
                else:
                   observers[k].append(v.numpy(force=True).astype(dtype=np.float32))
             ### evaluate the network
-            score = sess.run([], inputs)
+            score = sess.run([], inputs)[0]
             score = torch.as_tensor(np.array(score)).squeeze();
             scores_cat.append(score[:,:num_labels].numpy(force=True).astype(dtype=np.float32));
             scores_reg.append(score[:,num_labels:num_labels+num_targets].numpy(force=True).astype(dtype=np.float32));

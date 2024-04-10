@@ -1057,7 +1057,7 @@ def evaluate_onnx_classreg(model_path, test_loader,
                 indexes_domain[k].append((index_offset+index_domain[list(y_domain_check.keys())[idx]]).numpy(force=True).astype(dtype=np.int32));
   
             ### output of the mode
-            model_output = sess.run([], inputs)
+            model_output = sess.run([], inputs)[0]
             model_output = torch.as_tensor(np.array(model_output)).squeeze();            
             model_output_cat = model_output[:,:num_labels]
             model_output_reg = model_output[:,num_labels:num_labels+num_targets];

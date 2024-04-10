@@ -426,6 +426,7 @@ def test_load(args):
 
 
 def onnx(args):
+
     """
     Saving model as ONNX.
     :param args:
@@ -438,12 +439,13 @@ def onnx(args):
     from utils.dataset import DataConfig
     data_config = DataConfig.load(args.data_config, load_observers=False, load_reweight_info=False)
     model, model_info, _ = model_setup(args, data_config)
+    model = model.cpu()
+    
     if "domain" in args.weaver_mode:
         model.load_state_dict(torch.load(model_path, map_location='cpu'),strict=False)
     else:
         model.load_state_dict(torch.load(model_path, map_location='cpu'))
 
-    model = model.cpu()
     model.eval()
 
     if not os.path.dirname(args.export_onnx):
